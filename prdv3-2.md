@@ -141,12 +141,12 @@ SYNTHESIS ENGINE: GLOBAL ALIGNMENT SCORE (GAS)
 #### 2.1.1 Market Intelligence Features
 - **Single stock analysis** with multi-timeframe ML consensus (1h, 4h, 1d, 1w, 1mo)
 - **Global Alignment Score (GAS)** visualization: 0-100 scale
-- **Market Weather System** visual representations:
-  - ☀️ Strong Tailwind (80-100): All layers aligned bullish
-  - 🌤 Mild Support (60-79): Mostly bullish, some caution
-  - 🌥 Mixed Signals (40-59): Disagreement between layers
-  - 🌧 Headwind (20-39): Mostly bearish, some hope
-  - 🌪 High Instability (0-19): All layers aligned bearish
+- **Market Weather System**  representations (no emoji nor images):
+  - Strong Tailwind (80-100): All layers aligned bullish
+  -  Mild Support (60-79): Mostly bullish, some caution
+  -  Mixed Signals (40-59): Disagreement between layers
+  -  Headwind (20-39): Mostly bearish, some hope
+  -  High Instability (0-19): All layers aligned bearish
 - **Conflict Detector**: Highlights when layers disagree (e.g., "Technicals bullish +4% vs. Macro bearish -3%")
 - **Regime Classification**: Risk-On / Risk-Off / Range-Bound with confidence %
 - **Volatility Regime**: Low (VIX < 15) / Medium (15-25) / High (> 25)
