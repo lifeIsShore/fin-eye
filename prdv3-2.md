@@ -130,11 +130,6 @@ SYNTHESIS ENGINE: GLOBAL ALIGNMENT SCORE (GAS)
    - Data export options
    - Subscription management
 
-8. **[Future] Community Tab**
-   - Shared backtests/scenarios
-   - User leaderboard
-   - Comments on shared analyses
-   - "Inspiration library"
 
 ---
 
