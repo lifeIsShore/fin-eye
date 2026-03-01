@@ -2527,6 +2527,155 @@ FUTURE REVENUE STREAMS:
    - License blog content to financial sites
    - License model predictions to traders
 
+
+18. Revenue Module – Window Showcase (Digital Product Shop)
+18.1 Purpose & Strategic Goal
+
+The Window Showcase is a built-in monetization module inside the platform (your “small Bloomberg terminal”). It serves as a curated digital storefront where users can discover premium financial tools and be redirected to your external digital product website for purchase.
+
+This module must:
+
+Generate recurring revenue through digital product sales
+
+Promote proprietary financial tools (Excel + VBA, planning systems, dashboards)
+
+Present high-value, finance-focused utilities aligned with the platform’s professional positioning
+
+Remain lightweight and non-intrusive to core analytics functionality
+
+The goal is not to turn the system into an e-commerce platform, but to act as a conversion-oriented showcase window.
+
+18.2 Product Scope
+Included in V1
+
+Visual product showcase grid
+
+Product detail modal (inside platform)
+
+Redirect button to external sales website
+
+Admin management panel (add/edit/remove products)
+
+Click tracking & analytics
+
+Product categorization
+
+Featured / highlighted products
+
+Excluded in V1
+
+In-app payment system
+
+Subscription billing engine
+
+License management
+
+Digital download hosting
+
+Complex recommendation engine
+
+All purchases happen externally.
+
+18.3 Product Types to Be Displayed
+
+The module will primarily contain digital financial tools such as:
+
+1. Portfolio Tools
+
+Portfolio Tracking Dashboard (Excel + VBA automation)
+
+Risk-adjusted return calculators
+
+Performance attribution sheets
+
+2. Financial Planning Tools
+
+Retirement planning models
+
+Investment allocation planners
+
+Cash flow forecasting templates
+
+Net worth tracking systems
+
+3. Personal Finance Tools
+
+Expense tracking Excel sheets
+
+Revenue & cost management tools
+
+Household budgeting calculators
+
+Debt amortization sheets
+
+4. Thematic Financial Calculators
+
+LBO modeling templates
+
+DCF valuation sheets
+
+Sensitivity analysis tools
+
+Scenario simulation sheets
+
+All products must align with finance, analytics, or productivity.
+
+18.4 User Experience (UX) Flow
+Step 1: User Enters “Window Showcase”
+
+Access via left sidebar navigation
+
+Clear label (e.g., “Marketplace” or “Pro Tools”)
+
+Dedicated standalone page
+
+Step 2: Product Grid View
+
+Each product card displays:
+
+Product title
+
+Short 1–2 line description
+
+Price (optional visibility toggle)
+
+Product category badge
+
+“View Details” button
+
+Optional:
+
+“Featured” badge
+
+“New” badge
+
+Step 3: Product Detail Modal
+
+Clicking a product opens a modal containing:
+
+Full description
+
+Key features list
+
+Screenshots (optional)
+
+Use case explanation
+
+Target audience
+
+“Buy Now” button (redirect)
+
+Step 4: Redirect
+
+Opens external website in new browser tab
+
+Append tracking parameters:
+
+product_id
+
+source=terminal
+
+user_id (if allowed) 
 ```
 
 ---
