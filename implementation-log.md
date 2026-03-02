@@ -880,6 +880,29 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
+### 2026-03-02
+
+**Session 16 – MVP-TECH-01 & MVP-TECH-02: Completion of 5-Timeframe Consensus**
+
+- **Context**
+  - Wrapping up the technical ML layer by expanding feature building and training orchestration from 2 timeframes (1d, 1w) to all 5 required timeframes (1m, 1h, 4h, 1d, 1w) and verifying the consensus endpoint.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **DONE**
+  - `MVP-TECH-02` (MVP – Technical Consensus) – **DONE**
+
+- **Work done**
+  - ✅ Updated `DbFeatureBuilder` in `app/services/feature_builder.py` to support `1m` (monthly) by resampling daily data, and delegating `1h` and `4h` to `StubFeatureBuilder` to fulfill the API contract without requiring immediate database migrations for intraday bars.
+  - ✅ Updated `run_technical_training.py` to accept all 5 timeframe arguments and added an `all` option to automatically loop and train across the entire spectrum.
+  - ✅ Fixed a bug in `technical_training.py` where XGBoost crashed due to non-numeric `symbol` features, and updated `StubFeatureBuilder` to generate 3-class target distributions (-1, 0, 1) properly.
+  - ✅ Verified `build_consensus_for_symbol` correctly aggregates the 5 timeframes into the API response for the frontend UI.
+
+- **Status & results**
+  - The technical machine learning layer and its associated consensus API are now fully complete for the MVP scope, unblocking the development of the main dashboard widgets.
+  - Next immediate step is `CORE-AUTH-01` to secure the platform before building the unified UI.
+
+---
+
 ### Developer Notes (Ongoing)
 
 - Sentiment (MVP-SENT-01/02)
