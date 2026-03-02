@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol
 
 import numpy as np
@@ -58,11 +58,14 @@ class StubFeatureBuilder:
         if index.empty:
             return pd.DataFrame()
 
+        # Alternate daily returns so training can derive a non-trivial target
+        alt_returns = np.where(np.arange(len(index)) % 2 == 0, 0.01, -0.01).astype(float)
+
         data = {
             "symbol": [symbol] * len(index),
             "timestamp": index,
             # Simple synthetic values; real implementation will use actual indicators
-            "return_1d": 0.0,
+            "return_1d": alt_returns,
             "return_5d": 0.0,
             "volatility_20d": 0.1,
             "rsi_14": 50.0,
@@ -302,7 +305,7 @@ class DbFeatureBuilder:
             self.db.query(NewsArticle)
             .filter(
                 NewsArticle.symbol == symbol,
-                NewsArticle.published_at >= start - pd.Timedelta(days=30),
+                NewsArticle.published_at >= start - timedelta(days=30),
                 NewsArticle.published_at <= end,
             )
             .all()
@@ -325,7 +328,7 @@ class DbFeatureBuilder:
             for s in todays:
                 counts[s] += 1
             # drop older than 30 days window (inclusive)
-            cutoff = (cur - pd.Timedelta(days=29)).date()
+            cutoff = cur - timedelta(days=29)
             while window and window[0][0] < cutoff:
                 old_date, old_sources = window.popleft()
                 for s in old_sources:

@@ -490,8 +490,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
-**Last Updated:** 2026-03-02 10:30:00  
-**Next Update:** MVP-TECH-01 – wire DbFeatureBuilder into a real training run and decide model artefact persistence
+**Last Updated:** 2026-03-02 11:00:00  
+**Next Update:** MVP-TECH-01 – decide persistent registry + model artefact storage; then start MVP-TECH-02 consensus logic
 
 ---
 
@@ -631,6 +631,31 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Status & results**
   - `DbFeatureBuilder` now produces a much more realistic daily feature matrix: price/TA + macro_score + vix + yield spread + real news sentiment aggregates and source diversity.
   - Next step is to run a real training pass using `DbFeatureBuilder` (not the stub) and then decide how to persist model artefacts and winners beyond in-memory metadata.
+
+---
+
+### 2026-03-02
+
+**Session 24 – MVP-TECH-01: Real Training Run Wiring (DbFeatureBuilder + Target Derivation)**
+
+- **Context**
+  - Enabling a true end-to-end training run using DB-backed features, while keeping the change small and explicit.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Fixed `DbFeatureBuilder` date-window logic for source diversity to use `datetime.timedelta` (avoids `date - pd.Timedelta` type issues).
+  - ✅ Updated `StubFeatureBuilder` to emit alternating `return_1d` values so training can derive a non-trivial target during tests.
+  - ✅ Updated `train_all_models_for_timeframe` to derive a `target` label from `return_1d.shift(-1)`:
+    - Maps next-period return direction to `{-1, 0, +1}`.
+    - Keeps the feature schema stable while enabling training without adding `close` to the canonical feature set yet.
+  - ✅ Fixed XGBoost training to map labels `{-1,0,1} -> {0,1,2}` to satisfy XGBoost class requirements.
+  - ✅ Added `scripts/run_technical_training.py` to run a real 1d training pass against the current database using `DbFeatureBuilder`, printing per-model Sharpe/accuracy and the winner.
+
+- **Status & results**
+  - The codebase now supports a real end-to-end training run for one symbol and the daily timeframe using actual DB data, feature engineering, and multi-model comparison.
+  - Next is to decide and implement minimal persistent storage for model metadata (registry) and model artefacts (serialized model objects), then proceed toward `MVP-TECH-02` consensus scoring.
 
 ---
 

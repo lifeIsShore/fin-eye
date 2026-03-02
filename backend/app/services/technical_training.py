@@ -144,6 +144,10 @@ def train_xgboost_for_timeframe(
     total_predictions = 0
 
     for _window, X_train, y_train, X_valid, y_valid in splits:
+        # XGBoost expects non-negative class labels; map {-1,0,1} -> {0,1,2}
+        y_train_mapped = (y_train.to_numpy() + 1).astype(int)
+        y_valid_mapped = (y_valid.to_numpy() + 1).astype(int)
+
         clf = XGBClassifier(
             max_depth=4,
             n_estimators=100,
@@ -155,15 +159,15 @@ def train_xgboost_for_timeframe(
             eval_metric="mlogloss",
             n_jobs=1,
         )
-        clf.fit(X_train, y_train)
+        clf.fit(X_train, y_train_mapped)
 
         y_pred = clf.predict(X_valid)
 
-        returns = np.where(y_pred == y_valid.to_numpy(), 1.0, -1.0)
+        returns = np.where(y_pred == y_valid_mapped, 1.0, -1.0)
         all_valid_returns.extend(returns.tolist())
 
-        correct_predictions += int((y_pred == y_valid.to_numpy()).sum())
-        total_predictions += y_valid.shape[0]
+        correct_predictions += int((y_pred == y_valid_mapped).sum())
+        total_predictions += y_valid_mapped.shape[0]
 
     sharpe = compute_sharpe_ratio(np.array(all_valid_returns))
     accuracy = (correct_predictions / total_predictions) if total_predictions else 0.0
@@ -208,6 +212,14 @@ def train_all_models_for_timeframe(
     df = builder.build_features(symbol=symbol, timeframe=timeframe, start=start, end=end)
     if df.empty:
         return TrainingResult(timeframe=timeframe, performances=all_performances)
+
+    # Derive next-period direction target from return_1d (shifted by -1).
+    # If return_1d at t is (close_t / close_{t-1}) - 1, then return_1d at t+1
+    # approximates next day's return relative to t. This keeps the FeatureBuilder
+    # contract stable while enabling end-to-end training.
+    df = df.copy()
+    next_ret = df["return_1d"].shift(-1).fillna(0.0)
+    df["target"] = np.where(next_ret > 0, 1, np.where(next_ret < 0, -1, 0)).astype(int)
 
     # Train logistic baseline
     logistic_result = train_logistic_baseline_for_timeframe(df, timeframe, registry)
