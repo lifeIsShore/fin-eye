@@ -4,7 +4,7 @@ from typing import List, Optional
 import logging
 from datetime import datetime, timedelta
 
-from app.schemas.data_models import OHLCVData
+from app.schemas.data_models import OHLCVData, MacroData
 
 logger = logging.getLogger(__name__)
 
@@ -60,3 +60,39 @@ class OHLCVFetcher:
         except Exception as e:
             logger.error(f"Failed to fetch data for {symbol}: {e}")
             return []
+
+    @staticmethod
+    def fetch_vix(period: str = "1mo") -> List[MacroData]:
+        """
+        Fetch VIX data and return it as MacroData.
+        """
+        logger.info(f"Fetching {period} of VIX data")
+        try:
+            ticker = yf.Ticker("^VIX")
+            hist = ticker.history(period=period, interval="1d")
+            
+            if hist.empty:
+                logger.warning("No data found for ^VIX")
+                return []
+                
+            results = []
+            for index, row in hist.iterrows():
+                try:
+                    date_obj = index.date() if hasattr(index, 'date') else index
+                    
+                    data_point = MacroData(
+                        indicator_name="vix",
+                        value=float(row['Close']),
+                        date=date_obj
+                    )
+                    results.append(data_point)
+                except Exception as e:
+                    logger.error(f"Error parsing row for ^VIX at {index}: {e}")
+                    continue
+            
+            logger.info(f"Successfully fetched {len(results)} records for VIX")
+            return results
+        except Exception as e:
+            logger.error(f"Failed to fetch VIX data: {e}")
+            return []
+

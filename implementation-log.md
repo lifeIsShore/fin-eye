@@ -28,12 +28,12 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-BACK-02         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on BACK-01 |
 | MVP-SENT-01         | MVP – Sentiment       | NOT_STARTED  | -            | Depends on DATA-01 |
 | MVP-SENT-02         | MVP – Sentiment       | NOT_STARTED  | -            | Depends on SENT-01 |
-| MVP-MACRO-01        | MVP – Macro           | NOT_STARTED  | -            | Depends on DATA-01 |
+| MVP-MACRO-01        | MVP – Macro           | DONE         | 2026-03-02   | ✅ 5 indicators + interpretration + refresh |
 | MVP-MACRO-02        | MVP – Macro           | NOT_STARTED  | -            | Depends on MACRO-01 |
 | MVP-LEARN-01        | MVP – Learn/Blog      | NOT_STARTED  | -            | Independent |
 | MVP-ONBOARD-01      | MVP – Onboarding      | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-HEDGE-01        | MVP – Hedging         | NOT_STARTED  | -            | Depends on DATA-01, DASH-01 |
-| MVP-DATA-01         | MVP – Data/Infra      | IN_PROGRESS  | 2026-03-02   | ✅ Tasks 1.1, 1.2, 1.3, 1.4 DONE |
+| MVP-DATA-01         | MVP – Data/Infra      | DONE         | 2026-03-02   | ✅ Tasks 1.1-1.5 DONE |
 | P2-PORT-01          | P2 – Portfolio        | NOT_STARTED  | -            | Depends on DASH-01 |
 | P2-RET-01           | P2 – Retail Sentiment | NOT_STARTED  | -            | Depends on DATA-01 |
 | P2-EVENT-01         | P2 – Events           | NOT_STARTED  | -            | Depends on DATA-01 |
@@ -188,9 +188,9 @@ This log tracks implementation progress for each user story in `user-stories.md`
 **As of 2026-03-01 End of Day**
 
 - Total User Stories: 56
-- Completed: 0
-- In Progress: 1 (MVP-DATA-01, 20% complete)
-- Not Started: 55
+- Completed: 2 (MVP-DATA-01, MVP-MACRO-01)
+- In Progress: 0
+- Not Started: 54
 - Blocked: 0
 
 **Sprint 1 Progress**
@@ -293,6 +293,55 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
-**Last Updated:** 2026-03-02 01:50:00  
-**Next Update:** After Task 1.5 completion
+### 2026-03-02
+
+**Session 7 – Task 1.5: Testing & DB Migrations Completing MVP-DATA-01**
+
+- **Context**
+  - Finalizing MVP-DATA-01 through testing and ensuring DB works.
+- **Stories touched**
+  - `MVP-DATA-01` (MVP – Data/Infra) – **DONE**
+- **Work done**
+  - ✅ Ran Alembic migrations to build PostgreSQL schema.
+  - ✅ Wrote Pytest suites for `app/models/market.py` and `app/models/macro.py`.
+  - ✅ Wrote Pytest suites for data fetchers with `MagicMock` and `AsyncMock`.
+  - ✅ Ran all tests and fixed assertions/types; all test suites pass.
+- **Status & results**
+  - Data models, ingestion layers, and cache service have passing tests.
+  - Database schema is fully migrated via Alembic.
+  - MVP-DATA-01 is fully complete.
+- **Next steps**
+  - Proceed to MVP-MACRO-01 as the next foundational story.
+
+---
+
+### 2026-03-02
+
+**Session 8 – MVP-MACRO-01: Macro Dashboard Basics**
+
+- **Context**
+  - Implementing Macro Dashboard basics (5 key indicators).
+- **Stories touched**
+  - `MVP-MACRO-01` (MVP – Macro) – **DONE**
+- **Work done**
+  - ✅ Enhanced `MacroFetcher` with specific methods for FEDFUNDS, UNRATE, and T10Y2Y.
+  - ✅ Implemented YoY CPI calculation logic based on 12-month rolling window from FRED.
+  - ✅ Added VIX fetcher to `OHLCVFetcher`.
+  - ✅ Created `app/crud/macro.py` for handling indicator persistence.
+  - ✅ Built `MacroOrchestrator` to coordinate multi-source data fetching.
+  - ✅ Created `GET /api/v1/macro/latest` with automated textual interpretations (e.g., "Yield curve inverted").
+  - ✅ Created `POST /api/v1/macro/refresh` to trigger manual data updates.
+  - ✅ Fixed `tests/conftest.py` to support `ASGITransport` and shared `test_db` fixture across API tests.
+  - ✅ Successfully ran and passed `tests/api/test_macro.py`.
+- **Status & results**
+  - Macro dashboard backend is fully functional with live (mockable) data integrations.
+  - Interpretations correctly handle logic for recession warnings (Inverted Curve) and market fear (VIX).
+- **Next steps**
+  - Start `MVP-SENT-01` (News Sentiment Analysis basics) to begin building the market sentiment layer.
+
+---
+
+**Last Updated:** 2026-03-02 03:00:00  
+**Next Update:** MVP-SENT-01 Implementation
+
 

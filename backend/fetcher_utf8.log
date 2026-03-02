@@ -1,0 +1,54 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.3.4, pluggy-1.5.0
+rootdir: C:\Users\ahmty\fin-eye\backend
+plugins: anyio-4.8.0, dash-2.18.2, Faker-37.1.0, asyncio-1.3.0, docker-3.1.2, requests-mock-1.12.1, typeguard-4.4.2
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 6 items
+
+tests\services\test_fetchers.py ..F.F.                                   [100%]
+
+================================== FAILURES ===================================
+_________________________ test_macro_fetcher_success __________________________
+tests\services\test_fetchers.py:61: in test_macro_fetcher_success
+    assert len(results) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+---------------------------- Captured stderr call -----------------------------
+INFO:app.services.macro_data:Fetching macro data for fed_funds_rate (FEDFUNDS)
+ERROR:app.services.macro_data:Failed to fetch data for fed_funds_rate: 'coroutine' object has no attribute 'get'
+------------------------------ Captured log call ------------------------------
+INFO     app.services.macro_data:macro_data.py:44 Fetching macro data for fed_funds_rate (FEDFUNDS)
+ERROR    app.services.macro_data:macro_data.py:81 Failed to fetch data for fed_funds_rate: 'coroutine' object has no attribute 'get'
+__________________________ test_news_fetcher_success __________________________
+tests\services\test_fetchers.py:91: in test_news_fetcher_success
+    assert len(results) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+---------------------------- Captured stderr call -----------------------------
+INFO:app.services.news_data:Fetching news for AAPL from 2026-03-01 to 2026-03-02
+ERROR:app.services.news_data:Failed to fetch news for AAPL: 'coroutine' object is not iterable
+------------------------------ Captured log call ------------------------------
+INFO     app.services.news_data:news_data.py:51 Fetching news for AAPL from 2026-03-01 to 2026-03-02
+ERROR    app.services.news_data:news_data.py:88 Failed to fetch news for AAPL: 'coroutine' object is not iterable
+============================== warnings summary ===============================
+..\..\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pydantic\_internal\_config.py:295
+  C:\Users\ahmty\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pydantic\_internal\_config.py:295: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.10/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+tests/services/test_fetchers.py::test_macro_fetcher_success
+  C:\Users\ahmty\fin-eye\backend\tests\services\test_fetchers.py:59: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    results = await fetcher.fetch_series("FEDFUNDS", "fed_funds_rate", "2023-10-01")
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/services/test_fetchers.py::test_news_fetcher_success
+  C:\Users\ahmty\fin-eye\backend\tests\services\test_fetchers.py:89: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    results = await fetcher.fetch_recent_news("AAPL", days_back=1)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/services/test_fetchers.py::test_macro_fetcher_success - assert 0...
+FAILED tests/services/test_fetchers.py::test_news_fetcher_success - assert 0 ...
+=================== 2 failed, 4 passed, 3 warnings in 2.88s ===================

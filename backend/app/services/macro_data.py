@@ -2,7 +2,7 @@ import httpx
 from typing import List, Optional
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.config import settings
 from app.schemas.data_models import MacroData
 
@@ -80,3 +80,41 @@ class MacroFetcher:
         except Exception as e:
             logger.error(f"Failed to fetch data for {indicator_name}: {e}")
             return []
+
+    async def fetch_fed_funds_rate(self) -> List[MacroData]:
+        """Fetch Federal Funds Rate (FEDFUNDS)"""
+        start = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+        return await self.fetch_series("FEDFUNDS", "fed_funds_rate", start)
+
+    async def fetch_unemployment_rate(self) -> List[MacroData]:
+        """Fetch Unemployment Rate (UNRATE)"""
+        start = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+        return await self.fetch_series("UNRATE", "unemployment_rate", start)
+
+    async def fetch_yield_spread(self) -> List[MacroData]:
+        """Fetch 10-Year Minus 2-Year Treasury Constant Maturity (T10Y2Y)"""
+        start = (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d")
+        return await self.fetch_series("T10Y2Y", "yield_spread_10y_2y", start)
+
+    async def fetch_cpi_yoy(self) -> List[MacroData]:
+        """Fetch CPI (CPIAUCSL) and calculate Year-over-Year percent change"""
+        start = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
+        results = await self.fetch_series("CPIAUCSL", "cpi_raw", start)
+        if len(results) < 13:
+            return []
+            
+        results.sort(key=lambda x: x.date)
+        yoy_results = []
+        for i in range(12, len(results)):
+            current = results[i]
+            year_ago = results[i - 12]
+            if year_ago.value == 0:
+                continue
+            yoy_value = ((current.value - year_ago.value) / year_ago.value) * 100
+            yoy_results.append(MacroData(
+                indicator_name="cpi_yoy",
+                value=round(yoy_value, 2),
+                date=current.date
+            ))
+        return yoy_results
+

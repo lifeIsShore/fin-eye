@@ -1,0 +1,92 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.3.4, pluggy-1.5.0
+rootdir: C:\Users\ahmty\fin-eye\backend
+plugins: anyio-4.8.0, dash-2.18.2, Faker-37.1.0, asyncio-1.3.0, docker-3.1.2, requests-mock-1.12.1, typeguard-4.4.2
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 2 items
+
+tests\api\test_macro.py EE                                               [100%]
+
+=================================== ERRORS ====================================
+______________ ERROR at setup of test_get_latest_macro_dashboard ______________
+
+self = <Coroutine test_get_latest_macro_dashboard>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+>       return super().setup()
+
+..\..\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pytest_asyncio\plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pytest_asyncio\plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+..\..\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pytest_asyncio\plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+..\..\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pytest_asyncio\plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+test_app = <fastapi.applications.FastAPI object at 0x000001B47971D890>
+
+    @pytest_asyncio.fixture(scope="session")
+    async def client(test_app) -> AsyncGenerator[AsyncClient, None]:
+        """Provide an async test client."""
+>       async with AsyncClient(app=test_app, base_url="http://testserver") as test_client:
+E       TypeError: AsyncClient.__init__() got an unexpected keyword argument 'app'
+
+tests\conftest.py:22: TypeError
+---------------------------- Captured stderr setup ----------------------------
+INFO:app.db.redis_client:\u2705 Redis connected successfully
+----------------------------- Captured log setup ------------------------------
+INFO     app.db.redis_client:redis_client.py:23 \u2705 Redis connected successfully
+__________________ ERROR at setup of test_refresh_macro_data __________________
+
+self = <Coroutine test_refresh_macro_data>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+>       return super().setup()
+
+..\..\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pytest_asyncio\plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pytest_asyncio\plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+..\..\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pytest_asyncio\plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+test_app = <fastapi.applications.FastAPI object at 0x000001B47971D890>
+
+    @pytest_asyncio.fixture(scope="session")
+    async def client(test_app) -> AsyncGenerator[AsyncClient, None]:
+        """Provide an async test client."""
+>       async with AsyncClient(app=test_app, base_url="http://testserver") as test_client:
+E       TypeError: AsyncClient.__init__() got an unexpected keyword argument 'app'
+
+tests\conftest.py:22: TypeError
+============================== warnings summary ===============================
+..\..\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pydantic\_internal\_config.py:295
+  C:\Users\ahmty\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\pydantic\_internal\_config.py:295: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.10/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+tests/api/test_macro.py::test_refresh_macro_data
+  C:\Users\ahmty\fin-eye\backend\app\db\redis_client.py:32: DeprecationWarning: Call to deprecated close. (Use aclose() instead) -- Deprecated since version 5.0.1.
+    await redis_client.close()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+ERROR tests/api/test_macro.py::test_get_latest_macro_dashboard - TypeError: A...
+ERROR tests/api/test_macro.py::test_refresh_macro_data - TypeError: AsyncClie...
+======================== 2 warnings, 2 errors in 1.30s ========================
