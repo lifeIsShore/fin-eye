@@ -490,8 +490,141 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
-**Last Updated:** 2026-03-02 06:30:00  
-**Next Update:** MVP-TECH-01 – training orchestration & model registry
+**Last Updated:** 2026-03-02 09:00:00  
+**Next Update:** MVP-TECH-01 – implement real feature engineering and DB-backed FeatureBuilder
+
+---
+
+### 2026-03-02
+
+**Session 19 – MVP-TECH-01: Multi-Model Comparison Orchestration (Single Timeframe)**
+
+- **Context**
+  - Continuing `MVP-TECH-01` by adding a small orchestrator that compares multiple model families for a single timeframe and records the best one, still avoiding full cross-timeframe complexity.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Added `train_all_models_for_timeframe` in `app/services/technical_training.py` to:
+    - Call `train_logistic_baseline_for_timeframe` and `train_xgboost_for_timeframe` for the same timeframe.
+    - Aggregate their `ModelPerformance` entries.
+    - Use `pick_timeframe_winner` to select the highest Sharpe model across both families.
+    - Persist a consolidated winner via the model registry with notes `"combined models v1"`.
+  - ✅ Extended `tests/services/test_technical_training.py` with:
+    - `test_train_all_models_for_timeframe_records_combined_winner`, asserting that:
+      - The combined result contains performances from both `ModelKind.LOGISTIC` and `ModelKind.XGBOOST`.
+      - The registry has a latest entry for the timeframe after orchestration runs.
+
+- **Status & results**
+  - The technical layer now has a clear pattern for running multiple models per timeframe, comparing them on Sharpe, and recording a single winner, which is a core requirement of `MVP-TECH-01`.
+
+---
+
+### 2026-03-02
+
+**Session 20 – MVP-TECH-01: Feature Schema & Builder Interface**
+
+- **Context**
+  - Implementing a canonical technical feature schema and a stubbed FeatureBuilder so training code has a stable contract before full feature engineering is added.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Added `TechnicalFeatureRow` to `app/schemas/data_models.py`, capturing:
+    - Price/technical: short/medium-term returns, 20-day volatility, RSI-14, MACD (line/signal/histogram), Bollinger band levels.
+    - Sentiment: 1d/7d/30d news sentiment aggregates and a 30d source-diversity metric.
+    - Macro: Macro Score, VIX level, 10y–2y yield spread.
+    - Temporal: day of week, month, and hour of day.
+  - ✅ Created `app/services/feature_builder.py` with:
+    - `FeatureBuilder` protocol defining `build_features(symbol, timeframe, start, end) -> pd.DataFrame`.
+    - `StubFeatureBuilder` that returns a synthetic DataFrame matching `TechnicalFeatureRow`’s columns and validates a sample against the Pydantic model.
+  - ✅ Updated `train_all_models_for_timeframe` in `app/services/technical_training.py` to:
+    - Accept `symbol`, `start`, `end`, and an optional `FeatureBuilder`.
+    - Use `StubFeatureBuilder` by default to produce a feature DataFrame, and then pass that into the existing logistic/XGBoost training flows.
+  - ✅ Adapted `tests/services/test_technical_training.py` so the combined training test now calls `train_all_models_for_timeframe` with symbol and date range, exercising the stub builder path.
+
+- **Status & results**
+  - The technical layer now has a single, explicit schema for model features and a clear hook (`FeatureBuilder`) where real feature engineering and data joins will live, while training code already works against this contract.
+  - Next steps for `MVP-TECH-01` are to replace `StubFeatureBuilder` with a DB-backed implementation that pulls real OHLCV, macro, and sentiment data and computes the indicators specified in the PRD.
+
+---
+
+### 2026-03-02
+
+**Session 18 – MVP-TECH-01: Add XGBoost Baseline for Single Timeframe**
+
+- **Context**
+  - Incrementally extending `MVP-TECH-01` by adding a second model family (XGBoost) to the training orchestration for a single timeframe, reusing the existing helpers and registry.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Updated `app/services/technical_training.py` to import and use `XGBClassifier` from `xgboost`.
+  - ✅ Added `train_xgboost_for_timeframe`, mirroring the logistic baseline flow:
+    - Uses the same walk-forward splits and target convention.
+    - Trains a multi-class XGBoost classifier per split.
+    - Computes Sharpe ratio and accuracy from validation predictions.
+    - Wraps results in `ModelPerformance` with `ModelKind.XGBOOST` and records the winner via the model registry.
+  - ✅ Extended `tests/services/test_technical_training.py` to verify that XGBoost training:
+    - Produces at least one `ModelPerformance`.
+    - Registers a latest winner for the timeframe in the in-memory registry.
+
+- **Status & results**
+  - The technical layer now supports two competing model families (logistic baseline and XGBoost) for a single timeframe, each with its own training + evaluation + registry path.
+  - Next for `MVP-TECH-01` is to design how to run multiple models per timeframe together, compare their Sharpe ratios using the shared helpers, and prepare this structure for eventual integration into the GAS engine and multi-timeframe consensus logic.
+
+---
+
+### 2026-03-02
+
+**Session 17 – MVP-TECH-01: First Training Orchestration (Logistic Baseline, Single Timeframe)**
+
+- **Context**
+  - Implementing an initial, narrow training orchestration for `MVP-TECH-01` using a simple logistic regression baseline on a single timeframe, leveraging the previously added helpers and registry.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Added `app/services/technical_training.py`:
+    - `_prepare_walk_forward_splits` to build 3y train / 6m validation splits for a given timeframe, based on a `DatetimeIndex`, feature columns, and a `target` column in `{-1, 0, 1}`.
+    - `train_logistic_baseline_for_timeframe` which:
+      - Trains `sklearn.linear_model.LogisticRegression` across walk-forward splits for a chosen timeframe.
+      - Computes a simple Sharpe ratio from directional returns (correct vs incorrect predictions).
+      - Aggregates accuracy and wraps results in `ModelPerformance`.
+      - Uses `pick_timeframe_winner` + `record_winners` to persist the winning logistic model metadata in the registry with notes (`"logistic baseline v1"`).
+  - ✅ Added `tests/services/test_technical_training.py` with synthetic data to validate split creation and that a winner is recorded in the in-memory registry.
+
+- **Status & results**
+  - `MVP-TECH-01` now has a working, test-covered training orchestration path for one simple model and timeframe; this provides a concrete template to extend to additional models (XGBoost, Prophet, LSTM) and timeframes later.
+  - Next work for this story will focus on broadening model coverage, improving feature engineering, and designing a persistent model storage strategy beyond the in-memory registry.
+
+---
+
+### 2026-03-02
+
+**Session 16 – MVP-TECH-01: Model Registry & Metadata**
+
+- **Context**
+  - Continuing `MVP-TECH-01` by adding a simple model registry and metadata layer to record which model “won” per timeframe, without yet wiring full training pipelines.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Created `app/services/model_registry.py` with:
+    - `ModelRecord` dataclass capturing timeframe, model kind, Sharpe, accuracy, timestamp, and notes.
+    - `ModelRegistry` protocol defining `save_winner`, `list_winners`, and `get_latest_for_timeframe`.
+    - `InMemoryModelRegistry` implementation for development and tests.
+    - `record_winners` helper to convert `TimeframeWinner` objects from the technical layer into persisted records.
+  - ✅ Added `tests/services/test_model_registry.py` to verify saving, listing, retrieving latest per timeframe, and the `record_winners` helper.
+
+- **Status & results**
+  - The technical layer now has a clean, extensible registry abstraction for winner metadata; a future session can swap `InMemoryModelRegistry` for a database-backed version without changing calling code.
+  - `MVP-TECH-01` remains in progress; next steps focus on a first, narrow training orchestration pass that uses the helpers and registry for a single timeframe and simple models.
 
 ---
 
