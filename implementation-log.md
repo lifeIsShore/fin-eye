@@ -212,5 +212,32 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
-**Last Updated:** 2026-03-01 23:59:59  
-**Next Update:** After Task 1.2 completion
+### 2026-03-02
+
+**Session 4 – Task 1.2: Database Schema & Alembic Config**
+
+- **Context**
+  - Implementing Task 1.2 of MVP-DATA-01: Create database schema and models.
+
+- **Stories touched**
+  - `MVP-DATA-01` (MVP – Data/Infra) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Created SQLAlchemy models (`User`, `StockOHLCV`, `MacroIndicator`, `NewsArticle`, `SentimentAggregate`).
+  - ✅ Initialized Alembic (`alembic init alembic`) for database migrations.
+  - ✅ Configured `alembic/env.py` to use dynamic `database_url` from Pydantic config.
+
+- **Status & results**
+  - Models are defined and migration environment is ready in `backend/alembic`.
+  - Blocked on running the first Alembic migration until PostgreSQL is accessible.
+
+- **Next steps**
+  - Start PostgreSQL database via Docker.
+  - Run `alembic revision --autogenerate -m "Initial migration"` to generate the migration script.
+  - Run `alembic upgrade head` to apply it to the database.
+  - Proceed to Task 1.3: Data Fetchers.
+
+---
+
+**Last Updated:** 2026-03-02 01:35:00  
+**Next Update:** After Alembic migration completion
