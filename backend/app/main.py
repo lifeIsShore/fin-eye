@@ -5,6 +5,7 @@ import logging
 
 from app.config import settings
 from app.db.database import init_db, test_db_connection
+from app.db.redis_client import init_redis, close_redis, redis_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,9 +16,11 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting Fin-Eye...")
     test_db_connection()
     init_db()
+    await init_redis()
     yield
     # Shutdown
     logger.info("🛑 Shutting down Fin-Eye...")
+    await close_redis()
 
 app = FastAPI(
     title=settings.app_name,
@@ -36,7 +39,8 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_check() -> dict:
-    return {"status": "ok", "version": settings.app_version}
+    redis_status = "connected" if redis_client and await redis_client.ping() else "disconnected"
+    return {"status": "ok", "version": settings.app_version, "redis_status": redis_status}
 
 @app.get("/")
 async def root() -> dict:

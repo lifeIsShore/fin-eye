@@ -33,7 +33,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-LEARN-01        | MVP – Learn/Blog      | NOT_STARTED  | -            | Independent |
 | MVP-ONBOARD-01      | MVP – Onboarding      | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-HEDGE-01        | MVP – Hedging         | NOT_STARTED  | -            | Depends on DATA-01, DASH-01 |
-| MVP-DATA-01         | MVP – Data/Infra      | IN_PROGRESS  | 2026-03-01   | ✅ Task 1.1 DONE (Project structure, config, DB setup) |
+| MVP-DATA-01         | MVP – Data/Infra      | IN_PROGRESS  | 2026-03-02   | ✅ Tasks 1.1, 1.2, 1.3, 1.4 DONE |
 | P2-PORT-01          | P2 – Portfolio        | NOT_STARTED  | -            | Depends on DASH-01 |
 | P2-RET-01           | P2 – Retail Sentiment | NOT_STARTED  | -            | Depends on DATA-01 |
 | P2-EVENT-01         | P2 – Events           | NOT_STARTED  | -            | Depends on DATA-01 |
@@ -266,5 +266,33 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
-**Last Updated:** 2026-03-02 01:45:00  
-**Next Update:** After Task 1.4 completion
+### 2026-03-02
+
+**Session 6 – Task 1.4: Redis Caching**
+
+- **Context**
+  - Implementing Task 1.4 of MVP-DATA-01: Build a Redis caching layer for the application.
+
+- **Stories touched**
+  - `MVP-DATA-01` (MVP – Data/Infra) – **IN_PROGRESS** (Task 1.4 DONE)
+
+- **Work done**
+  - ✅ Spun up a local Redis instance using Docker (`fin-eye-redis`).
+  - ✅ Created Redis connection pool (`app/db/redis_client.py`) using `redis.asyncio`.
+  - ✅ Built generic `CacheService` (`app/services/cache_service.py`) supporting `get`, `set`, `delete`, and `get_or_set` (fallback fetching).
+  - ✅ Integrated Redis initialization and shutdown into FastAPI lifespan (`app/main.py`).
+  - ✅ Added Redis connection status to `/health` endpoint.
+  - ✅ Created and passed test script (`scripts/test_redis.py`) to verify caching behavior.
+
+- **Status & results**
+  - Redis cache layer is functional and integrated.
+  - The API is ready to utilize caching for external data fetches.
+
+- **Next steps**
+  - Proceed to Task 1.5: Testing + docs.
+
+---
+
+**Last Updated:** 2026-03-02 01:50:00  
+**Next Update:** After Task 1.5 completion
+
