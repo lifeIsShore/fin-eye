@@ -490,8 +490,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
-**Last Updated:** 2026-03-02 09:00:00  
-**Next Update:** MVP-TECH-01 – implement real feature engineering and DB-backed FeatureBuilder
+**Last Updated:** 2026-03-02 10:30:00  
+**Next Update:** MVP-TECH-01 – wire DbFeatureBuilder into a real training run and decide model artefact persistence
 
 ---
 
@@ -548,6 +548,89 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Status & results**
   - The technical layer now has a single, explicit schema for model features and a clear hook (`FeatureBuilder`) where real feature engineering and data joins will live, while training code already works against this contract.
   - Next steps for `MVP-TECH-01` are to replace `StubFeatureBuilder` with a DB-backed implementation that pulls real OHLCV, macro, and sentiment data and computes the indicators specified in the PRD.
+
+---
+
+### 2026-03-02
+
+**Session 21 – MVP-TECH-01: Real FeatureBuilder (Price + Macro for 1d)**  
+
+- **Context**
+  - Replacing the purely synthetic feature builder with a first real, DB-backed implementation for the daily (`1d`) timeframe, focusing on price-based indicators and macro backdrop.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Extended `TechnicalFeatureRow` in `app/schemas/data_models.py` to be the canonical schema for technical features, as defined in Session 20.
+  - ✅ Implemented `DbFeatureBuilder` in `app/services/feature_builder.py`:
+    - Loads `StockOHLCV` rows for a given `symbol` and date range from the database.
+    - Computes real technical features for the `1d` timeframe:
+      - `return_1d`, `return_5d`, `volatility_20d`, `rsi_14`, and 20-day Bollinger bands (upper/middle/lower).
+    - Joins macro context from `MacroIndicator`:
+      - Aligns VIX (`indicator_name="vix"`) by date with forward-fill to produce a `vix_level` series.
+      - Uses a placeholder `macro_score=50.0` for now (to be refined later).
+    - Fills sentiment features with safe placeholder values and derives temporal fields (day-of-week, month, hour-of-day).
+    - Validates sample rows against `TechnicalFeatureRow` to catch schema mismatches early.
+  - ✅ Updated `train_all_models_for_timeframe` in `app/services/technical_training.py` to accept `symbol`, `start`, `end`, and an optional `FeatureBuilder`, and internally call the builder (tests still inject `StubFeatureBuilder` via the optional parameter to avoid DB dependencies).
+
+- **Status & results**
+  - For the `1d` timeframe, the system can now build feature matrices from real OHLCV + VIX data using a DB-backed builder, while keeping sentiment and some advanced indicators as clearly documented placeholders.
+  - `MVP-TECH-01` is closer to end-to-end realism; the next incremental steps are to enrich `DbFeatureBuilder` with MACD, real macro_score logic, sentiment joins, and eventual multi-timeframe support before moving on to `MVP-TECH-02`.
+
+---
+
+### 2026-03-02
+
+**Session 22 – MVP-TECH-01: Enrich DbFeatureBuilder (MACD + Yield Spread)**
+
+- **Context**
+  - Incrementally enriching the DB-backed feature builder with additional real indicators, keeping scope limited to the daily (`1d`) timeframe.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Updated `DbFeatureBuilder` in `app/services/feature_builder.py` to compute:
+    - MACD (12/26 EMA) plus signal line (9 EMA) and histogram (`macd`, `macd_signal`, `macd_hist`).
+  - ✅ Extended macro joins in `DbFeatureBuilder` to also align:
+    - `yield_spread_10y_2y` from `MacroIndicator` (forward-filled by date and mapped onto OHLCV timestamps).
+  - ✅ Added `tests/services/test_feature_builder.py`:
+    - Seeds `StockOHLCV` with a gently trending close series, plus macro indicators (VIX + yield spread).
+    - Asserts the feature DataFrame includes the new columns and that MACD is non-zero for trending prices.
+
+- **Status & results**
+  - Daily features now include a broader, more realistic technical set and a second macro dimension (yield spread), while sentiment fields and macro_score remain explicitly placeholder-only.
+  - Next step is to join real sentiment aggregates and replace the placeholder macro_score series with a date-aligned score from stored macro indicators.
+
+---
+
+### 2026-03-02
+
+**Session 23 – MVP-TECH-01: Join Real Sentiment Aggregates + Date-Aligned Macro Score**
+
+- **Context**
+  - Continuing incremental feature engineering by replacing remaining placeholders in `DbFeatureBuilder` for sentiment aggregates and macro_score, still only for the `1d` timeframe.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Created `app/services/macro_scoring.py` containing the shared `compute_macro_score` heuristic, and updated the macro API endpoint to import it (avoids duplicated logic).
+  - ✅ Updated `DbFeatureBuilder` in `app/services/feature_builder.py` to:
+    - Join `SentimentAggregate` (news) by date and compute weighted rolling averages:
+      - `news_sentiment_1d`, `news_sentiment_7d`, `news_sentiment_30d` (weighted by mentions).
+    - Compute `news_source_diversity_30d` using distinct `NewsArticle.source` values in a 30-day sliding window (constant-time sliding counter).
+    - Replace placeholder `macro_score` with a per-date score derived from stored macro indicators (`fed_funds_rate`, `unemployment_rate`, `cpi_yoy`, `yield_spread_10y_2y`, `vix`) using the shared `compute_macro_score`.
+  - ✅ Extended `tests/services/test_feature_builder.py` to seed:
+    - Macro indicators needed for scoring,
+    - `SentimentAggregate` rows,
+    - `NewsArticle` sources for diversity,
+    and assert that joined sentiment, diversity, and macro_score values behave as expected.
+
+- **Status & results**
+  - `DbFeatureBuilder` now produces a much more realistic daily feature matrix: price/TA + macro_score + vix + yield spread + real news sentiment aggregates and source diversity.
+  - Next step is to run a real training pass using `DbFeatureBuilder` (not the stub) and then decide how to persist model artefacts and winners beyond in-memory metadata.
 
 ---
 
