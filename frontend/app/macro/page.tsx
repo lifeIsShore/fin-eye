@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import { fetchMacroLatest } from "../../lib/api";
 

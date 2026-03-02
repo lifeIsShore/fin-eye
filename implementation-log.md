@@ -17,9 +17,9 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 | Story ID            | Phase / Area          | Status       | Last Updated | Notes |
 |---------------------|-----------------------|--------------|--------------|-------|
-| MVP-DASH-01         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on TECH-02, AUTH-01 |
-| MVP-DASH-02         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
-| MVP-DASH-03         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
+| MVP-DASH-01         | MVP – Dashboard       | DONE         | 2026-03-02   | GAS, Market Weather, UI implemented |
+| MVP-DASH-02         | MVP – Dashboard       | DONE         | 2026-03-02   | Tech Regime & Volatility implemented |
+| MVP-DASH-03         | MVP – Dashboard       | DONE         | 2026-03-02   | Multi-timeframe tiles implemented |
 | MVP-EXPL-01         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-EXPL-02         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-TECH-01         | MVP – ML/Tech layer   | IN_PROGRESS  | 2026-03-02   | Features + training + JSONL registry + artifact persistence |
@@ -915,3 +915,28 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - Frontend
   - Next time you work on the UI, you can reuse the existing Next.js shell to add the Macro tab and, later, the main dashboard without changing backend contracts.
+
+---
+
+### 2026-03-02
+
+**Session 29 – MVP-DASH-01, 02, 03: Main Dashboard Frontend**
+
+- **Context**
+  - Building the primary user dashboard, integrating Technical, Sentiment, and Macro data into a unified Global Alignment Score (GAS) and rendering the widgets.
+
+- **Stories touched**
+  - `MVP-DASH-01` (MVP – Dashboard) – **DONE**
+  - `MVP-DASH-02` (MVP – Dashboard) – **DONE**
+  - `MVP-DASH-03` (MVP – Dashboard) – **DONE**
+
+- **Work done**
+  - ✅ Implemented `MarketWeatherWidget` to calculate and display the Global Alignment Score (GAS) based on weighted Macro (30%), Sentiment (30%), and Technical Consensus (40%) scores. 
+  - ✅ Implemented `RegimeWidget` to show technical & volatility regimes.
+  - ✅ Implemented `TimeframeGrid` to visualize directional consensus across the varying 5 timeframes.
+  - ✅ Wired all components into the main dashboard page (`app/page.tsx`), orchestrating concurrent data fetching via `SWR`.
+  - ✅ Configured Next.js with Tailwind CSS v4 and resolved client-side rendering boundaries (`"use client"`) for accurate module resolution.
+
+- **Status & results**
+  - The main dashboard is now functional, presenting a holistic market view for a given symbol.
+  - Core MVP dashboard features are complete and the Next.js production build succeeds.
