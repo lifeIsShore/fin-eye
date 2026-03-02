@@ -22,7 +22,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-DASH-03         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-EXPL-01         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-EXPL-02         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
-| MVP-TECH-01         | MVP – ML/Tech layer   | NOT_STARTED  | -            | Depends on DATA-01 |
+| MVP-TECH-01         | MVP – ML/Tech layer   | IN_PROGRESS  | 2026-03-02   | Walk-forward + Sharpe helpers + model enums |
 | MVP-TECH-02         | MVP – ML/Tech layer   | NOT_STARTED  | -            | Depends on TECH-01 |
 | MVP-BACK-01         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on DATA-01 |
 | MVP-BACK-02         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on BACK-01 |
@@ -490,8 +490,32 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
-**Last Updated:** 2026-03-02 06:00:00  
-**Next Update:** Select and start next MVP story (likely technical layer or first dashboard slice)
+**Last Updated:** 2026-03-02 06:30:00  
+**Next Update:** MVP-TECH-01 – training orchestration & model registry
+
+---
+
+### 2026-03-02
+
+**Session 15 – MVP-TECH-01: Technical Layer Foundations (Helpers & Types)**
+
+- **Context**
+  - Starting `MVP-TECH-01` by building core helper functions and type definitions for the technical ML layer, without yet implementing heavy model training.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Added ML dependencies to `backend/requirements.txt` (`scikit-learn`, `xgboost`, `prophet`) in preparation for future training pipelines.
+  - ✅ Created `app/services/technical_models.py` with:
+    - Enums for `Timeframe` and `ModelKind` covering the five timeframes and four model families (LSTM, XGBoost, logistic, Prophet).
+    - Dataclasses for `TrainingWindow`, `ModelPerformance`, and `TimeframeWinner`.
+    - Pure helpers for `compute_sharpe_ratio`, `generate_walk_forward_windows` (3y train / 6m validation walk-forward), `pick_timeframe_winner`, and `summarise_winners_by_timeframe`.
+  - ✅ Added `tests/services/test_technical_models.py` to validate the helper logic (Sharpe ratio behaviour, window generation, winner selection).
+
+- **Status & results**
+  - Technical layer now has a clean foundation for walk-forward evaluation and Sharpe-based winner selection, matching key parts of `MVP-TECH-01` acceptance criteria without entangling training code yet.
+  - Story remains in progress until actual model training, persistence, and feature engineering are implemented.
 
 ---
 
