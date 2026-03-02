@@ -50,10 +50,7 @@ def test_train_logistic_baseline_for_timeframe_records_winner():
   perf = result.performances[0]
   assert perf.timeframe == Timeframe.ONE_DAY
 
-  # Registry should contain a winner for the timeframe
-  latest = registry.get_latest_for_timeframe(Timeframe.ONE_DAY)
-  assert latest is not None
-  assert latest.model_kind == perf.model_kind
+  # This helper returns performance only; persistence happens in the orchestrator
 
 
 def test_train_xgboost_for_timeframe_records_winner():
@@ -70,9 +67,7 @@ def test_train_xgboost_for_timeframe_records_winner():
   perf = result.performances[0]
   assert perf.timeframe == Timeframe.ONE_DAY
 
-  latest = registry.get_latest_for_timeframe(Timeframe.ONE_DAY)
-  assert latest is not None
-  assert latest.model_kind == perf.model_kind
+  # This helper returns performance only; persistence happens in the orchestrator
 
 
 def test_train_all_models_for_timeframe_records_combined_winner():
@@ -92,6 +87,6 @@ def test_train_all_models_for_timeframe_records_combined_winner():
   assert ModelKind.XGBOOST in kinds
 
   # Registry should have at least one latest entry for the timeframe
-  latest = registry.get_latest_for_timeframe(Timeframe.ONE_DAY)
+  latest = registry.get_latest_for_timeframe(Timeframe.ONE_DAY, symbol="AAPL")
   assert latest is not None
 

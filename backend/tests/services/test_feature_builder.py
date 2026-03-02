@@ -117,3 +117,57 @@ def test_db_feature_builder_builds_1d_features(test_db):
     # Macro score should reflect the "stressed" seeded environment (should be < 50)
     assert float(df["macro_score"].iloc[-1]) < 50.0
 
+
+def test_db_feature_builder_builds_1w_features(test_db):
+    symbol = "AAPL"
+    start = datetime(2020, 1, 1)
+    end = datetime(2020, 3, 31)
+
+    # Seed daily OHLCV (enough to resample into multiple weeks)
+    ts_list = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+    for i, ts in enumerate(ts_list):
+        close = 100.0 + i * 0.3
+        test_db.add(
+            StockOHLCV(
+                symbol=symbol,
+                timestamp=ts,
+                open=close - 0.2,
+                high=close + 0.3,
+                low=close - 0.4,
+                close=close,
+                volume=1_000_000.0,
+            )
+        )
+
+    for d in {t.date() for t in ts_list}:
+        test_db.add(MacroIndicator(indicator_name="vix", value=18.0, date=d))
+        test_db.add(MacroIndicator(indicator_name="yield_spread_10y_2y", value=0.5, date=d))
+        test_db.add(MacroIndicator(indicator_name="fed_funds_rate", value=5.0, date=d))
+        test_db.add(MacroIndicator(indicator_name="unemployment_rate", value=6.5, date=d))
+        test_db.add(MacroIndicator(indicator_name="cpi_yoy", value=4.5, date=d))
+        test_db.add(
+            SentimentAggregate(
+                symbol=symbol,
+                date=d,
+                mentions=10,
+                sentiment_score=0.2,
+                source_type="news",
+            )
+        )
+
+    test_db.commit()
+
+    builder = DbFeatureBuilder(db=test_db)
+    df = builder.build_features(
+        symbol=symbol,
+        timeframe=Timeframe.ONE_WEEK,
+        start=start,
+        end=end,
+    )
+
+    assert not df.empty
+    # Weekly resample should have fewer rows than daily range
+    assert len(df) < len(ts_list)
+    assert "macd" in df.columns
+    assert "macro_score" in df.columns
+

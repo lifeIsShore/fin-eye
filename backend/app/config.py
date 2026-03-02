@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(default="change-in-production", alias="JWT_SECRET")
     jwt_algorithm: str = "HS256"
 
+    # Model storage (local filesystem for MVP)
+    model_store_dir: str = Field(default="model_store", alias="MODEL_STORE_DIR")
+
     class Config:
         env_file = ".env"
         case_sensitive = False

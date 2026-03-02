@@ -22,8 +22,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-DASH-03         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-EXPL-01         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-EXPL-02         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
-| MVP-TECH-01         | MVP – ML/Tech layer   | IN_PROGRESS  | 2026-03-02   | Walk-forward + Sharpe helpers + model enums |
-| MVP-TECH-02         | MVP – ML/Tech layer   | NOT_STARTED  | -            | Depends on TECH-01 |
+| MVP-TECH-01         | MVP – ML/Tech layer   | IN_PROGRESS  | 2026-03-02   | Features + training + JSONL registry + artifact persistence |
+| MVP-TECH-02         | MVP – ML/Tech layer   | IN_PROGRESS  | 2026-03-02   | Consensus + 0–100 mapping + API endpoint |
 | MVP-BACK-01         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on DATA-01 |
 | MVP-BACK-02         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on BACK-01 |
 | MVP-SENT-01         | MVP – Sentiment       | DONE         | 2026-03-02   | ✅ Timeseries + 1d/7d/30d + UI (manual QA pending) |
@@ -490,8 +490,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
-**Last Updated:** 2026-03-02 11:00:00  
-**Next Update:** MVP-TECH-01 – decide persistent registry + model artefact storage; then start MVP-TECH-02 consensus logic
+**Last Updated:** 2026-03-02 13:00:00  
+**Next Update:** MVP-TECH-02 – train at least 1d+1w winners for a symbol and return 2-tf consensus from API
 
 ---
 
@@ -656,6 +656,126 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Status & results**
   - The codebase now supports a real end-to-end training run for one symbol and the daily timeframe using actual DB data, feature engineering, and multi-model comparison.
   - Next is to decide and implement minimal persistent storage for model metadata (registry) and model artefacts (serialized model objects), then proceed toward `MVP-TECH-02` consensus scoring.
+
+---
+
+### 2026-03-02
+
+**Session 25 – MVP-TECH-01: Minimal Persistence (JSONL Registry + Model Artifacts)**
+
+- **Context**
+  - Implementing the smallest clean persistence layer for MVP-TECH-01 so training outputs can be saved and resumed across sessions.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Added `joblib` to `backend/requirements.txt` for sklearn model persistence.
+  - ✅ Extended `app/services/model_registry.py`:
+    - `ModelRecord` now includes `symbol` and optional `artifact_path` so metadata is usable across tickers.
+    - Added `JsonlFileModelRegistry` that appends model-winner metadata to a JSONL file and can list/retrieve latest winners by timeframe+symbol.
+    - Updated `record_winners` helper to require `symbol` and optionally attach `artifact_path`.
+  - ✅ Added `app/services/model_artifacts.py`:
+    - `ModelArtifactStore` that saves:
+      - sklearn models via joblib (`.joblib`)
+      - XGBoost models via `save_model` (`.json`)
+    - Artifacts are stored under `model_store/artifacts/<SYMBOL>/<TIMEFRAME>/<MODEL_KIND>.<ext>`.
+  - ✅ Updated `train_all_models_for_timeframe` to:
+    - Fit the *winning* model kind on the full dataset,
+    - Save the artifact via `ModelArtifactStore`,
+    - Record a consolidated winner entry (with artifact path) via the registry.
+    - Kept per-model functions returning performance only (no side-effect persistence).
+  - ✅ Updated `scripts/run_technical_training.py` to use:
+    - `JsonlFileModelRegistry("model_store/registry.jsonl")`
+    - `ModelArtifactStore("model_store/artifacts")`
+    - Prints winner + artifact path after training.
+  - ✅ Added tests:
+    - Updated `tests/services/test_model_registry.py` for `symbol`/`record_winners` signature changes.
+    - Added `tests/services/test_jsonl_model_registry.py` to validate JSONL round-trip persistence.
+
+- **Status & results**
+  - Training can now persist both winner metadata (JSONL) and the winning model artifact to disk, making MVP-TECH-01 outputs reproducible across sessions.
+  - Next: start `MVP-TECH-02` (multi-timeframe consensus and technical confidence score) using the stored winners and their Sharpe ratios as weights.
+
+---
+
+### 2026-03-02
+
+**Session 26 – MVP-TECH-02: Technical Consensus + Confidence Score (Foundations)**
+
+- **Context**
+  - Starting `MVP-TECH-02` by implementing the consensus logic and 0–100 score mapping, plus minimal inference scaffolding that can read stored winners and load their saved model artifacts.
+
+- **Stories touched**
+  - `MVP-TECH-02` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Added `app/services/technical_consensus.py`:
+    - `TimeframeSignal` and `TechnicalConsensus` data structures.
+    - `compute_consensus` that combines per-timeframe directions using Sharpe-based weights and confidence, producing a consensus in \([-1,+1]\).
+    - `consensus_to_score` mapping consensus \([-1,+1]\) → Technical Confidence Score \(0–100\) and a simple text summary band.
+    - `build_consensus_for_symbol` scaffolding:
+      - Loads latest winner per timeframe+symbol from the registry,
+      - Loads the model artifact,
+      - Builds the latest feature row,
+      - Produces direction + confidence and computes overall consensus.
+      - Works with partial timeframes (if only 1d is trained, consensus is computed from that single signal).
+  - ✅ Extended `app/services/model_artifacts.py` with a `load(...)` method to load persisted models:
+    - joblib load for sklearn models
+    - `XGBClassifier.load_model` for XGBoost JSON artifacts
+  - ✅ Added unit tests `tests/services/test_technical_consensus.py` to validate consensus weighting and 0–100 mapping.
+
+- **Status & results**
+  - Core `MVP-TECH-02` consensus + score mapping is implemented and test-covered.
+  - Next steps are to (1) train winners for additional timeframes, and (2) expose the consensus score via a backend API endpoint for the dashboard.
+
+---
+
+### 2026-03-02
+
+**Session 27 – MVP-TECH-02: Expose Technical Consensus via API**
+
+- **Context**
+  - Making the MVP-TECH-02 consensus consumable by the frontend/dashboard by adding a dedicated API endpoint.
+
+- **Stories touched**
+  - `MVP-TECH-02` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Added `GET /api/v1/technical/{symbol}/latest` endpoint in `app/api/v1/endpoints/technical.py`:
+    - Loads latest winners from the JSONL registry under `MODEL_STORE_DIR`.
+    - Loads model artifacts from the artifact store.
+    - Builds consensus using `build_consensus_for_symbol` across the 5 timeframes (partial if only some are trained).
+  - ✅ Registered the new router in `app/main.py` under the `technical` tag.
+  - ✅ Added `app/api/v1/endpoints/__init__.py` to make endpoint imports explicit.
+  - ✅ Added API test `tests/api/test_technical.py` which monkeypatches the consensus builder (keeps the test fast and avoids filesystem/model loading).
+  - ✅ Documented `MODEL_STORE_DIR` in `backend/.env.example` for local configuration.
+
+- **Status & results**
+  - The backend now exposes the technical consensus and 0–100 confidence score via a stable endpoint for UI integration.
+  - Next: train winners for the remaining timeframes (currently DbFeatureBuilder only supports 1d) so the endpoint returns a full 5-timeframe consensus.
+
+---
+
+### 2026-03-02
+
+**Session 28 – MVP-TECH-02: Extend FeatureBuilder + Training to Weekly (1w)**
+
+- **Context**
+  - Incrementally expanding timeframe coverage so MVP-TECH-02 consensus can use more than the daily model, without jumping straight to all five timeframes.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **IN_PROGRESS**
+  - `MVP-TECH-02` (MVP – ML/Tech layer) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Extended `DbFeatureBuilder` to support `Timeframe.ONE_WEEK` by resampling OHLCV into weekly bars (`W-FRI`) and computing the same feature set on the weekly close series.
+  - ✅ Added a weekly feature-builder test (`test_db_feature_builder_builds_1w_features`) to ensure resampling works and the output schema remains intact.
+  - ✅ Updated `scripts/run_technical_training.py` to accept `--timeframe` (`1d` or `1w`) so you can train and persist weekly winners.
+
+- **Status & results**
+  - Weekly (`1w`) feature matrices can now be built from the DB and used for training/persistence, enabling the technical consensus endpoint to evolve from 1-timeframe to multi-timeframe consensus in small steps.
+  - Next step is to run training for both `1d` and `1w` for at least one symbol so `/api/v1/technical/{symbol}/latest` returns a 2-timeframe consensus (before implementing 4h/1h/1m).
 
 ---
 

@@ -20,6 +20,7 @@ from app.services.technical_models import (
 )
 from app.services.model_registry import ModelRegistry, record_winners
 from app.services.feature_builder import FeatureBuilder, StubFeatureBuilder
+from app.services.model_artifacts import ModelArtifactStore
 
 
 @dataclass
@@ -115,10 +116,6 @@ def train_logistic_baseline_for_timeframe(
     )
     performances.append(perf)
 
-    winner = pick_timeframe_winner(performances)
-    if winner:
-        record_winners(registry, [winner], notes="logistic baseline v1")
-
     return TrainingResult(timeframe=timeframe, performances=performances)
 
 
@@ -180,10 +177,6 @@ def train_xgboost_for_timeframe(
     )
     performances.append(perf)
 
-    winner = pick_timeframe_winner(performances)
-    if winner:
-        record_winners(registry, [winner], notes="xgboost v1")
-
     return TrainingResult(timeframe=timeframe, performances=performances)
 
 
@@ -194,6 +187,8 @@ def train_all_models_for_timeframe(
     start: datetime,
     end: datetime,
     feature_builder: FeatureBuilder | None = None,
+    artifact_store: ModelArtifactStore | None = None,
+    artifact_base_dir: str = "model_store",
 ) -> TrainingResult:
     """
     Orchestrate training of all configured models for a single timeframe and
@@ -221,19 +216,55 @@ def train_all_models_for_timeframe(
     next_ret = df["return_1d"].shift(-1).fillna(0.0)
     df["target"] = np.where(next_ret > 0, 1, np.where(next_ret < 0, -1, 0)).astype(int)
 
-    # Train logistic baseline
+    # Train logistic baseline (metadata-only at this level)
     logistic_result = train_logistic_baseline_for_timeframe(df, timeframe, registry)
     all_performances.extend(logistic_result.performances)
 
-    # Train XGBoost baseline
+    # Train XGBoost baseline (metadata-only at this level)
     xgb_result = train_xgboost_for_timeframe(df, timeframe, registry)
     all_performances.extend(xgb_result.performances)
 
     # Determine overall winner across all model kinds
     winner = pick_timeframe_winner(all_performances)
     if winner:
-        # Record a consolidated winner entry
-        record_winners(registry, [winner], notes="combined models v1")
+        # Fit the winning model kind on the full dataset and persist it.
+        X_full = df[[c for c in df.columns if c != "target"]]
+        y_full = df["target"]
+
+        if winner.model_kind == ModelKind.LOGISTIC:
+            final_model = LogisticRegression(max_iter=1000, multi_class="auto")
+            final_model.fit(X_full, y_full)
+        else:
+            y_full_mapped = (y_full.to_numpy() + 1).astype(int)
+            final_model = XGBClassifier(
+                max_depth=4,
+                n_estimators=100,
+                learning_rate=0.1,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                objective="multi:softmax",
+                num_class=3,
+                eval_metric="mlogloss",
+                n_jobs=1,
+            )
+            final_model.fit(X_full, y_full_mapped)
+
+        store = artifact_store or ModelArtifactStore(artifact_base_dir)
+        saved = store.save(
+            symbol=symbol,
+            timeframe=timeframe,
+            model_kind=winner.model_kind,
+            model=final_model,
+        )
+
+        # Record a consolidated winner entry with artifact path
+        record_winners(
+            registry,
+            [winner],
+            symbol=symbol,
+            notes="combined models v1",
+            artifact_path=saved.path,
+        )
 
     return TrainingResult(timeframe=timeframe, performances=all_performances)
 

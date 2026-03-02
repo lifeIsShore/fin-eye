@@ -114,7 +114,7 @@ class DbFeatureBuilder:
         start: datetime,
         end: datetime,
     ) -> pd.DataFrame:
-        if timeframe is not Timeframe.ONE_DAY:
+        if timeframe not in (Timeframe.ONE_DAY, Timeframe.ONE_WEEK):
             # Narrow slice for now; other timeframes can be added later.
             return pd.DataFrame()
 
@@ -147,6 +147,22 @@ class DbFeatureBuilder:
             ]
         )
         ohlcv_df = ohlcv_df.set_index("timestamp").sort_index()
+
+        # Resample to weekly bars if requested (use week ending Friday for equities)
+        if timeframe is Timeframe.ONE_WEEK:
+            ohlcv_df = (
+                ohlcv_df.resample("W-FRI", label="right", closed="right")
+                .agg(
+                    {
+                        "open": "first",
+                        "high": "max",
+                        "low": "min",
+                        "close": "last",
+                        "volume": "sum",
+                    }
+                )
+                .dropna(subset=["open", "high", "low", "close"])
+            )
 
         close = ohlcv_df["close"]
 

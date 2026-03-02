@@ -13,6 +13,7 @@ def test_in_memory_model_registry_basic():
 
     now = datetime.utcnow()
     record = ModelRecord(
+        symbol="AAPL",
         timeframe=Timeframe.ONE_DAY,
         model_kind=ModelKind.XGBOOST,
         sharpe_ratio=1.2,
@@ -50,7 +51,7 @@ def test_record_winners_helper():
     ]
 
     when = datetime.utcnow() - timedelta(days=1)
-    record_winners(registry, winners, trained_at=when, notes="walk-forward v1")
+    record_winners(registry, winners, symbol="AAPL", trained_at=when, notes="walk-forward v1")
 
     all_records = registry.list_winners()
     assert len(all_records) == 2
@@ -60,4 +61,5 @@ def test_record_winners_helper():
     }
     assert all(r.trained_at == when for r in all_records)
     assert all(r.notes == "walk-forward v1" for r in all_records)
+    assert all(r.symbol == "AAPL" for r in all_records)
 
