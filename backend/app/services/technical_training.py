@@ -47,7 +47,7 @@ def _prepare_walk_forward_splits(
         Tuple[TrainingWindow, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
     ] = []
 
-    feature_cols = [c for c in df.columns if c != "target"]
+    feature_cols = [c for c in df.columns if c not in ("target", "symbol", "timestamp")]
 
     for window in windows:
         train_mask = (df.index >= window.train_start) & (df.index < window.train_end)
@@ -228,7 +228,7 @@ def train_all_models_for_timeframe(
     winner = pick_timeframe_winner(all_performances)
     if winner:
         # Fit the winning model kind on the full dataset and persist it.
-        X_full = df[[c for c in df.columns if c != "target"]]
+        X_full = df[[c for c in df.columns if c not in ("target", "symbol", "timestamp")]]
         y_full = df["target"]
 
         if winner.model_kind == ModelKind.LOGISTIC:

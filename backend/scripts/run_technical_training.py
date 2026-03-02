@@ -29,15 +29,26 @@ def main() -> None:
     parser.add_argument(
         "--timeframe",
         default="1d",
-        choices=["1d", "1w"],
-        help="Timeframe to train (currently supported: 1d, 1w)",
+        choices=["1h", "4h", "1d", "1w", "1m", "all"],
+        help="Timeframe to train (choices: 1h, 4h, 1d, 1w, 1m, all)",
     )
     args = parser.parse_args()
 
     symbol = args.symbol.upper()
     start = parse_dt(args.start)
     end = parse_dt(args.end)
-    tf = Timeframe(args.timeframe)
+    
+    timeframes_to_run = []
+    if args.timeframe == "all":
+        timeframes_to_run = [
+            Timeframe.ONE_HOUR,
+            Timeframe.FOUR_HOUR,
+            Timeframe.ONE_DAY,
+            Timeframe.ONE_WEEK,
+            Timeframe.ONE_MONTH,
+        ]
+    else:
+        timeframes_to_run = [Timeframe(args.timeframe)]
 
     db = SessionLocal()
     try:
@@ -45,33 +56,35 @@ def main() -> None:
         registry = JsonlFileModelRegistry("model_store/registry.jsonl")
         store = ModelArtifactStore("model_store/artifacts")
 
-        result = train_all_models_for_timeframe(
-            timeframe=tf,
-            registry=registry,
-            symbol=symbol,
-            start=start,
-            end=end,
-            feature_builder=builder,
-            artifact_store=store,
-        )
-
-        print(f"Symbol: {symbol}  Timeframe: {tf.value}")
-        if not result.performances:
-            print("No performances produced (insufficient data?)")
-            return
-
-        for perf in result.performances:
-            print(
-                f"- {perf.model_kind.value}: sharpe={perf.sharpe_ratio:.3f}  acc={perf.accuracy:.3f}"
+        for tf in timeframes_to_run:
+            print(f"\n--- Training for Timeframe: {tf.value} ---")
+            result = train_all_models_for_timeframe(
+                timeframe=tf,
+                registry=registry,
+                symbol=symbol,
+                start=start,
+                end=end,
+                feature_builder=builder,
+                artifact_store=store,
             )
 
-        latest = registry.get_latest_for_timeframe(tf, symbol=symbol)
-        if latest:
-            print(
-                f"Winner: {latest.model_kind.value}  sharpe={latest.sharpe_ratio:.3f}  acc={latest.accuracy:.3f}"
-            )
-            if latest.artifact_path:
-                print(f"Artifact: {latest.artifact_path}")
+            print(f"Symbol: {symbol}  Timeframe: {tf.value}")
+            if not result.performances:
+                print("No performances produced (insufficient data?)")
+                continue
+
+            for perf in result.performances:
+                print(
+                    f"- {perf.model_kind.value}: sharpe={perf.sharpe_ratio:.3f}  acc={perf.accuracy:.3f}"
+                )
+
+            latest = registry.get_latest_for_timeframe(tf, symbol=symbol)
+            if latest:
+                print(
+                    f"Winner: {latest.model_kind.value}  sharpe={latest.sharpe_ratio:.3f}  acc={latest.accuracy:.3f}"
+                )
+                if latest.artifact_path:
+                    print(f"Artifact: {latest.artifact_path}")
     finally:
         db.close()
 

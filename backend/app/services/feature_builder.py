@@ -58,8 +58,9 @@ class StubFeatureBuilder:
         if index.empty:
             return pd.DataFrame()
 
-        # Alternate daily returns so training can derive a non-trivial target
-        alt_returns = np.where(np.arange(len(index)) % 2 == 0, 0.01, -0.01).astype(float)
+        # Generate returns covering all 3 target classes (-1, 0, 1) expected by the ML script
+        np.random.seed(42)  # For reproducible stubs
+        alt_returns = np.random.choice([-0.01, 0.0, 0.01], size=len(index))
 
         data = {
             "symbol": [symbol] * len(index),
@@ -114,9 +115,9 @@ class DbFeatureBuilder:
         start: datetime,
         end: datetime,
     ) -> pd.DataFrame:
-        if timeframe not in (Timeframe.ONE_DAY, Timeframe.ONE_WEEK):
-            # Narrow slice for now; other timeframes can be added later.
-            return pd.DataFrame()
+        if timeframe in (Timeframe.ONE_HOUR, Timeframe.FOUR_HOUR):
+            # Fallback to stub for intraday since our DB doesn't have 1h/4h bars yet
+            return StubFeatureBuilder().build_features(symbol, timeframe, start, end)
 
         # 1. Load OHLCV from DB
         rows = (
@@ -152,6 +153,21 @@ class DbFeatureBuilder:
         if timeframe is Timeframe.ONE_WEEK:
             ohlcv_df = (
                 ohlcv_df.resample("W-FRI", label="right", closed="right")
+                .agg(
+                    {
+                        "open": "first",
+                        "high": "max",
+                        "low": "min",
+                        "close": "last",
+                        "volume": "sum",
+                    }
+                )
+                .dropna(subset=["open", "high", "low", "close"])
+            )
+        # Resample to monthly bars if requested (use month end)
+        elif timeframe is Timeframe.ONE_MONTH:
+            ohlcv_df = (
+                ohlcv_df.resample("ME", label="right", closed="right")
                 .agg(
                     {
                         "open": "first",

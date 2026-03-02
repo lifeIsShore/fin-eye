@@ -136,3 +136,51 @@ export async function fetchMacroLatest(
   return (await res.json()) as MacroLatestDto;
 }
 
+export interface TechnicalSignalDto {
+  timeframe: string;
+  direction: "Bullish" | "Neutral" | "Bearish";
+  confidence: number;
+  sharpe_weight: number;
+}
+
+export interface TechnicalConsensusDto {
+  symbol: string;
+  consensus: number;
+  technical_confidence_score: number;
+  summary: string;
+  signals: TechnicalSignalDto[];
+}
+
+export async function fetchTechnicalLatest(
+  symbol: string,
+  init?: RequestInit,
+): Promise<TechnicalConsensusDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/technical/${encodeURIComponent(
+      symbol.toUpperCase(),
+    )}/latest`,
+    {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) {
+    if (res.status === 404) {
+      // It's possible for there to be no models trained yet.
+      // We can return a default empty consensus or throw a specific error depending on how we want the UI to handle it.
+      // We'll throw an error for now and let the SWR hook or UI catch it.
+      throw new Error(`Technical models not trained or found for ${symbol}`);
+    }
+    throw new Error(
+      `Failed to load technical consensus for ${symbol}: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  return (await res.json()) as TechnicalConsensusDto;
+}
+

@@ -28,7 +28,6 @@ def get_latest_technical_consensus(
 
     Notes:
       - If only some timeframes have trained winners, this returns a partial consensus.
-      - For now, feature engineering is only implemented for the 1d timeframe in DbFeatureBuilder.
     """
     symbol = symbol.upper()
 
