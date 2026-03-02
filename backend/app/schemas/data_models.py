@@ -22,3 +22,31 @@ class NewsData(BaseModel):
     sentiment_score: Optional[float] = None
     source: Optional[str] = None
     published_at: datetime
+
+
+class SentimentAggregateData(BaseModel):
+    date: date
+    sentiment_score: float
+    mentions: int
+
+
+class SentimentTimeseriesResponse(BaseModel):
+    symbol: str
+    series: List[SentimentAggregateData]
+    sentiment_1d: Optional[float] = Field(default=None)
+    sentiment_7d: Optional[float] = Field(default=None)
+    sentiment_30d: Optional[float] = Field(default=None)
+    articles: List[NewsData]
+
+
+class SentimentSourceBreakdownEntry(BaseModel):
+    source: str
+    positive: int
+    negative: int
+    neutral: int
+
+
+class SentimentSourceBreakdownResponse(BaseModel):
+    symbol: str
+    days: int
+    breakdown: List[SentimentSourceBreakdownEntry]

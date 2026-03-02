@@ -6,7 +6,7 @@ import logging
 from app.config import settings
 from app.db.database import init_db, test_db_connection
 from app.db.redis_client import init_redis, close_redis, redis_client
-from app.api.v1.endpoints import macro
+from app.api.v1.endpoints import macro, sentiment
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,3 +48,8 @@ async def root() -> dict:
     return {"message": "Fin-Eye Backend", "docs": "/docs"}
 
 app.include_router(macro.router, prefix="/api/v1/macro", tags=["macro"])
+app.include_router(
+    sentiment.router,
+    prefix="/api/v1/sentiment",
+    tags=["sentiment"],
+)

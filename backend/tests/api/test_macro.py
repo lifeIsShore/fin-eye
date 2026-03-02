@@ -22,8 +22,9 @@ async def test_get_latest_macro_dashboard(client: AsyncClient, test_app, test_db
 
     response = await client.get("/api/v1/macro/latest")
     assert response.status_code == 200
-    
-    data = response.json().get("data")
+
+    payload = response.json()
+    data = payload.get("data")
     assert data is not None
     
     # Check if all indicators are present
@@ -39,6 +40,12 @@ async def test_get_latest_macro_dashboard(client: AsyncClient, test_app, test_db
     
     assert data["yield_spread_10y_2y"]["value"] == -0.5
     assert "inverted" in data["yield_spread_10y_2y"]["interpretation"].lower()
+
+    # Macro score should be present and within 0–100 with a label
+    macro_score = payload.get("macro_score")
+    assert macro_score is not None
+    assert 0 <= macro_score["score"] <= 100
+    assert macro_score["label"] in {"Supportive", "Neutral", "Stressed"}
 
 @pytest.mark.asyncio
 @patch('app.api.v1.endpoints.macro.refresh_all_macro_indicators')

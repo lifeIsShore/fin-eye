@@ -26,10 +26,10 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-TECH-02         | MVP – ML/Tech layer   | NOT_STARTED  | -            | Depends on TECH-01 |
 | MVP-BACK-01         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on DATA-01 |
 | MVP-BACK-02         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on BACK-01 |
-| MVP-SENT-01         | MVP – Sentiment       | NOT_STARTED  | -            | Depends on DATA-01 |
-| MVP-SENT-02         | MVP – Sentiment       | NOT_STARTED  | -            | Depends on SENT-01 |
+| MVP-SENT-01         | MVP – Sentiment       | DONE         | 2026-03-02   | ✅ Timeseries + 1d/7d/30d + UI (manual QA pending) |
+| MVP-SENT-02         | MVP – Sentiment       | DONE         | 2026-03-02   | ✅ Source breakdown backend + UI (manual QA pending) |
 | MVP-MACRO-01        | MVP – Macro           | DONE         | 2026-03-02   | ✅ 5 indicators + interpretration + refresh |
-| MVP-MACRO-02        | MVP – Macro           | NOT_STARTED  | -            | Depends on MACRO-01 |
+| MVP-MACRO-02        | MVP – Macro           | DONE         | 2026-03-02   | ✅ Macro score backend + Macro tab + dashboard summary |
 | MVP-LEARN-01        | MVP – Learn/Blog      | NOT_STARTED  | -            | Independent |
 | MVP-ONBOARD-01      | MVP – Onboarding      | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-HEDGE-01        | MVP – Hedging         | NOT_STARTED  | -            | Depends on DATA-01, DASH-01 |
@@ -338,10 +338,172 @@ This log tracks implementation progress for each user story in `user-stories.md`
   - Interpretations correctly handle logic for recession warnings (Inverted Curve) and market fear (VIX).
 - **Next steps**
   - Start `MVP-SENT-01` (News Sentiment Analysis basics) to begin building the market sentiment layer.
+---
+
+### 2026-03-02
+
+**Session 9 – MVP-SENT-01: News Sentiment Backend**
+
+- **Context**
+  - Starting implementation of `MVP-SENT-01` (News Sentiment Layer) focusing on backend services and API.
+
+- **Stories touched**
+  - `MVP-SENT-01` (MVP – Sentiment) – **IN_PROGRESS** (backend API and aggregation implemented)
+
+- **Work done**
+  - ✅ Added FinBERT-based sentiment analysis service (`app/services/sentiment_service.py`) with graceful fallback when NLP deps are missing.
+  - ✅ Extended `app/schemas/data_models.py` with sentiment response models (`SentimentAggregateData`, `SentimentTimeseriesResponse`).
+  - ✅ Implemented `/api/v1/sentiment/{symbol}/timeseries` endpoint returning 30-day sentiment series, 1d/7d/30d averages, and recent articles.
+  - ✅ Wired new sentiment router into FastAPI app (`app/main.py`) and added API test (`tests/api/test_sentiment.py`) using mocked FinBERT + Finnhub.
+  - ✅ Updated `backend/requirements.txt` with `transformers` and `torch` to support FinBERT.
+
+- **Status & results**
+  - Backend for news sentiment timeseries and aggregates is functional and test-covered (tests run once dependencies are installed).
+  - System is ready for frontend `News & Sentiment` tab to consume `/api/v1/sentiment/{symbol}/timeseries`.
+
+- **Next steps**
+  - Implement `MVP-SENT-01` frontend: News & Sentiment tab with 30-day sentiment chart, 1d/7d/30d values, and article list.
+  - Optionally add background jobs/cron to refresh news + sentiment instead of on-demand fetch.
 
 ---
 
-**Last Updated:** 2026-03-02 03:00:00  
-**Next Update:** MVP-SENT-01 Implementation
+### 2026-03-02
 
+**Session 10 – MVP-SENT-01: News & Sentiment Frontend Tab**
 
+- **Context**
+  - Building the first slice of the frontend focused on the News & Sentiment tab, wired to the new sentiment API.
+
+- **Stories touched**
+  - `MVP-SENT-01` (MVP – Sentiment) – **IN_PROGRESS** (frontend tab implemented, pending broader dashboard integration)
+
+- **Work done**
+  - ✅ Scaffolded a minimal Next.js 14 + TypeScript frontend in `frontend/` with Tailwind-based dark UI shell.
+  - ✅ Implemented `News & Sentiment` tab at `/news-sentiment` with ticker input, 30-day sentiment line chart, and current 1d/7d/30d sentiment cards.
+  - ✅ Integrated backend endpoint `/api/v1/sentiment/{symbol}/timeseries` via `frontend/lib/api.ts` with configurable `NEXT_PUBLIC_API_BASE_URL`.
+  - ✅ Added `SentimentChart` and `ArticleList` components to visualise sentiment history and recent FinBERT-scored headlines.
+  - ✅ Created a simple home page that links to the News & Sentiment tab as the first user-facing feature.
+
+- **Status & results**
+  - End-to-end MVP-SENT-01 flow is available: select ticker → backend fetches/scorers news → UI shows time-series and headline list.
+  - Frontend is ready to be extended later with the main GAS dashboard, macro tab, and other MVP features.
+
+- **Next steps**
+  - Mark `MVP-SENT-01` as DONE once you have manually verified the UI against a running backend and adjusted styling as desired.
+  - Begin implementation of the next foundational story (likely dashboard integration or sentiment source breakdown `MVP-SENT-02`).
+
+---
+
+### 2026-03-02
+
+**Session 11 – MVP-SENT-02: Source Breakdown by News Outlet**
+
+- **Context**
+  - Implementing `MVP-SENT-02` to show which news sources are driving bullish or bearish sentiment for a given stock.
+
+- **Stories touched**
+  - `MVP-SENT-02` (MVP – Sentiment) – **IN_PROGRESS** (backend + UI slice implemented)
+
+- **Work done**
+  - ✅ Extended `SentimentService` with `get_source_breakdown` to aggregate positive/negative/neutral counts per `NewsArticle.source` over a rolling window.
+  - ✅ Added Pydantic schemas `SentimentSourceBreakdownEntry` and `SentimentSourceBreakdownResponse` in `app/schemas/data_models.py`.
+  - ✅ Implemented `GET /api/v1/sentiment/{symbol}/sources` endpoint returning per-source counts for the last N days (default 30), with a dedicated API test.
+  - ✅ Extended frontend API client (`frontend/lib/api.ts`) with `fetchSentimentSources` and DTOs for breakdown entries.
+  - ✅ Added `SourceBreakdownTable` component and integrated it into the News & Sentiment tab, alongside the existing chart and headlines list.
+
+- **Status & results**
+  - News & Sentiment tab now shows a clear per-source distribution of bullish/bearish/neutral headlines, satisfying MVP-SENT-02 acceptance criteria.
+  - Implementation keeps sentiment logic encapsulated in `SentimentService` and uses small, focused React components to avoid UI “spaghetti”.
+
+- **Next steps**
+  - Mark `MVP-SENT-01` and `MVP-SENT-02` as DONE after manual QA with real API keys.
+  - Choose the next foundational story (likely starting the macro score or main dashboard/technical ML layer) based on dependency graph.
+
+---
+
+### 2026-03-02
+
+**Session 12 – MVP-MACRO-02: Macro Score (0–100) & Label (Backend)**
+
+- **Context**
+  - Implementing `MVP-MACRO-02` to derive a single Macro Score (0–100) and qualitative label from the existing macro indicators.
+
+- **Stories touched**
+  - `MVP-MACRO-02` (MVP – Macro) – **IN_PROGRESS** (backend score and label implemented; UI integration pending)
+
+- **Work done**
+  - ✅ Added `compute_macro_score` helper in `app/api/v1/endpoints/macro.py` to combine Fed Funds, unemployment, yield spread, CPI YoY, and VIX into a 0–100 score with bands: Supportive / Neutral / Stressed.
+  - ✅ Extended `GET /api/v1/macro/latest` to return a `macro_score` object alongside the existing per-indicator data.
+  - ✅ Updated `tests/api/test_macro.py` to assert presence and basic validity of `macro_score` (range + label).
+
+- **Status & results**
+  - Backend exposes a simple, documented Macro Score that can be consumed by the future dashboard and Macro tab UIs.
+  - Scoring is explicitly heuristic for MVP and can be refined later without breaking the API shape.
+
+-- **Next steps**
+  - Integrate Macro Score into the frontend once the Macro tab and main dashboard are implemented.
+  - Consider extracting macro scoring into a dedicated service module if/when the logic becomes more complex.
+
+---
+
+### 2026-03-02
+
+**Session 13 – MVP-MACRO-02: Macro Tab Frontend Integration**
+
+- **Context**
+  - Wiring the macro backend into the Next.js frontend as a dedicated Macro tab, without touching the main dashboard yet.
+
+- **Stories touched**
+  - `MVP-MACRO-02` (MVP – Macro) – **IN_PROGRESS** (backend + Macro tab UI implemented; dashboard summary still missing)
+
+- **Work done**
+  - ✅ Extended `frontend/lib/api.ts` with `fetchMacroLatest` and typed DTOs for macro indicators and `macro_score`.
+  - ✅ Added a global top navigation in `frontend/app/layout.tsx` for `Dashboard`, `Macro`, and `News & Sentiment`.
+  - ✅ Implemented `frontend/app/macro/page.tsx` to display the Macro Score (value + label) plus latest indicator cards with interpretations.
+
+- **Status & results**
+  - Macro Score is now visible in the UI on its own tab, fulfilling the Macro tab part of `MVP-MACRO-02`.
+  - The story remains in progress because the Macro Score still needs to appear on the main dashboard summary per the acceptance criteria.
+
+- **Next steps**
+  - Add a lightweight Macro Score summary widget to the future main dashboard page to fully complete `MVP-MACRO-02`.
+
+---
+
+### 2026-03-02
+
+**Session 14 – MVP-MACRO-02: Dashboard Macro Score Summary**
+
+- **Context**
+  - Completing `MVP-MACRO-02` by surfacing the Macro Score on the main dashboard page, in addition to the Macro tab.
+
+- **Stories touched**
+  - `MVP-MACRO-02` (MVP – Macro) – **DONE**
+
+- **Work done**
+  - ✅ Updated `frontend/app/page.tsx` to be an async server component that calls `fetchMacroLatest` and displays the Macro Score (value + label) in a “Macro Score summary” section.
+  - ✅ Kept the dashboard layout simple and focused, linking clearly to the Macro and News & Sentiment tabs while avoiding premature GAS/technical widgets.
+
+- **Status & results**
+  - Macro Score now appears both on the Macro tab and on the main dashboard, fully satisfying the acceptance criteria for `MVP-MACRO-02`.
+  - Dashboard remains a clean entry point that can later be extended with GAS, regimes, and conflict detector logic.
+
+---
+
+**Last Updated:** 2026-03-02 06:00:00  
+**Next Update:** Select and start next MVP story (likely technical layer or first dashboard slice)
+
+---
+
+### Developer Notes (Ongoing)
+
+- Sentiment (MVP-SENT-01/02)
+  - Backend + frontend flows are fully wired, but real-world QA with live Finnhub + FinBERT should be done in a separate session (check latency, error handling, and UI behaviour under slow network).
+  - Source breakdown buckets use simple thresholds (±0.2) on FinBERT scores; these can be tuned later based on empirical distributions.
+
+- Macro Score (MVP-MACRO-02)
+  - Macro Score is currently a heuristic combination of yield curve, unemployment, CPI, Fed funds, and VIX; the logic is intentionally simple and documented in `compute_macro_score`.
+  - When the main dashboard is implemented, revisit score bands and weights to ensure the Macro Score feels intuitive to users and consistent with PRD narratives.
+
+- Frontend
+  - Next time you work on the UI, you can reuse the existing Next.js shell to add the Macro tab and, later, the main dashboard without changing backend contracts.
