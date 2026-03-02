@@ -239,5 +239,32 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ---
 
-**Last Updated:** 2026-03-02 01:35:00  
-**Next Update:** After Alembic migration completion
+### 2026-03-02
+
+**Session 5 – Task 1.3: Data Fetchers & Validation**
+
+- **Context**
+  - Implementing Task 1.3 of MVP-DATA-01: Build data fetchers and validation schemas.
+
+- **Stories touched**
+  - `MVP-DATA-01` (MVP – Data/Infra) – **IN_PROGRESS**
+
+- **Work done**
+  - ✅ Updated `requirements.txt` with `httpx` and `yfinance`.
+  - ✅ Created Pydantic data schemas in `app/schemas/data_models.py` (`OHLCVData`, `MacroData`, `NewsData`).
+  - ✅ Created `OHLCVFetcher` in `app/services/market_data.py` to get stock data via Yahoo Finance.
+  - ✅ Created async `MacroFetcher` in `app/services/macro_data.py` to get economic data via FRED.
+  - ✅ Created async `NewsFetcher` in `app/services/news_data.py` to get articles via Finnhub.
+  - ✅ Tested `OHLCVFetcher` successfully via a temporary script.
+
+- **Status & results**
+  - Data ingestion foundation is complete and validated using Pydantic schemas. 
+  - FRED and Finnhub fetchers are ready but waiting on valid API keys in `.env`.
+
+- **Next steps**
+  - Proceed to Task 1.4: Redis Caching.
+
+---
+
+**Last Updated:** 2026-03-02 01:45:00  
+**Next Update:** After Task 1.4 completion
