@@ -22,8 +22,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-DASH-03         | MVP – Dashboard       | DONE         | 2026-03-02   | Multi-timeframe tiles implemented |
 | MVP-EXPL-01         | MVP – Dashboard       | DONE         | 2026-03-03   | Dashboard WHY panel and API |
 | MVP-EXPL-02         | MVP – Dashboard       | DONE         | 2026-03-03   | Conflict detector and GAS |
-| MVP-TECH-01         | MVP – ML/Tech layer   | IN_PROGRESS  | 2026-03-02   | Features + training + JSONL registry + artifact persistence |
-| MVP-TECH-02         | MVP – ML/Tech layer   | IN_PROGRESS  | 2026-03-02   | Consensus + 0–100 mapping + API endpoint |
+| MVP-TECH-01         | MVP – ML/Tech layer   | DONE         | 2026-03-03   | Features + training + JSONL registry + artifact persistence |
+| MVP-TECH-02         | MVP – ML/Tech layer   | DONE         | 2026-03-03   | Consensus + 0–100 mapping + API endpoint |
 | MVP-BACK-01         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on DATA-01 |
 | MVP-BACK-02         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on BACK-01 |
 | MVP-SENT-01         | MVP – Sentiment       | DONE         | 2026-03-02   | ✅ Timeseries + 1d/7d/30d + UI (manual QA pending) |
@@ -987,3 +987,27 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Status & results**
   - The feature provides a robust, visual insight into cost scenarios for Protective Puts and Inverse ETFs.
   - End-to-end implementation complete.
+
+---
+
+### 2026-03-03
+
+**Session 32 – MVP-TECH-01, 02: ML Pipeline & Technical Consensus Verification**
+
+- **Context**
+  - Completed the real Machine Learning pipeline training block, ensuring historical fetching, walk-forward validation, tracking winning models, persisting artifacts, and generating LIVE 0-100 technical scores.
+
+- **Stories touched**
+  - `MVP-TECH-01` (MVP – ML/Tech layer) – **DONE**
+  - `MVP-TECH-02` (MVP – Technical Consensus) – **DONE**
+
+- **Work done**
+  - ✅ Developed full feature engineering pipeline matching trading requirements (SMA, RSI, MACD, BB, Volatility, ROC).
+  - ✅ Overhauled ML models to standardize `LogisticRegression`, `XGBClassifier`, and `Prophet` training and output formats.
+  - ✅ Built proper model persistence via `joblib`, updating the `model_registry.jsonl` upon finding highest Sharpe ratio winners.
+  - ✅ Overhauled `compute_technical_consensus` to dynamically execute feature engineering and inference across live YFinance data per timeframe, outputting weighted probabilities into a 0-100 Technical Confidence score.
+  - ✅ Updated FASTAPI endpoints `GET /latest` and `POST /train` (background task) to seamlessly tie into the ML engines.
+  - ✅ Complete End-to-End local testing proving the pipeline respects timezone logic, writes metrics consistently, and handles edge casing.
+
+- **Status & results**
+  - Both technical foundation epics for ML signals and scoring are DONE and locally validated. Live API runs reliably without 500 crashes and provides accurate confidence data formats.
