@@ -20,8 +20,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-DASH-01         | MVP – Dashboard       | DONE         | 2026-03-02   | GAS, Market Weather, UI implemented |
 | MVP-DASH-02         | MVP – Dashboard       | DONE         | 2026-03-02   | Tech Regime & Volatility implemented |
 | MVP-DASH-03         | MVP – Dashboard       | DONE         | 2026-03-02   | Multi-timeframe tiles implemented |
-| MVP-EXPL-01         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
-| MVP-EXPL-02         | MVP – Dashboard       | NOT_STARTED  | -            | Depends on DASH-01 |
+| MVP-EXPL-01         | MVP – Dashboard       | DONE         | 2026-03-03   | Dashboard WHY panel and API |
+| MVP-EXPL-02         | MVP – Dashboard       | DONE         | 2026-03-03   | Conflict detector and GAS |
 | MVP-TECH-01         | MVP – ML/Tech layer   | IN_PROGRESS  | 2026-03-02   | Features + training + JSONL registry + artifact persistence |
 | MVP-TECH-02         | MVP – ML/Tech layer   | IN_PROGRESS  | 2026-03-02   | Consensus + 0–100 mapping + API endpoint |
 | MVP-BACK-01         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on DATA-01 |
@@ -32,7 +32,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-MACRO-02        | MVP – Macro           | DONE         | 2026-03-02   | ✅ Macro score backend + Macro tab + dashboard summary |
 | MVP-LEARN-01        | MVP – Learn/Blog      | NOT_STARTED  | -            | Independent |
 | MVP-ONBOARD-01      | MVP – Onboarding      | NOT_STARTED  | -            | Depends on DASH-01 |
-| MVP-HEDGE-01        | MVP – Hedging         | NOT_STARTED  | -            | Depends on DATA-01, DASH-01 |
+| MVP-HEDGE-01        | MVP – Hedging         | DONE         | 2026-03-03   | API + Full UI panels implemented |
 | MVP-DATA-01         | MVP – Data/Infra      | DONE         | 2026-03-02   | ✅ Tasks 1.1-1.5 DONE |
 | P2-PORT-01          | P2 – Portfolio        | NOT_STARTED  | -            | Depends on DASH-01 |
 | P2-RET-01           | P2 – Retail Sentiment | NOT_STARTED  | -            | Depends on DATA-01 |
@@ -940,3 +940,50 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Status & results**
   - The main dashboard is now functional, presenting a holistic market view for a given symbol.
   - Core MVP dashboard features are complete and the Next.js production build succeeds.
+
+---
+
+### 2026-03-03
+
+**Session 30 – MVP-EXPL-01, 02: Exploration Panels**
+
+- **Context**
+  - Aligned MVP-EXPL-01 (Why is this moving?) and MVP-EXPL-02 (Conflict detector) with the PRD to be dashboard widgets rather than a separate "Deep Exploration" page.
+
+- **Stories touched**
+  - `MVP-EXPL-01` (MVP – Dashboard) – **DONE**
+  - `MVP-EXPL-02` (MVP – Dashboard) – **DONE**
+
+- **Work done**
+  - ✅ Updated documentation (`blueprint.md`, `api-reference.md`) to correctly reflect EXPL-01 and 02 as dashboard features.
+  - ✅ Implemented `explanation.py` endpoint on the backend to provide a stateless explanation snapshot using layer scores as query parameters.
+  - ✅ Created frontend components `WhyMovingPanel.tsx` and `ConflictDetector.tsx`.
+  - ✅ Integrated components into the main dashboard page (`app/page.tsx`), orchestrating them with existing technical, sentiment, and macro context.
+
+- **Status & results**
+  - The exploration requirements (Why Is This Moving, Conflict Detector) are now fully satisfied and integrated directly into the dashboard context.
+  - The API router is properly registered in `main.py`.
+
+---
+
+### 2026-03-03
+
+**Session 31 – MVP-HEDGE-01: Hedging Simulator**
+
+- **Context**
+  - Designed and built the Hedging Simulator feature to estimate portfolio protection costs and payoff scenarios.
+
+- **Stories touched**
+  - `MVP-HEDGE-01` (MVP – Hedging) – **DONE**
+
+- **Work done**
+  - ✅ Implemented `hedging_service.py` to calculate correlation matrices, beta vs SPY, hedge ratios, payoff diagrams, and cost estimates.
+  - ✅ Expose `GET /api/v1/hedge/{symbol}/analysis` and `/api/v1/hedge/{symbol}/correlation` via new endpoints.
+  - ✅ Configured FastAPI router registration and defined Pydantic V2 compatible Query parameters.
+  - ✅ Built full `app/hedge/page.tsx` React component containing 5 panels (Configurator, Beta & Correlation, Payoff Diagram, Equity Curve/Cost Estimate).
+  - ✅ Added `fetchHedgeAnalysis` client method and integrated it with SWR payload.
+  - ✅ Added comprehensive `test_hedging_service.py` to enforce accurate unit calculations and mock price data arrays. All tests passing (exit code 0).
+
+- **Status & results**
+  - The feature provides a robust, visual insight into cost scenarios for Protective Puts and Inverse ETFs.
+  - End-to-end implementation complete.

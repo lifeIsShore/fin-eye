@@ -184,3 +184,65 @@ export async function fetchTechnicalLatest(
   return (await res.json()) as TechnicalConsensusDto;
 }
 
+// ─── Hedging ────────────────────────────────────────────────────────────────
+
+export interface HedgePayoffScenario {
+  return_pct: number;
+  unhedged: number;
+  hedged: number;
+}
+
+export interface HedgeAnalysisDto {
+  symbol: string;
+  hedge_type: string;
+  portfolio_value: number;
+  period: string;
+  correlation: {
+    symbol: string;
+    period: string;
+    correlations: Record<string, number>;
+  };
+  beta: {
+    symbol: string;
+    benchmark: string;
+    beta: number;
+    r_squared: number;
+    data_points: number;
+  };
+  hedge_ratio: {
+    hedge_units: number;
+    notional: number;
+  };
+  payoff: {
+    scenarios: HedgePayoffScenario[];
+  };
+  cost: {
+    hedge_type: string;
+    annual_cost_pct: number;
+    annual_cost_usd: number;
+    description: string;
+  };
+  disclaimer: string;
+}
+
+export async function fetchHedgeAnalysis(
+  symbol: string,
+  hedgeType: string = "protective_put",
+  portfolioValue: number = 10000,
+  period: string = "1y",
+): Promise<HedgeAnalysisDto> {
+  const params = new URLSearchParams({
+    hedge_type: hedgeType,
+    portfolio_value: portfolioValue.toString(),
+    period,
+  });
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/hedge/${symbol}/analysis?${params}`,
+  );
+  if (!res.ok) {
+    throw new Error(
+      `Failed to load hedge analysis for ${symbol}: ${res.status} ${res.statusText}`,
+    );
+  }
+  return (await res.json()) as HedgeAnalysisDto;
+}

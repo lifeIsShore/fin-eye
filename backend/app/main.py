@@ -6,7 +6,7 @@ import logging
 from app.config import settings
 from app.db.database import init_db, test_db_connection
 from app.db.redis_client import init_redis, close_redis, redis_client
-from app.api.v1.endpoints import macro, sentiment, technical
+from app.api.v1.endpoints import macro, sentiment, technical, explanation, hedging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -57,4 +57,14 @@ app.include_router(
     technical.router,
     prefix="/api/v1/technical",
     tags=["technical"],
+)
+app.include_router(
+    explanation.router,
+    prefix="/api/v1/explanation",
+    tags=["explanation"],
+)
+app.include_router(
+    hedging.router,
+    prefix="/api/v1/hedge",
+    tags=["hedging"],
 )

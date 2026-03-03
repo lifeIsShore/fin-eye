@@ -12,6 +12,7 @@ const navItems = [
   { href: "/", label: "Dashboard" },
   { href: "/macro", label: "Macro" },
   { href: "/news-sentiment", label: "News & Sentiment" },
+  { href: "/hedge", label: "Hedge" },
 ];
 
 function Nav() {
