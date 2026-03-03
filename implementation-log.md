@@ -1011,3 +1011,26 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Status & results**
   - Both technical foundation epics for ML signals and scoring are DONE and locally validated. Live API runs reliably without 500 crashes and provides accurate confidence data formats.
+
+---
+
+### 2026-03-03
+
+**Session 33 – CORE-AUTH-01: User Authentication System & Bypass**
+
+- **Context**
+  - Designed and built the User Authentication layer utilizing standard JWT patterns. A key requirement was building a "frictionless" Bypass Mode for development.
+
+- **Stories touched**
+  - `CORE-AUTH-01` (Core – Auth) – **DONE**
+
+- **Work done**
+  - ✅ **Backend Auth Module**: Implemented `passlib[bcrypt]` hashing and `python-jose` token minting via `app/services/auth.py`.
+  - ✅ **Live Endpoints**: Built `/api/v1/auth/signup`, `/api/v1/auth/login`, and `/api/v1/auth/me`.
+  - ✅ **Dependency Validation**: Auth dependency `get_current_user` natively protects backend routes.
+  - ✅ **Bypass Mode**: Wired Backend toggles (`REQUIRE_AUTH`) and Frontend toggles (`NEXT_PUBLIC_REQUIRE_AUTH`) that organically force a mock identity, bypassing all local frictions during testing.
+  - ✅ **React Context**: Created Next.js `AuthProvider.tsx` to intercept client side unauthenticated users and send them to the interactive UI portals.
+  - ✅ **Testing**: Executed `pytest` validations against auth cryptographics successfully.
+
+- **Status & results**
+  - The feature provides full scale database security for real users, and complete bypass for local environment developers. End-to-end implementation complete.

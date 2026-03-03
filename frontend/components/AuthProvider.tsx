@@ -1,0 +1,85 @@
+"use client";
+
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
+
+interface User {
+    id: number;
+    email: string;
+    is_pro: boolean;
+}
+
+interface AuthContextType {
+    user: User | null;
+    loading: boolean;
+    login: (token: string, userData: User) => void;
+    logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextType>({
+    user: null,
+    loading: true,
+    login: () => { },
+    logout: () => { },
+});
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+    const [user, setUser] = useState<User | null>(null);
+    const [loading, setLoading] = useState(true);
+    const router = useRouter();
+    const pathname = usePathname();
+
+    // BYPASS: Read from our environment to see if we should enforce authentication
+    const REQUIRE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_AUTH === "true";
+
+    useEffect(() => {
+        // 1. If bypass is enabled, instantly set a mock user and stop loading.
+        if (!REQUIRE_AUTH) {
+            setUser({ id: 9999, email: "dev@mock.local", is_pro: true });
+            setLoading(false);
+            return;
+        }
+
+        // 2. Otherwise, check for an existing JWT token
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+            setLoading(false);
+            // Auto-redirect to login if attempting access to protected routes
+            if (pathname !== "/auth/login" && pathname !== "/auth/signup") {
+                router.push("/auth/login");
+            }
+            return;
+        }
+
+        // 3. Optional: we could validate the token via API here. 
+        // For now, we trust the cache and parse out user data stored at login
+        const cachedUser = localStorage.getItem("user_data");
+        if (cachedUser) {
+            setUser(JSON.parse(cachedUser));
+        }
+        setLoading(false);
+    }, [REQUIRE_AUTH, pathname, router]);
+
+    const login = (token: string, userData: User) => {
+        localStorage.setItem("access_token", token);
+        localStorage.setItem("user_data", JSON.stringify(userData));
+        setUser(userData);
+        router.push("/");
+    };
+
+    const logout = () => {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user_data");
+        setUser(null);
+        router.push("/auth/login");
+    };
+
+    return (
+        <AuthContext.Provider value={{ user, loading, login, logout }}>
+            {/* Hide rendering until auth state determines if we should redirect or show app */}
+            {!loading && children}
+        </AuthContext.Provider>
+    );
+}
+
+export const useAuth = () => useContext(AuthContext);

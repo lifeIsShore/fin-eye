@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # JWT
     jwt_secret: str = Field(default="change-in-production", alias="JWT_SECRET")
     jwt_algorithm: str = "HS256"
+    require_auth: bool = Field(default=False, alias="REQUIRE_AUTH")
 
     # Model storage (local filesystem for MVP)
     model_store_dir: str = Field(default="model_store", alias="MODEL_STORE_DIR")
