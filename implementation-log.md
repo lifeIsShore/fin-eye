@@ -1173,3 +1173,41 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Next steps**
   - Verify fixes by running `pytest` in backend and `npm run build` in frontend.
   - Proceed to next sprint: MVP-BACK-01 (Backtesting Engine) + CORE stub pages for billing/auth.
+
+---
+
+### 2026-03-05
+
+**Session 40 – MVP-BACK-01, MVP-BACK-02: Backtesting Engine Completion + Stub Pages**
+
+- **Context**
+  - Backend backtesting engine was largely implemented. This session completes it to full acceptance criteria, rebuilds the frontend, and adds disabled stub pages for billing and settings as agreed (active during testing, not yet wired to payments).
+
+- **Stories touched**
+  - `MVP-BACK-01` – **DONE**
+  - `MVP-BACK-02` – **DONE**
+  - `CORE-SUB-01` – **PARTIAL** (UI stub only, Stripe not wired)
+  - `CORE-SET-01` – **PARTIAL** (UI stub only, save endpoints not wired)
+
+- **Backend changes**
+  - ✅ Added `recovery_factor` to `BacktestStats` (total_return / abs(max_drawdown))
+  - ✅ Added `benchmark_equity` to `EquityPoint` (buy-and-hold comparison curve)
+  - ✅ Added `overfitting_warning: bool` to `BacktestResponse` (True when Sharpe > 1.2)
+  - ✅ Computed buy-and-hold benchmark equity curve inside `_run_momentum_strategy`
+  - ✅ Updated `_empty_stats` to include `recovery_factor`
+  - ✅ Updated `test_backtesting.py` to assert new fields (`recovery_factor`, `overfitting_warning`, `benchmark_equity`)
+
+- **Frontend changes**
+  - ✅ Rebuilt `app/backtesting/page.tsx` — date range pickers, dynamic overfitting warning (severity changes when Sharpe > 1.2), dual equity curve chart (strategy vs buy & hold), all 8 metrics including recovery factor, loading spinner, assumptions footnote
+  - ✅ Created `app/settings/page.tsx` — profile, security (2FA stub), notifications, preferences, sign out. All save/edit actions disabled with "Coming Soon" badges
+  - ✅ Created `app/billing/page.tsx` — Free/Pro/Institutional plan cards, current plan banner, FAQ section. All upgrade buttons disabled with "Coming Soon" badges
+  - ✅ Rebuilt `components/Nav.tsx` — added user avatar dropdown with email, plan badge, Settings link, Billing link (with UPGRADE badge for free users), Sign Out. Added Portfolio to nav items
+
+- **Status & results**
+  - MVP backtesting is feature-complete per acceptance criteria. Overfitting warnings fire dynamically. Buy-and-hold benchmark gives users honest comparison context.
+  - Billing and settings pages are visually complete and navigable, but all mutations are disabled behind "Coming Soon" badges — safe for testing without accidental charges or data loss.
+
+- **Next steps**
+  - Run `pytest tests/services/test_backtesting.py tests/api/test_backtesting_api.py -v` to verify
+  - Wire Stripe to `billing/page.tsx` (CORE-SUB-01 full) when ready for payments
+  - Implement `CORE-WATCH-01` (persistent watchlist) next

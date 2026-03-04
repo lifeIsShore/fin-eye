@@ -23,13 +23,16 @@ class BacktestStats(BaseModel):
     win_rate_pct: float
     profit_factor: float
     total_trades: int
+    recovery_factor: float = 0.0  # total_return / abs(max_drawdown)
 
 class EquityPoint(BaseModel):
     date: str
     equity: float
+    benchmark_equity: Optional[float] = None  # Buy-and-hold comparison
 
 class BacktestResponse(BaseModel):
     request: BacktestRequest
     stats: BacktestStats
     equity_curve: List[EquityPoint]
     assumptions_applied: str = "Applied initial capital and slippage model."
+    overfitting_warning: bool = False  # True when Sharpe > 1.2

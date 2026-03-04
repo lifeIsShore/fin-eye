@@ -47,7 +47,11 @@ class TestBacktestingEngine:
         assert response.request.symbol == "AAPL"
         assert response.stats.total_trades >= 0
         assert len(response.equity_curve) > 0
-        assert response.stats.initial_capital == 10000.0 if hasattr(response.stats, "initial_capital") else True
+        assert hasattr(response.stats, "recovery_factor")
+        assert isinstance(response.stats.recovery_factor, float)
+        assert hasattr(response, "overfitting_warning")
+        # Benchmark curve should be present on equity points
+        assert response.equity_curve[0].benchmark_equity is not None
 
     @patch("app.services.backtesting_service.OHLCVFetcher.fetch_historical_data")
     def test_unsupported_strategy(self, mock_fetch):

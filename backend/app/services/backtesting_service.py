@@ -75,17 +75,24 @@ class BacktestingEngine:
 
         # Map to Response schemas
         stats = BacktestStats(**stats_dict)
-        
+
         equity_curve = [
-            EquityPoint(date=str(idx), equity=row["equity"]) 
+            EquityPoint(
+                date=str(idx),
+                equity=row["equity"],
+                benchmark_equity=row["benchmark_equity"] if pd.notna(row.get("benchmark_equity")) else None,
+            )
             for idx, row in df_res.iterrows() if pd.notna(row["equity"])
         ]
+
+        overfitting_warning = stats.sharpe_ratio > 1.2
 
         return BacktestResponse(
             request=self.request,
             stats=stats,
             equity_curve=equity_curve,
-            assumptions_applied=f"Started with ${self.initial_capital:,.2f}. Assumed {self.slippage*100}% slippage per trade."
+            assumptions_applied=f"Started with ${self.initial_capital:,.2f}. Assumed {self.slippage*100:.1f}% slippage per trade.",
+            overfitting_warning=overfitting_warning,
         )
 
     def _run_momentum_strategy(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
@@ -139,9 +146,13 @@ class BacktestingEngine:
         df["strat_return_net"] = df["strat_return_gross"] - df["cost"]
         df["strat_return_net"] = df["strat_return_net"].fillna(0)
 
-        # Calculate Equity Curve
+        # Strategy equity curve
         df["cum_return"] = (1 + df["strat_return_net"]).cumprod()
         df["equity"] = self.initial_capital * df["cum_return"]
+
+        # Buy-and-hold benchmark equity curve (no trading costs)
+        df["bh_cum_return"] = (1 + df["asset_return"].fillna(0)).cumprod()
+        df["benchmark_equity"] = self.initial_capital * df["bh_cum_return"]
 
         stats = self._calculate_performance_metrics(df)
         return df, stats
@@ -190,6 +201,9 @@ class BacktestingEngine:
         # Total Trades
         total_trades = int(df["trade"].sum())
 
+        # Recovery Factor = total return / abs(max drawdown)
+        recovery_factor = abs(total_return / max_drawdown) if max_drawdown < 0 else 0.0
+
         return {
             "total_return_pct": float(total_return * 100),
             "annualized_return_pct": float(ann_return * 100),
@@ -198,7 +212,8 @@ class BacktestingEngine:
             "sortino_ratio": float(sortino),
             "win_rate_pct": float(win_rate * 100),
             "profit_factor": float(profit_factor),
-            "total_trades": total_trades
+            "total_trades": total_trades,
+            "recovery_factor": float(recovery_factor),
         }
 
     def _empty_stats(self) -> Dict[str, Any]:
@@ -210,5 +225,6 @@ class BacktestingEngine:
             "sortino_ratio": 0.0,
             "win_rate_pct": 0.0,
             "profit_factor": 0.0,
-            "total_trades": 0
+            "total_trades": 0,
+            "recovery_factor": 0.0,
         }

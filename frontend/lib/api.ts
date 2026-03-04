@@ -269,17 +269,21 @@ export interface BacktestStats {
   win_rate_pct: number;
   profit_factor: number;
   total_trades: number;
+  recovery_factor: number;
 }
 
 export interface EquityPoint {
   date: string;
   equity: number;
+  benchmark_equity?: number | null;
 }
 
 export interface BacktestResponse {
   request: BacktestRequest;
   stats: BacktestStats;
   equity_curve: EquityPoint[];
+  assumptions_applied?: string;
+  overfitting_warning?: boolean;
 }
 
 export async function runBacktest(
