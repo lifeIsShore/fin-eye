@@ -58,6 +58,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-WATCH-01       | Core – Watchlist      | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-NOTIF-01       | Core – Notifications  | NOT_STARTED  | -            | Depends on AUTH-01, DASH-01 |
 | CORE-CMS-01         | Core – Content/CMS    | NOT_STARTED  | -            | Independent |
+| CORE-CMS-02         | Core – Content/CMS    | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-COMM-01        | Core – Community      | NOT_STARTED  | -            | Independent |
 | CORE-LEGAL-01       | Core – Legal/ToS      | NOT_STARTED  | -            | Independent |
 | CORE-GDPR-01        | Core – GDPR           | NOT_STARTED  | -            | Depends on AUTH-01 |
@@ -1124,3 +1125,22 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Status & results**
   - Fin-Eye is now **100% feature-complete** for the MVP scope. We are fully cleared to proceed into deep Phase 2 algorithms (Strategy Library, Advanced Hedging).
+
+---
+
+### 2026-03-04
+
+**Session 38 – CORE-CMS-02: Admin Blog Management Story**
+
+- **Context**
+  - Added new requirement for managing the educational blog via a dedicated in-app admin view.
+  
+- **Stories touched**
+  - `CORE-CMS-02` (Admin Blog Entry Management) – **ADDED**
+
+- **Work done**
+  - ✅ **User Stories**: Created new `CORE-CMS-02` user story detailing requirements (admin authorization, markdown editor, post state management).
+  - ✅ **Implementation Log**: Added `CORE-CMS-02` to the tracking matrix (`NOT_STARTED` state).
+  
+- **Status & results**
+  - Ready for future implementation when needed; does not conflict with immediate Phase 2 goals.

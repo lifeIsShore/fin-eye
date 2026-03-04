@@ -526,6 +526,18 @@ These stories support the core product but cut across phases.
 
 ---
 
+**Story ID: CORE-CMS-02**  
+**As a content admin (you), I want** a dedicated admin view with a markdown editor **so that** I can manage blog posts directly within the Fin-Eye application.
+
+**Acceptance Criteria**
+- Admin dashboard is conditionally shown only to users with the 'admin' role.
+- Interface includes a table of all posts with status (Draft, Published).
+- Editor includes capability to write markdown, preview it, set titles, slugs, and publish dates.
+- Admin can save drafts, publish posts, or unpublish active posts.
+- Database or file storage layer handles saving and retrieving of these managed posts.
+
+---
+
 **Story ID: CORE-COMM-01**  
 **As Emma, I want** a lightweight community space linked from the app (Discord/Reddit or in‑app forum) **so that** I can discuss ideas and ask questions with others.
 
