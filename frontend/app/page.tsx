@@ -14,6 +14,7 @@ import TimeframeGrid from "../components/TimeframeGrid";
 import WhyMovingPanel from "../components/WhyMovingPanel";
 import ConflictDetector from "../components/ConflictDetector";
 import { GuidedTour } from "../components/onboarding/GuidedTour";
+import { WatchlistWidget } from "../components/WatchlistWidget";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -218,6 +219,21 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <GuidedTour />
+      {/* Watchlist sidebar + main content two-column layout */}
+      <div className="flex gap-6">
+        {/* Watchlist sidebar — hidden on small screens */}
+        <aside className="hidden xl:block w-48 flex-shrink-0">
+          <WatchlistWidget
+            activeSymbol={activeSymbol}
+            onSelectSymbol={(sym) => {
+              setActiveSymbol(sym);
+              setTickerInput(sym);
+            }}
+          />
+        </aside>
+
+        {/* Main dashboard column */}
+        <div className="min-w-0 flex-1 space-y-6">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-slate-800 pb-5">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-slate-100">
@@ -255,6 +271,17 @@ export default function DashboardPage() {
           </button>
         </form>
       </header>
+
+      {/* Mobile watchlist — visible only below xl breakpoint */}
+      <div className="xl:hidden">
+        <WatchlistWidget
+          activeSymbol={activeSymbol}
+          onSelectSymbol={(sym) => {
+            setActiveSymbol(sym);
+            setTickerInput(sym);
+          }}
+        />
+      </div>
 
       {isLoading ? (
         <div className="py-20 text-center animate-pulse text-slate-500">
@@ -327,6 +354,8 @@ export default function DashboardPage() {
           </section>
         </div>
       )}
+        </div> {/* end main dashboard column */}
+      </div> {/* end watchlist + content flex row */}
     </div>
   );
 }

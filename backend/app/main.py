@@ -6,7 +6,7 @@ import logging
 from app.config import settings
 from app.db.database import init_db, test_db_connection
 from app.db.redis_client import init_redis, close_redis, redis_client
-from app.api.v1.endpoints import macro, sentiment, technical, explanation, hedging, auth, portfolios, backtesting, events
+from app.api.v1.endpoints import macro, sentiment, technical, explanation, hedging, auth, portfolios, backtesting, events, watchlist
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -87,4 +87,9 @@ app.include_router(
     events.router,
     prefix="/api/v1/events",
     tags=["events"],
+)
+app.include_router(
+    watchlist.router,
+    prefix="/api/v1/watchlist",
+    tags=["watchlist"],
 )

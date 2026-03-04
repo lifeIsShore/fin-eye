@@ -485,14 +485,14 @@ These stories support the core product but cut across phases.
 
 ---
 
-**Story ID: CORE-WATCH-01**  
+**Story ID: CORE-WATCH-01** ✅ DONE (Session 41 — 2026-03-05)
 **As Marco, I want** to maintain a watchlist of favourite stocks **so that** I can quickly switch between the instruments I care about most.
 
 **Acceptance Criteria**
-- Users can search and add tickers to a personal watchlist.
-- Users can remove tickers from the watchlist at any time.
-- Dashboard provides quick access to watchlist; selecting a symbol updates the dashboard context.
-- Watchlist is persisted per user and available across sessions/devices.
+- ✅ Users can search and add tickers to a personal watchlist.
+- ✅ Users can remove tickers from the watchlist at any time.
+- ✅ Dashboard provides quick access to watchlist; selecting a symbol updates the dashboard context.
+- ✅ Watchlist is persisted per user and available across sessions/devices.
 
 ---
 

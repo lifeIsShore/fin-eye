@@ -1211,3 +1211,35 @@ This log tracks implementation progress for each user story in `user-stories.md`
   - Run `pytest tests/services/test_backtesting.py tests/api/test_backtesting_api.py -v` to verify
   - Wire Stripe to `billing/page.tsx` (CORE-SUB-01 full) when ready for payments
   - Implement `CORE-WATCH-01` (persistent watchlist) next
+
+---
+
+### 2026-03-05
+
+**Session 41 – CORE-WATCH-01: Persistent Watchlist**
+
+- **Context**
+  - Dashboard had a ticker search input but no persistence. Users had to retype symbols on every visit. This session implements a full persistent watchlist: DB model → API → frontend widget integrated into the dashboard.
+
+- **Stories touched**
+  - `CORE-WATCH-01` – **DONE**
+
+- **Backend changes**
+  - ✅ `app/models/watchlist.py` — `WatchlistItem` model with `user_id` FK, `symbol`, `added_at`, and a `UniqueConstraint(user_id, symbol)` to prevent duplicates at DB level
+  - ✅ `app/models/user.py` — Added `watchlist_items` relationship (`cascade="all, delete-orphan"`)
+  - ✅ `app/models/__init__.py` — Registered `WatchlistItem` (and fixed missing `Portfolio`/`PortfolioItem` imports)
+  - ✅ `app/api/v1/endpoints/watchlist.py` — Three endpoints: `GET /` (list), `POST /` (add, idempotent), `DELETE /{symbol}` (remove). Symbols auto-uppercased. Race-condition safe via IntegrityError catch.
+  - ✅ `app/main.py` — Router registered at `/api/v1/watchlist`
+  - ✅ `tests/api/test_watchlist_api.py` — 5 tests: add+list, duplicate idempotency, remove, remove-nonexistent-404, uppercase normalisation
+
+- **Frontend changes**
+  - ✅ `lib/api.ts` — Added `WatchlistItem` interface + `fetchWatchlist`, `addToWatchlist`, `removeFromWatchlist` functions with Bearer auth header helper
+  - ✅ `components/WatchlistWidget.tsx` — New component: add-ticker form, symbol list with active highlight, hover-reveal X to remove, empty state, loading state. Calls `onSelectSymbol` prop to bubble up ticker selection to parent.
+  - ✅ `app/page.tsx` — Integrated `WatchlistWidget` in two places: sidebar (xl+ screens, sticky left column) and inline below search bar (mobile, hidden on xl). Clicking a watchlist item sets both `activeSymbol` and `tickerInput`.
+
+- **Status & results**
+  - Watchlist is fully persistent per user across sessions. Clicking any watchlist entry immediately loads that symbol’s GAS/sentiment/macro data. The sidebar layout cleanly separates watchlist navigation from dashboard content on wide screens.
+
+- **Next steps**
+  - Run `pytest tests/api/test_watchlist_api.py -v` to verify
+  - Next story: `CORE-LEGAL-01` (Terms of Service, Privacy Policy, disclaimers — legal pages + consent recording)

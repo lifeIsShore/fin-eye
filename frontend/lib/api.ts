@@ -402,3 +402,52 @@ export async function getUpcomingEvents(
 
   return (await res.json()) as EventResponse;
 }
+
+// ─── Watchlist ──────────────────────────────────────────────────────────────
+
+export interface WatchlistItem {
+  id: number;
+  symbol: string;
+  added_at: string;
+}
+
+function authHeaders(): HeadersInit {
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+export async function fetchWatchlist(): Promise<WatchlistItem[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/watchlist/`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load watchlist");
+  return (await res.json()) as WatchlistItem[];
+}
+
+export async function addToWatchlist(symbol: string): Promise<WatchlistItem> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/watchlist/`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ symbol }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to add to watchlist");
+  }
+  return (await res.json()) as WatchlistItem;
+}
+
+export async function removeFromWatchlist(symbol: string): Promise<void> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/watchlist/${encodeURIComponent(symbol)}`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+  if (!res.ok && res.status !== 404) {
+    throw new Error("Failed to remove from watchlist");
+  }
+}
