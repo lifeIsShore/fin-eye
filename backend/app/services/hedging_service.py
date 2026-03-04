@@ -51,27 +51,45 @@ def _daily_returns(closes: pd.Series) -> pd.Series:
 # ── Public API ───────────────────────────────────────────────────────────────
 
 def compute_correlation_matrix(
-    symbol: str,
+    symbol_or_list: str,
     benchmarks: Optional[List[str]] = None,
     period: str = "1y",
 ) -> Dict:
     """
-    Pearson correlation of daily returns between *symbol* and each benchmark.
+    Pearson correlation of daily returns between input and each benchmark.
+    *symbol_or_list* can be a single symbol "AAPL" or a comma-separated list "AAPL,MSFT".
 
     Returns
     -------
     {
-        "symbol": "AAPL",
+        "symbol": "AAPL,MSFT",
         "period": "1y",
         "correlations": {"SPY": 0.82, "QQQ": 0.88, ...}
     }
     """
     benchmarks = benchmarks or BENCHMARKS
-    symbol_closes = _fetch_closes(symbol, period)
-    if symbol_closes.empty:
-        return {"symbol": symbol, "period": period, "correlations": {}}
+    symbols = [s.strip().upper() for s in symbol_or_list.split(",") if s.strip()]
+    
+    if len(symbols) == 1:
+        closes = _fetch_closes(symbols[0], period)
+    else:
+        # Simple equal-weighted portfolio returns
+        all_returns = []
+        for s in symbols:
+            s_closes = _fetch_closes(s, period)
+            if not s_closes.empty:
+                all_returns.append(_daily_returns(s_closes))
+        
+        if not all_returns:
+            return {"symbol": symbol_or_list, "period": period, "correlations": {}}
+            
+        combined_returns = pd.concat(all_returns, axis=1).dropna()
+        closes = combined_returns.mean(axis=1) # Treat mean returns as portfolio returns proxy
 
-    sym_ret = _daily_returns(symbol_closes)
+    if closes.empty:
+        return {"symbol": symbol_or_list, "period": period, "correlations": {}}
+
+    input_ret = closes if len(symbols) > 1 else _daily_returns(closes)
     correlations: Dict[str, float] = {}
 
     for bm in benchmarks:
@@ -81,13 +99,68 @@ def compute_correlation_matrix(
             continue
         bm_ret = _daily_returns(bm_closes)
         # Align on common dates
-        combined = pd.DataFrame({"sym": sym_ret, "bm": bm_ret}).dropna()
+        combined = pd.DataFrame({"inp": input_ret, "bm": bm_ret}).dropna()
         if len(combined) < 20:
             correlations[bm] = 0.0
             continue
-        correlations[bm] = float(combined["sym"].corr(combined["bm"]))
+        correlations[bm] = float(combined["inp"].corr(combined["bm"]))
 
-    return {"symbol": symbol, "period": period, "correlations": correlations}
+    return {"symbol": symbol_or_list, "period": period, "correlations": correlations}
+
+
+def compute_portfolio_beta(
+    symbols: List[str],
+    benchmark: str = "SPY",
+    period: str = "1y",
+) -> Dict:
+    """
+    Aggregates beta for a basket of symbols (equal-weighted).
+    """
+    betas = []
+    for s in symbols:
+        res = compute_beta(s, benchmark, period)
+        betas.append(res["beta"])
+    
+    avg_beta = float(np.mean(betas)) if betas else 1.0
+    return {
+        "symbols": symbols,
+        "benchmark": benchmark,
+        "beta": round(avg_beta, 4),
+        "individual_betas": {s: b for s, b in zip(symbols, betas)},
+        "period": period
+    }
+
+
+def compute_intra_portfolio_correlation(
+    symbols: List[str],
+    period: str = "1y",
+) -> Dict:
+    """
+    Returns a correlation matrix between all symbols in the list.
+    Used to detect over-concentration/clusters.
+    """
+    if len(symbols) < 2:
+        return {"matrix": {}, "symbols": symbols}
+    
+    returns_map = {}
+    for s in symbols:
+        closes = _fetch_closes(s, period)
+        if not closes.empty:
+            returns_map[s] = _daily_returns(closes)
+            
+    if not returns_map:
+        return {"matrix": {}, "symbols": symbols}
+        
+    df = pd.DataFrame(returns_map).dropna()
+    if df.empty:
+        return {"matrix": {}, "symbols": symbols}
+        
+    matrix = df.corr().to_dict()
+    return {
+        "matrix": matrix,
+        "symbols": list(returns_map.keys()),
+        "period": period
+    }
 
 
 def compute_beta(
@@ -234,17 +307,29 @@ def get_full_hedge_analysis(
     period: str = "1y",
 ) -> Dict:
     """
-    Orchestrator that returns the complete hedging analysis payload
-    consumed by the `/hedge/{symbol}/analysis` endpoint.
+    Orchestrator that returns the complete hedging analysis payload.
+    Supports comma-separated symbols for portfolio analysis.
     """
-    # 1. Correlation matrix
+    symbols = [s.strip().upper() for s in symbol.split(",") if s.strip()]
+    is_portfolio = len(symbols) > 1
+
+    # 1. Correlation matrix (vs benchmarks)
     corr = compute_correlation_matrix(symbol, period=period)
+    
+    # 1b. Intra-portfolio correlation
+    intra_corr = None
+    if is_portfolio:
+        intra_corr = compute_intra_portfolio_correlation(symbols, period)
 
     # 2. Beta vs SPY
-    beta_data = compute_beta(symbol, "SPY", period)
+    if is_portfolio:
+        beta_data = compute_portfolio_beta(symbols, "SPY", period)
+    else:
+        beta_data = compute_beta(symbols[0], "SPY", period)
+    
     beta_val = beta_data["beta"]
 
-    # 3. Hedge ratio (use SPY price as proxy for inverse-ETF price)
+    # 3. Hedge ratio
     spy_closes = _fetch_closes("SPY", "5d")
     hedge_price = float(spy_closes.iloc[-1]) if not spy_closes.empty else 450.0
     ratio = compute_hedge_ratio(beta_val, portfolio_value, hedge_price)
@@ -257,10 +342,13 @@ def get_full_hedge_analysis(
 
     return {
         "symbol": symbol,
+        "is_portfolio": is_portfolio,
+        "symbols": symbols,
         "hedge_type": hedge_type,
         "portfolio_value": portfolio_value,
         "period": period,
         "correlation": corr,
+        "intra_portfolio_correlation": intra_corr,
         "beta": beta_data,
         "hedge_ratio": ratio,
         "payoff": payoff,

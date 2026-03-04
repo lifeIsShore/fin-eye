@@ -358,3 +358,43 @@ export async function getRetailSentiment(
 
   return (await res.json()) as RetailSentimentResponse;
 }
+
+// ─── Economic Calendar Events ────────────────────────────────────────────────
+
+export interface MarketEvent {
+  id: string;
+  date: string;
+  time?: string;
+  title: string;
+  description?: string;
+  impact: "Low" | "Medium" | "High";
+  country: string;
+  actual?: string;
+  estimate?: string;
+  previous?: string;
+}
+
+export interface EventResponse {
+  events: MarketEvent[];
+}
+
+export async function getUpcomingEvents(
+  country?: string,
+  impact?: string,
+): Promise<EventResponse> {
+  const params = new URLSearchParams();
+  if (country) params.append("country", country);
+  if (impact) params.append("impact", impact);
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${API_BASE_URL}/api/v1/events/upcoming${query}`, {
+    method: "GET",
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(`Failed to fetch events: ${errorData.detail || res.statusText}`);
+  }
+
+  return (await res.json()) as EventResponse;
+}

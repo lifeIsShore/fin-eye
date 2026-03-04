@@ -1,2 +1,2 @@
-from app.api.v1.endpoints import macro, sentiment, technical, backtesting
+from app.api.v1.endpoints import macro, sentiment, technical, backtesting, events
 

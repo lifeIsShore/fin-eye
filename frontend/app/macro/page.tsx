@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { fetchMacroLatest } from "../../lib/api";
+import EventTimeline from "../../components/macro/EventTimeline";
 
 const fetcher = () => fetchMacroLatest();
 
@@ -99,6 +100,12 @@ export default function MacroPage() {
               );
             })}
           </div>
+        </section>
+      </div>
+
+      <div className="pt-8 border-t border-slate-800">
+        <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
+          <EventTimeline />
         </section>
       </div>
     </div>
