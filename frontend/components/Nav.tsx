@@ -8,6 +8,7 @@ const navItems = [
     { href: "/macro", label: "Macro" },
     { href: "/news-sentiment", label: "News & Sentiment" },
     { href: "/hedge", label: "Hedge" },
+    { href: "/backtesting", label: "Backtesting" },
 ];
 
 export function Nav() {

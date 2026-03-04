@@ -34,7 +34,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-ONBOARD-01      | MVP – Onboarding      | NOT_STARTED  | -            | Depends on DASH-01 |
 | MVP-HEDGE-01        | MVP – Hedging         | DONE         | 2026-03-03   | API + Full UI panels implemented |
 | MVP-DATA-01         | MVP – Data/Infra      | DONE         | 2026-03-02   | ✅ Tasks 1.1-1.5 DONE |
-| P2-PORT-01          | P2 – Portfolio        | NOT_STARTED  | -            | Depends on DASH-01 |
+| P2-PORT-01          | P2 – Portfolio        | DONE         | 2026-03-04   | Backend and UI watchlists implemented |
 | P2-RET-01           | P2 – Retail Sentiment | NOT_STARTED  | -            | Depends on DATA-01 |
 | P2-EVENT-01         | P2 – Events           | NOT_STARTED  | -            | Depends on DATA-01 |
 | P2-HEDGE-ADV-01     | P2 – Hedging (adv)    | NOT_STARTED  | -            | Depends on HEDGE-01 |
@@ -51,7 +51,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P3-MOBILE-01        | P3 – Mobile           | NOT_STARTED  | -            | Depends on DASH-01 |
 | P3-MOBILE-02        | P3 – Mobile           | NOT_STARTED  | -            | Depends on MOBILE-01 |
 | P3-EDU-01           | P3 – Education (adv)  | NOT_STARTED  | -            | Depends on LEARN-01 |
-| CORE-AUTH-01        | Core – Auth           | NOT_STARTED  | -            | Independent, blocking many |
+| CORE-AUTH-01        | Core – Auth           | DONE         | 2026-03-04   | NextAuth/JWT implemented |
 | CORE-SUB-01         | Core – Billing        | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SUB-02         | Core – Billing        | NOT_STARTED  | -            | Depends on SUB-01 |
 | CORE-SET-01         | Core – Settings       | NOT_STARTED  | -            | Depends on AUTH-01 |
@@ -185,13 +185,17 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ## Summary Statistics
 
-**As of 2026-03-01 End of Day**
+**As of 2026-03-04**
 
 - Total User Stories: 56
-- Completed: 2 (MVP-DATA-01, MVP-MACRO-01)
+- Completed: 15 (MVP: DATA-01, MACRO-01, MACRO-02, SENT-01, SENT-02, TECH-01, TECH-02, DASH-01, DASH-02, DASH-03, EXPL-01, EXPL-02, HEDGE-01; Phase2/Core: P2-PORT-01, CORE-AUTH-01)
 - In Progress: 0
-- Not Started: 54
+- Not Started: 41
 - Blocked: 0
+
+**Sprint Progress**
+- MVP Phase: ~76% complete (13 of 17 MVP tasks done)
+- Overall Progress: ~27% complete (15 of 56 total tasks done)
 
 **Sprint 1 Progress**
 - Week 1: 20% (1 of 6 tasks done)

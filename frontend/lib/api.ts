@@ -246,3 +246,59 @@ export async function fetchHedgeAnalysis(
   }
   return (await res.json()) as HedgeAnalysisDto;
 }
+
+// ─── Backtesting ────────────────────────────────────────────────────────────
+
+export interface BacktestRequest {
+  symbol: string;
+  strategy: string;
+  start_date?: string;
+  end_date?: string;
+  parameters?: Record<string, any>;
+  initial_capital?: number;
+  slippage_pct?: number;
+  commission_pct?: number;
+}
+
+export interface BacktestStats {
+  total_return_pct: number;
+  annualized_return_pct: number;
+  max_drawdown_pct: number;
+  sharpe_ratio: number;
+  sortino_ratio: number;
+  win_rate_pct: number;
+  profit_factor: number;
+  total_trades: number;
+}
+
+export interface EquityPoint {
+  date: string;
+  equity: number;
+}
+
+export interface BacktestResponse {
+  request: BacktestRequest;
+  stats: BacktestStats;
+  equity_curve: EquityPoint[];
+}
+
+export async function runBacktest(
+  request: BacktestRequest,
+): Promise<BacktestResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/backtest`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      `Failed to run backtest: ${errorData.detail || res.statusText}`,
+    );
+  }
+
+  return (await res.json()) as BacktestResponse;
+}
