@@ -13,6 +13,7 @@ import RegimeWidget from "../components/RegimeWidget";
 import TimeframeGrid from "../components/TimeframeGrid";
 import WhyMovingPanel from "../components/WhyMovingPanel";
 import ConflictDetector from "../components/ConflictDetector";
+import { GuidedTour } from "../components/onboarding/GuidedTour";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -216,6 +217,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <GuidedTour />
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-slate-800 pb-5">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-slate-100">
@@ -240,6 +242,17 @@ export default function DashboardPage() {
           >
             Analyze
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined" && (window as any).restartFinEyeTour) {
+                (window as any).restartFinEyeTour();
+              }
+            }}
+            className="rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition-colors"
+          >
+            Tour
+          </button>
         </form>
       </header>
 
@@ -251,12 +264,16 @@ export default function DashboardPage() {
         <div className="space-y-6">
           {/* Row 1 – GAS + Regime + Timeframe Grid */}
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <MarketWeatherWidget gasScore={gasScore} />
+            <div className="tour-gas-score">
+              <MarketWeatherWidget gasScore={gasScore} />
+            </div>
 
             <div className="flex flex-col space-y-4">
-              <RegimeWidget technicalScore={techScore} vixLevel={vixLevel} />
+              <div className="tour-regime">
+                <RegimeWidget technicalScore={techScore} vixLevel={vixLevel} />
+              </div>
 
-              <div className="p-5 rounded-2xl border border-slate-800 bg-slate-900/40">
+              <div className="tour-timeframes p-5 rounded-2xl border border-slate-800 bg-slate-900/40">
                 <div className="flex justify-between items-center mb-1">
                   <h3 className="text-sm font-semibold text-slate-100">
                     Technical Consensus
@@ -279,11 +296,13 @@ export default function DashboardPage() {
 
           {/* Row 2 – EXPL-01 + EXPL-02 (MVP-EXPL-01, MVP-EXPL-02) */}
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <WhyMovingPanel
-              symbol={activeSymbol}
-              bullets={whyBullets}
-              disclaimer={DISCLAIMER}
-            />
+            <div className="tour-why-moving">
+              <WhyMovingPanel
+                symbol={activeSymbol}
+                bullets={whyBullets}
+                disclaimer={DISCLAIMER}
+              />
+            </div>
             <ConflictDetector
               hasConflict={conflictData.hasConflict}
               conflicts={conflictData.conflicts}

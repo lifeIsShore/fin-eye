@@ -30,8 +30,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-SENT-02         | MVP – Sentiment       | DONE         | 2026-03-02   | ✅ Source breakdown backend + UI (manual QA pending) |
 | MVP-MACRO-01        | MVP – Macro           | DONE         | 2026-03-02   | ✅ 5 indicators + interpretration + refresh |
 | MVP-MACRO-02        | MVP – Macro           | DONE         | 2026-03-02   | ✅ Macro score backend + Macro tab + dashboard summary |
-| MVP-LEARN-01        | MVP – Learn/Blog      | NOT_STARTED  | -            | Independent |
-| MVP-ONBOARD-01      | MVP – Onboarding      | NOT_STARTED  | -            | Depends on DASH-01 |
+| MVP-LEARN-01        | MVP – Learn/Blog      | DONE         | 2026-03-04   | Static markdown parsing added with 6 initial posts |
+| MVP-ONBOARD-01      | MVP – Onboarding      | DONE         | 2026-03-04   | `react-joyride` implemented across main dashboard |
 | MVP-HEDGE-01        | MVP – Hedging         | DONE         | 2026-03-03   | API + Full UI panels implemented |
 | MVP-DATA-01         | MVP – Data/Infra      | DONE         | 2026-03-02   | ✅ Tasks 1.1-1.5 DONE |
 | P2-PORT-01          | P2 – Portfolio        | DONE         | 2026-03-04   | Backend and UI watchlists implemented |
@@ -1102,3 +1102,25 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Status & results**
   - Users can now track key macroeconomic events directly from the Macro tab. End-to-end implementation complete.
+
+---
+
+### 2026-03-04
+
+**Session 37 – MVP Finalization: Learn/Blog & Onboarding**
+
+- **Context**
+  - Finalized the last remaining features required for the Minimum Viable Product (MVP) scope before proceeding strictly to Phase 2.
+
+- **Stories touched**
+  - `MVP-LEARN-01` (Learn/Blog Tab) – **DONE**
+  - `MVP-ONBOARD-01` (Guided UI Tour) – **DONE**
+
+- **Work done**
+  - ✅ **Content**: Created 6 markdown educational posts explaining fundamental quantitative concepts (Macro, GAS, Regimes, Volatility, Options/Sentiment).
+  - ✅ **Frontend Pages**: Added statically generated `/learn` and `/learn/[slug]` routes with `@tailwindcss/typography` parsing.
+  - ✅ **Onboarding**: Implemented `react-joyride` into the main `page.tsx` Dashboard mapping tooltips to anchor CSS classes.
+  - ✅ **Verification**: Validated `npm run build` succeeds and routes behave smoothly.
+
+- **Status & results**
+  - Fin-Eye is now **100% feature-complete** for the MVP scope. We are fully cleared to proceed into deep Phase 2 algorithms (Strategy Library, Advanced Hedging).
