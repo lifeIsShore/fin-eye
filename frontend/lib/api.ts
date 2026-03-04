@@ -302,3 +302,59 @@ export async function runBacktest(
 
   return (await res.json()) as BacktestResponse;
 }
+
+// ─── Retail Sentiment (Reddit) ──────────────────────────────────────────────
+
+export interface SentimentComment {
+  subreddit: string;
+  timestamp: string;
+  text: string;
+  sentiment_score: number;
+  sentiment_label: string;
+  upvotes: number;
+  url: string;
+}
+
+export interface SentimentSummary {
+  total_mentions: number;
+  percent_positive: number;
+  percent_neutral: number;
+  percent_negative: number;
+  retail_sentiment_score: number;
+}
+
+export interface RetailSentimentResponse {
+  ticker: string;
+  summary: SentimentSummary;
+  top_bullish: SentimentComment[];
+  top_bearish: SentimentComment[];
+}
+
+export async function getRetailSentiment(
+  ticker: string,
+  init?: RequestInit,
+): Promise<RetailSentimentResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/sentiment/retail/${encodeURIComponent(
+      ticker.toUpperCase(),
+    )}`,
+    {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      `Failed to load retail sentiment for ${ticker}: ${errorData.detail || res.statusText
+      }`,
+    );
+  }
+
+  return (await res.json()) as RetailSentimentResponse;
+}

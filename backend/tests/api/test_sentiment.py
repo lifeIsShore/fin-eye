@@ -66,3 +66,27 @@ async def test_get_news_sentiment_timeseries_success(
     titles = [a["title"] for a in payload["articles"]]
     assert "Apple launches new product" in titles
 
+@pytest.mark.asyncio
+async def test_get_retail_sentiment_success(client: AsyncClient, test_app):
+    # Test the retail sentiment endpoint (it uses mock data by default in tests)
+    response = await client.get("/api/v1/sentiment/retail/AAPL")
+    
+    assert response.status_code == 200
+    payload = response.json()
+    
+    assert payload["ticker"] == "AAPL"
+    
+    # Check summary
+    summary = payload["summary"]
+    assert summary["total_mentions"] == 3
+    assert "retail_sentiment_score" in summary
+    assert 0 <= summary["retail_sentiment_score"] <= 100
+    
+    # Check bullish comments
+    assert "top_bullish" in payload
+    assert isinstance(payload["top_bullish"], list)
+    
+    # Check bearish comments
+    assert "top_bearish" in payload
+    assert isinstance(payload["top_bearish"], list)
+

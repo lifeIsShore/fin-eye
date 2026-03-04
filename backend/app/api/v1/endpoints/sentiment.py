@@ -13,6 +13,8 @@ from app.schemas.data_models import (
 )
 from app.models.sentiment import NewsArticle
 from app.services.sentiment_service import SentimentService
+from app.schemas.sentiment_models import SentimentResponse
+from app.services.reddit_service import RedditService
 
 router = APIRouter()
 
@@ -129,3 +131,27 @@ async def get_news_sentiment_sources(
         breakdown=breakdown_entries,
     )
 
+@router.get(
+    "/retail/{ticker}",
+    response_model=SentimentResponse,
+)
+async def get_retail_sentiment(
+    ticker: str
+) -> Any:
+    """
+    Get recent retail sentiment from Reddit for a specific ticker.
+    Returns aggregated stats and top bullish/bearish comments.
+    """
+    ticker = ticker.upper()
+    try:
+        reddit_service = RedditService()
+        summary, top_bullish, top_bearish = reddit_service.get_sentiment_summary(ticker)
+        
+        return SentimentResponse(
+            ticker=ticker,
+            summary=summary,
+            top_bullish=top_bullish,
+            top_bearish=top_bearish
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
