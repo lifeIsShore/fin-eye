@@ -1,16 +1,4 @@
-import type { Config } from "tailwindcss";
-
-const config: Config = {
-    content: [
-        "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-        "./components/**/*.{js,ts,jsx,tsx,mdx}",
-        "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    ],
-    theme: {
-        extend: {},
-    },
-    plugins: [
-        require("@tailwindcss/typography"),
-    ],
-};
-export default config;
+// This file is intentionally left empty.
+// Tailwind CSS v4 no longer uses tailwind.config.ts.
+// Configuration is done via CSS @import directives in globals.css.
+// See: https://tailwindcss.com/docs/v4-beta

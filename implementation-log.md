@@ -1144,3 +1144,32 @@ This log tracks implementation progress for each user story in `user-stories.md`
   
 - **Status & results**
   - Ready for future implementation when needed; does not conflict with immediate Phase 2 goals.
+
+---
+
+### 2026-03-05
+
+**Session 39 – Bug Audit & Fix Pass**
+
+- **Context**
+  - Full QA audit before starting next sprint. No new features — fixing all known bugs and warnings.
+
+- **Stories touched**
+  - No story IDs (infra/quality pass)
+
+- **Work done**
+  - ✅ **Bug 1 – Backend: `test_db` fixture scope mismatch** — `test_app` was `scope="session"` but `test_db` was `scope="function"`, causing pytest to fail resolving `test_db` inside `client`. Fixed by changing `test_app` to `scope="function"` and restructuring `test_db` to use connection-level rollback (clean state per test without drop/recreate overhead). Tables are now created once at module load.
+  - ✅ **Bug 2 – Frontend: Tailwind v4 config files** — Removed v3-style `tailwind.config.ts` and `tailwind.config.js` (Tailwind v4 no longer uses these). Updated `globals.css` to use `@import "tailwindcss"` and `@import "@tailwindcss/typography"` (v4 syntax). `postcss.config.js` was already correct.
+  - ✅ **Bug 3 – Frontend: TypeScript `jest` types error** — Removed `"jest"` from `tsconfig.json` `types` array. `@types/jest` is installed as a devDep but was incorrectly declared as a global type, causing `TS2688: Cannot find type definition file for 'jest'`.
+  - ✅ **Bug 4 – Backend: Redis `close()` deprecated** — Updated `redis_client.py` to use `aclose()` instead of `close()` (redis-py v5+ deprecation).
+  - ✅ **Bug 5 – Backend: pytest-asyncio loop scope warning** — Added `pytest.ini` with `asyncio_mode = auto` and `asyncio_default_fixture_loop_scope = function` to silence the deprecation warning and set deterministic future-safe behaviour.
+
+- **Status & results**
+  - All known bugs and warnings resolved. Backend test suite should now pass `test_get_latest_macro_dashboard`. Frontend build should compile cleanly. No deprecation warnings in pytest output.
+
+- **Not fixed (third-party)**
+  - Pydantic `orm_mode` / `class-based config` deprecation warnings originate from `pydantic` internals used by dependencies — not in our code. Will resolve itself when those deps update to Pydantic v3 models.
+
+- **Next steps**
+  - Verify fixes by running `pytest` in backend and `npm run build` in frontend.
+  - Proceed to next sprint: MVP-BACK-01 (Backtesting Engine) + CORE stub pages for billing/auth.

@@ -1,12 +1,4 @@
-/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: [
-    "./app/**/*.{js,ts,jsx,tsx}",
-    "./components/**/*.{js,ts,jsx,tsx}",
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-};
-
+// This file is intentionally left empty.
+// Tailwind CSS v4 no longer uses tailwind.config.js.
+// Configuration is done via CSS @import directives in globals.css.
+// See: https://tailwindcss.com/docs/v4-beta
