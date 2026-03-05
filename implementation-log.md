@@ -38,7 +38,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P2-RET-01           | Retail Sentiment      | DONE         | 2026-03-04   | praw + VADER backend, Next.js page implemented |
 | P2-EVENT-01         | Political/Event Tracking | DONE         | 2026-03-04   | API + EventTimeline component implemented |
 | P2-HEDGE-ADV-01     | P2 – Hedging (adv)    | NOT_STARTED  | -            | Depends on HEDGE-01 |
-| P2-STRAT-01         | P2 – Strategy library | NOT_STARTED  | -            | Depends on BACK-01 |
+| P2-STRAT-01         | P2 – Strategy library | DONE         | 2026-03-05   | Save/load/share, community leaderboard by Sharpe |
 | P2-MACRO-ADV-01     | P2 – Macro (adv)      | NOT_STARTED  | -            | Depends on MACRO-01 |
 | P2-CONTENT-ADV-01   | P2 – Content (adv)    | NOT_STARTED  | -            | Depends on LEARN-01 |
 | P3-SENT-ADV-01      | P3 – Sentiment (adv)  | NOT_STARTED  | -            | Depends on SENT-02 |
@@ -1435,10 +1435,59 @@ This log tracks implementation progress for each user story in `user-stories.md`
     - `CORE-NOTIF-01` is fully complete. Users can create price and GAS alerts, see them fire in real-time (30s polling), dismiss them, and delete them. Backend evaluation engine is production-ready and scheduler-hookable.
 
 - **Next recommended stories**
-    - `P2-STRAT-01` (Strategy Library) — now unblocked since backtesting is confirmed done.
+    - `P2-STRAT-01` (Strategy Library) — now unblocked since backtesting is confirmed done. ← **Next up**
     - `P2-MACRO-ADV-01` (Advanced Macro) — no new dependencies.
-    - `CORE-EMAIL-01` — to activate email delivery for alerts.
+    - `CORE-EMAIL-01` — deferred (no email provider).
     - `CORE-SUB-01` — Stripe billing (needs credentials).
+
+---
+
+### 2026-03-05 (continued)
+
+**Session 48 — P2-STRAT-01: Strategy Library (Full Implementation)**
+
+- **Context & Decision**
+    - Emailing deferred (no provider). `CORE-SUB-01` deferred (no Stripe credentials).
+    - `P2-STRAT-01` selected: highest-retention unblocked feature, zero external dependencies, makes backtesting sticky — users save strategies and return to check them.
+
+- **Stories touched**
+    - `P2-STRAT-01` (Strategy Library) — **DONE**
+
+- **Backend work done**
+    - ✅ `app/models/strategy.py` — `SavedStrategy` model: UUID FK to users, `name`, `description`, `request_snapshot` (JSON — full BacktestRequest), key metrics columns (`total_return_pct`, `sharpe_ratio`, `max_drawdown_pct`, `win_rate_pct`, `total_trades`), `is_public` flag, timestamps.
+    - ✅ `app/schemas/strategy_models.py` — `StrategySaveRequest` (with all BacktestRequest fields + optional metrics + visibility), `StrategyResponse` (includes `is_mine` flag set at serialisation), `StrategyListResponse`, `StrategyUpdateRequest` (partial PATCH).
+    - ✅ `app/services/strategy_service.py` — `save_strategy`, `list_my_strategies`, `list_public_strategies` (sorted by Sharpe desc), `get_strategy` (own OR public), `update_strategy` (owner-only), `delete_strategy` (owner-only).
+    - ✅ `app/api/v1/endpoints/strategies.py` — 6 REST routes: POST (save), GET (list mine), GET /public (community leaderboard), GET /{id} (get one), PATCH /{id} (rename/toggle visibility), DELETE /{id}. All auth-protected.
+    - ✅ `app/main.py` — Registered `strategies.router` at `/api/v1/strategies`.
+    - ✅ `app/models/__init__.py` — Registered `SavedStrategy`.
+    - ✅ `app/api/v1/endpoints/__init__.py` — Added `strategies`.
+    - ✅ `alembic/versions/b2c3d4e5f6a7_add_saved_strategies_table.py` — Migration creates `saved_strategies` table.
+
+- **Tests written**
+    - ✅ `tests/api/test_strategies_api.py` — 8 tests: save, list mine, list public, get one, get 404, update, delete, delete 404.
+
+- **Frontend work done**
+    - ✅ `lib/api.ts` — Added `StrategyDto`, `StrategyListDto`, `StrategySavePayload` interfaces + `fetchMyStrategies`, `fetchPublicStrategies`, `saveStrategy`, `updateStrategy`, `deleteStrategy` functions.
+    - ✅ `app/backtesting/page.tsx` — Full rewrite of backtesting page with:
+        - **Save Strategy button** appears after running a backtest; opens modal with name input + public toggle.
+        - **Strategy Library panel** (collapsible) at bottom of page with two tabs: "My Strategies" and "Community" (public leaderboard sorted by Sharpe).
+        - **Load** button on every saved strategy restores all parameters into the form and clears current results.
+        - **Delete** and **toggle public/private** buttons on owned strategies.
+        - Privacy notice shown in save modal when making strategy public (no username exposed — only metrics + ticker).
+        - Library loads on mount, refreshes after every save.
+
+- **Architecture notes**
+    - `request_snapshot` stores the full BacktestRequest as JSON so strategies are fully self-contained and can be reloaded even if default parameters change in future.
+    - `is_mine` flag computed server-side at serialisation time (avoids leaking user UUIDs to other users browsing public strategies).
+    - Public strategies show ticker + metrics only — no user identity exposed.
+
+- **Status**
+    - `P2-STRAT-01` is fully complete. Users can save, name, load, delete, and share strategies. Community tab shows all public strategies sorted by Sharpe ratio.
+
+- **Next recommended stories**
+    - `P2-MACRO-ADV-01` (Advanced Macro) — yield curve, recession probability, macro stress index. No new dependencies.
+    - `CORE-SET-01` (Profile/Settings page) — update name, change password. Simple, high-polish value.
+    - `CORE-SUB-01` — Stripe billing (when credentials available).
 
 ---
 

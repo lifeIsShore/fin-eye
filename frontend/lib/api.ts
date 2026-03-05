@@ -700,6 +700,101 @@ export async function fetchTriggeredAlerts(): Promise<TriggeredAlertDto[]> {
   return res.json();
 }
 
+// ── Strategy Library ─────────────────────────────────────────────────────────
+
+export interface StrategyDto {
+  id: number;
+  name: string;
+  description: string | null;
+  symbol: string;
+  strategy: string;
+  parameters: Record<string, number>;
+  initial_capital: number;
+  slippage_pct: number;
+  start_date: string | null;
+  end_date: string | null;
+  total_return_pct: number | null;
+  annualized_return_pct: number | null;
+  sharpe_ratio: number | null;
+  max_drawdown_pct: number | null;
+  win_rate_pct: number | null;
+  total_trades: number | null;
+  is_public: boolean;
+  is_mine: boolean;
+  created_at: string;
+}
+
+export interface StrategyListDto {
+  strategies: StrategyDto[];
+  total: number;
+}
+
+export interface StrategySavePayload {
+  name: string;
+  description?: string;
+  symbol: string;
+  strategy: string;
+  parameters: Record<string, number>;
+  initial_capital: number;
+  slippage_pct?: number;
+  start_date?: string;
+  end_date?: string;
+  total_return_pct?: number;
+  annualized_return_pct?: number;
+  sharpe_ratio?: number;
+  max_drawdown_pct?: number;
+  win_rate_pct?: number;
+  total_trades?: number;
+  is_public?: boolean;
+}
+
+export async function fetchMyStrategies(): Promise<StrategyListDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/strategies`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch strategies");
+  return res.json();
+}
+
+export async function fetchPublicStrategies(): Promise<StrategyListDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/strategies/public`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch public strategies");
+  return res.json();
+}
+
+export async function saveStrategy(payload: StrategySavePayload): Promise<StrategyDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/strategies`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to save strategy");
+  return res.json();
+}
+
+export async function updateStrategy(
+  id: number,
+  payload: { name?: string; description?: string; is_public?: boolean },
+): Promise<StrategyDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/strategies/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to update strategy");
+  return res.json();
+}
+
+export async function deleteStrategy(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/strategies/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok && res.status !== 404) throw new Error("Failed to delete strategy");
+}
+
 export async function acknowledgeAlert(id: number): Promise<AlertDto> {
   const res = await fetch(`${API_BASE_URL}/api/v1/alerts/${id}/ack`, {
     method: "POST",
