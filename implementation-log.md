@@ -67,7 +67,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-SHOP-02        | Core – Showcase       | DONE         | 2026-03-06   | Detail modal + tracked outbound redirect + click stats endpoint |
 | CORE-SEC-01         | Core – Security       | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SEC-02         | Core – Security       | DONE         | 2026-03-06   | pg_dump backup script, restore script, APScheduler job (02:00 UTC), admin UI panel, DR runbook |
-| CORE-ANALYTICS-01   | Core – Analytics      | NOT_STARTED  | -            | Independent |
+| CORE-ANALYTICS-01   | Core – Analytics      | DONE         | 2026-03-06   | Self-hosted Postgres analytics, beacon endpoint, admin dashboard |
 | CORE-EXPERIMENT-01  | Core – Experiments    | NOT_STARTED  | -            | Depends on ANALYTICS-01 |
 | CORE-EMAIL-01       | Core – Email          | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-EMAIL-02       | Core – Email          | NOT_STARTED  | -            | Depends on EMAIL-01 |
@@ -1872,3 +1872,47 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Next steps**
     - `CORE-ANALYTICS-01` (product analytics) — next session.
+
+---
+
+### 2026-03-06 (continued)
+
+**Session — CORE-ANALYTICS-01: Self-Hosted Product Analytics (complete)**
+
+- **Context & Decision**
+    - Self-hosted in Postgres (zero external SaaS cost, full data ownership, unblocks `CORE-EXPERIMENT-01`).
+    - Dual-layer: server-side instrumentation for auth events + client-side beacon for all frontend events.
+    - Privacy-first: no PII in event properties (enforced at schema + service layer), user identified by UUID only.
+
+- **Stories completed**
+    - `CORE-ANALYTICS-01` (Product Analytics) — **DONE**
+
+- **Backend**
+    - ✅ `app/models/analytics.py` — `AnalyticsEvent` model with UUID PK, nullable user_id (ON DELETE SET NULL), anon_id, session_id, event_name, JSON properties, page, feature, created_at. Three composite indexes optimised for funnel, per-user, and DAU queries.
+    - ✅ `alembic/versions/d4e5f6a7b8c9_add_analytics_events_table.py` — migration with all indexes.
+    - ✅ `app/schemas/analytics_models.py` — Full `EventName` enum (40+ canonical events), `TrackEventRequest` with PII-stripping validator, `FunnelReport`, `FeatureAdoptionRow`, `DailyActiveUsersPoint`, `AnalyticsSummary` schemas. `ACTIVATION_FUNNEL`, `CONVERSION_FUNNEL`, `FEATURE_ADOPTION_EVENTS` list constants.
+    - ✅ `app/services/analytics_service.py` — `record_event` (async, non-fatal), `build_funnel_report`, `build_feature_adoption`, `build_dau_series`, `build_top_pages`, `build_top_symbols`, `build_analytics_summary` orchestrator.
+    - ✅ `app/api/v1/endpoints/analytics.py` — Three routes: `POST /event` (optional-auth beacon, never returns 5xx), `GET /summary` (admin, full dashboard data), `GET /events` (admin, raw stream with optional event_name filter).
+    - ✅ `app/api/v1/auth.py` — Server-side `user_signed_up` and `user_logged_in` events instrumented in register/login endpoints (try/except wrapped — never breaks auth flow).
+    - ✅ `app/models/__init__.py` — `AnalyticsEvent` registered.
+    - ✅ `app/main.py` — analytics model side-effect import + router registered at `/api/v1/analytics`.
+
+- **Tests**
+    - ✅ `tests/api/test_analytics_api.py` — 11 tests: anonymous beacon, authenticated beacon, invalid event_name 422, PII stripping, session_id, admin-only summary, funnel structure, DAU series length, admin-only raw events, event_name filter.
+
+- **Frontend**
+    - ✅ `frontend/lib/api.ts` — `AnalyticsEvent` const object (tree-shakeable), `track()` fire-and-forget helper (SSR guard, session_id injection, keepalive, never throws), `fetchAnalyticsSummary()`, `fetchAnalyticsRawEvents()` admin functions. Full TypeScript types: `AnalyticsSummaryDto`, `AnalyticsFunnelReport`, `AnalyticsFeatureAdoptionRow`, `AnalyticsDauPoint`.
+    - ✅ `frontend/app/admin/analytics/page.tsx` — Full admin analytics dashboard: period selector (7/14/30/90d), KPI strip (events / signed-up / active / activation rate), pure-SVG DAU+new-user chart, activation funnel, conversion funnel, feature adoption table with adoption bars, top pages table, top symbols table. Zero external charting dependencies.
+    - ✅ `frontend/components/Nav.tsx` — Analytics link added to admin dropdown with NEW badge.
+
+- **Architecture notes**
+    - `track()` uses `keepalive: true` so beacon fires even on page unload (covers logout, tab close).
+    - `POST /event` always returns 200 even on DB failure — analytics must never surface as a UX error.
+    - `user_id` FK uses `ON DELETE SET NULL` so GDPR account deletions preserve anonymised analytics history.
+    - DAU series fills all days in the period (including zero-traffic days) for a continuous chart.
+    - PII stripping is enforced at both the Pydantic schema layer (field_validator) and the service layer.
+
+- **Next steps**
+    - Wire `track()` calls into key frontend pages (dashboard, macro, backtesting, etc.) as part of normal feature work.
+    - `CORE-EXPERIMENT-01` is now unblocked (depends on ANALYTICS-01).
+    - Remaining unblocked stories: `CORE-SEC-01` (2FA), `CORE-EMAIL-01/02`, `CORE-EXPERIMENT-01`.

@@ -9,3 +9,4 @@ from app.models.legal import LegalConsent
 from app.models.blog import BlogPost
 from app.models.alert import Alert
 from app.models.strategy import SavedStrategy
+from app.models.analytics import AnalyticsEvent

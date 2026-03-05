@@ -1105,6 +1105,190 @@ export async function trackShowcaseClick(
   }
 }
 
+// ── Product Analytics (CORE-ANALYTICS-01) ───────────────────────────────────
+
+/**
+ * Canonical analytics event names — must match the backend EventName enum.
+ * Defined here as a const object so tree-shaking removes unused names.
+ */
+export const AnalyticsEvent = {
+  // Acquisition & Activation
+  USER_SIGNED_UP: "user_signed_up",
+  USER_LOGGED_IN: "user_logged_in",
+  USER_LOGGED_OUT: "user_logged_out",
+  CONSENT_ACCEPTED: "consent_accepted",
+  ONBOARDING_TOUR_STARTED: "onboarding_tour_started",
+  ONBOARDING_TOUR_COMPLETED: "onboarding_tour_completed",
+  ONBOARDING_TOUR_SKIPPED: "onboarding_tour_skipped",
+  // Dashboard & Core
+  DASHBOARD_VIEWED: "dashboard_viewed",
+  SYMBOL_SEARCHED: "symbol_searched",
+  SYMBOL_CHANGED: "symbol_changed",
+  WATCHLIST_SYMBOL_ADDED: "watchlist_symbol_added",
+  WATCHLIST_SYMBOL_REMOVED: "watchlist_symbol_removed",
+  // Features
+  TECHNICAL_CONSENSUS_VIEWED: "technical_consensus_viewed",
+  MACRO_DASHBOARD_VIEWED: "macro_dashboard_viewed",
+  MACRO_ADVANCED_VIEWED: "macro_advanced_viewed",
+  SENTIMENT_TAB_VIEWED: "sentiment_tab_viewed",
+  RETAIL_SENTIMENT_VIEWED: "retail_sentiment_viewed",
+  BACKTEST_RUN: "backtest_run",
+  BACKTEST_STRATEGY_SAVED: "backtest_strategy_saved",
+  BACKTEST_STRATEGY_LOADED: "backtest_strategy_loaded",
+  HEDGING_SIMULATOR_VIEWED: "hedging_simulator_viewed",
+  HEDGING_ADVANCED_VIEWED: "hedging_advanced_viewed",
+  PORTFOLIO_CREATED: "portfolio_created",
+  PORTFOLIO_VIEWED: "portfolio_viewed",
+  ALERT_CREATED: "alert_created",
+  ALERT_TRIGGERED: "alert_triggered",
+  LEARN_TAB_VIEWED: "learn_tab_viewed",
+  BLOG_POST_VIEWED: "blog_post_viewed",
+  CASE_STUDY_VIEWED: "case_study_viewed",
+  COMMUNITY_PAGE_VIEWED: "community_page_viewed",
+  SHOWCASE_VIEWED: "showcase_viewed",
+  SHOWCASE_PRODUCT_CLICKED: "showcase_product_clicked",
+  SETTINGS_PAGE_VIEWED: "settings_page_viewed",
+  PROFILE_UPDATED: "profile_updated",
+  PASSWORD_CHANGED: "password_changed",
+  BILLING_PAGE_VIEWED: "billing_page_viewed",
+  UPGRADE_CTA_CLICKED: "upgrade_cta_clicked",
+  API_ERROR_ENCOUNTERED: "api_error_encountered",
+} as const;
+
+export type AnalyticsEventName = (typeof AnalyticsEvent)[keyof typeof AnalyticsEvent];
+
+export interface TrackEventPayload {
+  event_name: AnalyticsEventName;
+  session_id?: string;
+  anon_id?: string;
+  page?: string;
+  feature?: string;
+  /** Properties must not contain PII (email, name, IP, etc.) */
+  properties?: Record<string, string | number | boolean | null>;
+}
+
+// Module-level session ID — generated once per page load, persisted in memory only
+let _sessionId: string | null = null;
+function getSessionId(): string {
+  if (!_sessionId) {
+    _sessionId = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+  }
+  return _sessionId;
+}
+
+/**
+ * Fire-and-forget analytics beacon.
+ * - Never throws — analytics must not break the UI.
+ * - Automatically injects session_id and current page path.
+ * - Sends Bearer token if present in localStorage.
+ */
+export async function track(
+  event_name: AnalyticsEventName,
+  options?: {
+    feature?: string;
+    properties?: Record<string, string | number | boolean | null>;
+    page?: string;
+  },
+): Promise<void> {
+  if (typeof window === "undefined") return; // SSR guard
+
+  const payload: TrackEventPayload = {
+    event_name,
+    session_id: getSessionId(),
+    page: options?.page ?? window.location.pathname,
+    feature: options?.feature,
+    properties: options?.properties ?? {},
+  };
+
+  try {
+    await fetch(`${API_BASE_URL}/api/v1/analytics/event`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Include auth token if available (best-effort — no throw if missing)
+        ...(localStorage.getItem("access_token")
+          ? { Authorization: `Bearer ${localStorage.getItem("access_token")}` }
+          : {}),
+      },
+      body: JSON.stringify(payload),
+      // keepalive ensures the request completes even during page unload
+      keepalive: true,
+    });
+  } catch {
+    // Silently swallow — analytics must never break UX
+  }
+}
+
+// ── Analytics Admin Dashboard ────────────────────────────────────────────────
+
+export interface AnalyticsFunnelStep {
+  event_name: string;
+  label: string;
+  unique_users: number;
+  total_occurrences: number;
+  conversion_from_previous_pct: number | null;
+}
+
+export interface AnalyticsFunnelReport {
+  funnel_name: string;
+  period_days: number;
+  steps: AnalyticsFunnelStep[];
+}
+
+export interface AnalyticsFeatureAdoptionRow {
+  event_name: string;
+  label: string;
+  unique_users: number;
+  total_occurrences: number;
+  adoption_pct: number;
+}
+
+export interface AnalyticsDauPoint {
+  date: string;
+  dau: number;
+  new_users: number;
+}
+
+export interface AnalyticsSummaryDto {
+  period_days: number;
+  total_events: number;
+  total_signed_up_users: number;
+  total_active_users: number;
+  activation_funnel: AnalyticsFunnelReport;
+  conversion_funnel: AnalyticsFunnelReport;
+  feature_adoption: AnalyticsFeatureAdoptionRow[];
+  daily_active_users: AnalyticsDauPoint[];
+  top_pages: { page: string; views: number; unique_users: number }[];
+  top_symbols: { symbol: string; searches: number }[];
+}
+
+export async function fetchAnalyticsSummary(
+  periodDays = 30,
+): Promise<AnalyticsSummaryDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/analytics/summary?period_days=${periodDays}`,
+    { headers: authHeaders(), cache: "no-store" },
+  );
+  if (!res.ok) throw new Error("Failed to load analytics summary");
+  return res.json();
+}
+
+export async function fetchAnalyticsRawEvents(
+  eventName?: string,
+  limit = 50,
+): Promise<Record<string, unknown>[]> {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (eventName) qs.set("event_name", eventName);
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/analytics/events?${qs}`,
+    { headers: authHeaders(), cache: "no-store" },
+  );
+  if (!res.ok) throw new Error("Failed to load raw events");
+  return res.json();
+}
+
 export async function deleteAccount(): Promise<{ message: string; anonymised_at: string }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/gdpr/delete`, {
     method: "POST",

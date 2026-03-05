@@ -28,6 +28,7 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.auth_service import authenticate_user, create_user, update_user_name, change_user_password
+from app.schemas.analytics_models import EventName
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth"])
@@ -47,6 +48,20 @@ async def register(
         user = await create_user(db, email=body.email, password=body.password, name=body.name)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+    # Track signup event (non-fatal)
+    try:
+        from app.services.analytics_service import record_event  # noqa: PLC0415
+        await record_event(
+            db,
+            EventName.USER_SIGNED_UP,
+            user_id=user.id,
+            properties={"subscription_tier": user.subscription_tier},
+        )
+        await db.commit()
+    except Exception:
+        logger.warning("Analytics: failed to record user_signed_up", exc_info=True)
+
     return user
 
 
@@ -66,6 +81,20 @@ async def login(
             detail="Invalid email or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Track login event (non-fatal)
+    try:
+        from app.services.analytics_service import record_event  # noqa: PLC0415
+        await record_event(
+            db,
+            EventName.USER_LOGGED_IN,
+            user_id=user.id,
+            properties={"subscription_tier": user.subscription_tier},
+        )
+        await db.commit()
+    except Exception:
+        logger.warning("Analytics: failed to record user_logged_in", exc_info=True)
+
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
         refresh_token=create_refresh_token(str(user.id)),

@@ -14,7 +14,7 @@ from app.services.scheduler import setup_scheduler
 from app.middleware.metrics_middleware import MetricsMiddleware
 
 # Register models so init_db() creates all tables
-from app.models import blog, showcase  # noqa: F401 — side-effect import
+from app.models import blog, showcase, analytics  # noqa: F401 — side-effect import
 
 from app.api.v1.health import router as health_router
 from app.api.v1.data import router as data_router
@@ -24,7 +24,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.endpoints import (
     macro, sentiment, technical, explanation, hedging,
     portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts, strategies,
-    showcase, ops
+    showcase, ops, analytics
 )
 
 # Configuration
@@ -110,3 +110,4 @@ app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts & Notif
 app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["Strategy Library"])
 app.include_router(showcase.router, prefix="/api/v1/showcase", tags=["Showcase / Pro Tools"])
 app.include_router(ops.router, prefix="/api/v1/ops", tags=["Ops & Monitoring"])
+app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Product Analytics"])
