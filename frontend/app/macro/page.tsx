@@ -1,114 +1,637 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
-import { fetchMacroLatest } from "../../lib/api";
+import {
+  fetchMacroLatest,
+  fetchMacroAdvanced,
+  fetchMacroHistory,
+  MacroAdvancedDto,
+  MacroLatestDto,
+  YieldCurvePoint,
+  StressComponentDto,
+} from "../../lib/api";
+import {
+  LineChart, Line, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import EventTimeline from "../../components/macro/EventTimeline";
+import { AlertTriangle, Info, ChevronDown, ChevronUp } from "lucide-react";
 
-const fetcher = () => fetchMacroLatest();
+// ─── Shared primitives ────────────────────────────────────────────────────────
 
-export default function MacroPage() {
-  const { data, error, isLoading } = useSWR("macro-latest", fetcher);
-
-  const macroScore = data?.macro_score ?? null;
-  const indicators = data?.data ?? {};
-
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
-        <h2 className="text-lg font-semibold tracking-tight">Macro dashboard</h2>
-        <p className="mt-1 max-w-2xl text-sm text-slate-400">
-          High-level economic backdrop combining rates, inflation, labour
-          market, yield curve and volatility into a simple Macro Score and
-          interpretations. Educational view only, not a trading signal.
-        </p>
-      </section>
-
-      <div className="grid gap-6 md:grid-cols-5">
-        <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4 md:col-span-2">
-          <h3 className="text-sm font-semibold text-slate-100">Macro Score</h3>
-          {isLoading && !data && !error && (
-            <p className="text-sm text-slate-400">Loading macro data…</p>
-          )}
-          {error && (
-            <p className="text-sm text-rose-400">
-              Could not load macro data. Ensure the backend is running and has
-              refreshed indicators.
-            </p>
-          )}
-          {macroScore && (
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-wide text-slate-500">
-                Macro Score (0–100)
-              </p>
-              <p className="text-4xl font-semibold text-sky-400">
-                {macroScore.score.toFixed(1)}
-              </p>
-              <p className="text-sm text-slate-200">{macroScore.label}</p>
-              <p className="text-[11px] text-slate-500">
-                Higher scores indicate a more supportive macro environment,
-                while lower scores indicate stress. This is a simplified
-                synthesis of several indicators as described in the PRD.
-              </p>
-            </div>
-          )}
-          {!macroScore && !isLoading && !error && (
-            <p className="text-sm text-slate-400">
-              Macro score is not available yet. Run the macro refresh job to
-              populate indicators.
-            </p>
-          )}
-        </section>
-
-        <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4 md:col-span-3">
-          <h3 className="text-sm font-semibold text-slate-100">
-            Key indicators (latest values)
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs">
-            {Object.entries(indicators).map(([key, value]) => {
-              const v = value as {
-                value: number | null;
-                date: string | null;
-                interpretation: string;
-              };
-              const labelMap: Record<string, string> = {
-                fed_funds_rate: "Fed Funds Rate",
-                unemployment_rate: "Unemployment",
-                yield_spread_10y_2y: "2–10yr Spread",
-                cpi_yoy: "CPI YoY",
-                vix: "VIX",
-              };
-              const title = labelMap[key] ?? key;
-
-              return (
-                <div
-                  key={key}
-                  className="rounded-lg border border-slate-800 bg-slate-950/60 p-3"
-                >
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                    {title}
-                  </p>
-                  <p className="mt-1 text-base font-semibold text-slate-50">
-                    {v.value !== null ? v.value : "n/a"}
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    {v.date ?? "No date"}
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    {v.interpretation}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </div>
-
-      <div className="pt-8 border-t border-slate-800">
-        <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
-          <EventTimeline />
-        </section>
-      </div>
+    <div>
+      <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
+      {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
     </div>
   );
 }
 
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-xl border border-slate-800 bg-slate-900/50 p-4 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function Pill({ label, color }: { label: string; color: "green" | "amber" | "red" | "sky" | "slate" }) {
+  const map = {
+    green: "bg-emerald-900/50 text-emerald-400 border-emerald-800",
+    amber: "bg-amber-900/50 text-amber-400 border-amber-800",
+    red:   "bg-red-900/50 text-red-400 border-red-800",
+    sky:   "bg-sky-900/50 text-sky-400 border-sky-800",
+    slate: "bg-slate-800 text-slate-400 border-slate-700",
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${map[color]}`}>
+      {label}
+    </span>
+  );
+}
+
+// ─── Score Gauge ──────────────────────────────────────────────────────────────
+
+function ScoreGauge({
+  score,
+  label,
+  size = "lg",
+  invert = false,
+}: {
+  score: number;
+  label: string;
+  size?: "sm" | "lg";
+  invert?: boolean; // for stress index — higher = worse
+}) {
+  // Colour: for normal score, green=high. For inverted (stress), red=high.
+  const pct = score;
+  const good = invert ? pct < 30 : pct > 60;
+  const bad  = invert ? pct > 60 : pct < 30;
+  const color = good ? "text-emerald-400" : bad ? "text-red-400" : "text-amber-400";
+  const barColor = good ? "bg-emerald-500" : bad ? "bg-red-500" : "bg-amber-500";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-end gap-2">
+        <span className={`font-bold leading-none ${size === "lg" ? "text-5xl" : "text-3xl"} ${color}`}>
+          {score.toFixed(1)}
+        </span>
+        <span className="text-slate-500 text-sm mb-1">/ 100</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-slate-800">
+        <div
+          className={`h-2 rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
+      </div>
+      <span className={`text-sm font-medium ${color}`}>{label}</span>
+    </div>
+  );
+}
+
+// ─── Core indicator card ──────────────────────────────────────────────────────
+
+function IndicatorCard({
+  title,
+  value,
+  date,
+  interpretation,
+}: {
+  title: string;
+  value: number | null;
+  date: string | null;
+  interpretation: string;
+}) {
+  const isWarning = interpretation.toLowerCase().includes("inverted") ||
+    interpretation.toLowerCase().includes("high") ||
+    interpretation.toLowerCase().includes("fear") ||
+    interpretation.toLowerCase().includes("risk");
+
+  return (
+    <Card>
+      <p className="text-[11px] uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mt-1.5 text-2xl font-semibold text-slate-50">
+        {value !== null ? value.toFixed(2) : "—"}
+      </p>
+      {date && <p className="mt-0.5 text-[11px] text-slate-600">{date}</p>}
+      <p className={`mt-1.5 text-xs ${isWarning ? "text-amber-400" : "text-slate-400"}`}>
+        {interpretation}
+      </p>
+    </Card>
+  );
+}
+
+// ─── Yield Curve Chart ────────────────────────────────────────────────────────
+
+function YieldCurveChart({ points }: { points: YieldCurvePoint[] }) {
+  const data = points
+    .filter(p => p.yield_pct !== null)
+    .map(p => ({ tenor: p.tenor, yield: p.yield_pct as number }));
+
+  if (data.length === 0) {
+    return (
+      <div className="flex h-32 items-center justify-center text-sm text-slate-600">
+        No yield data available yet — run a macro refresh.
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-48 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+          <defs>
+            <linearGradient id="yieldGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor="#38bdf8" stopOpacity={0.25} />
+              <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+          <XAxis dataKey="tenor" stroke="#475569" fontSize={11} />
+          <YAxis stroke="#475569" fontSize={11}
+            tickFormatter={(v) => `${v.toFixed(1)}%`}
+            domain={["auto", "auto"]} width={44}
+          />
+          <Tooltip
+            contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px", fontSize: 12, color: "#f8fafc" }}
+            formatter={(v: number) => [`${v.toFixed(2)}%`, "Yield"]}
+          />
+          <Area type="monotone" dataKey="yield" stroke="#38bdf8" strokeWidth={2}
+            fill="url(#yieldGrad)" dot={{ fill: "#38bdf8", r: 4 }} activeDot={{ r: 5 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── Recession Gauge ──────────────────────────────────────────────────────────
+
+function RecessionGauge({
+  probability,
+  label,
+  nber,
+  drivers,
+}: {
+  probability: number;
+  label: string;
+  nber: boolean;
+  drivers: string[];
+}) {
+  const color =
+    label === "High"     ? "text-red-400" :
+    label === "Elevated" ? "text-amber-400" : "text-emerald-400";
+  const barColor =
+    label === "High"     ? "bg-red-500" :
+    label === "Elevated" ? "bg-amber-500" : "bg-emerald-500";
+
+  return (
+    <div className="space-y-4">
+      {nber && (
+        <div className="flex items-center gap-2 rounded-lg bg-red-950/40 border border-red-700/40 px-3 py-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
+          <span className="text-xs text-red-300 font-medium">NBER official recession is active</span>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <div className="flex items-end justify-between">
+          <span className={`text-3xl font-bold ${color}`}>{probability.toFixed(1)}%</span>
+          <Pill label={label} color={label === "High" ? "red" : label === "Elevated" ? "amber" : "green"} />
+        </div>
+        <div className="h-2 w-full rounded-full bg-slate-800">
+          <div
+            className={`h-2 rounded-full transition-all duration-500 ${barColor}`}
+            style={{ width: `${Math.min(100, probability)}%` }}
+          />
+        </div>
+        <p className="text-[11px] text-slate-500">12-month estimated probability</p>
+      </div>
+
+      {drivers.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-slate-400">Signal drivers</p>
+          {drivers.map((d, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs text-slate-500">
+              <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-slate-600 shrink-0" />
+              {d}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-[11px] text-slate-600 border-t border-slate-800 pt-2">
+        Educational estimate only — not a professional economic forecast.
+      </p>
+    </div>
+  );
+}
+
+// ─── Stress Index Breakdown ───────────────────────────────────────────────────
+
+function StressBreakdown({ components }: { components: StressComponentDto[] }) {
+  const visible = components.filter(c => c.contribution > 0);
+  if (visible.length === 0) {
+    return <p className="text-xs text-slate-600">No stress signals detected.</p>;
+  }
+  const max = Math.max(...visible.map(c => c.contribution));
+
+  return (
+    <div className="space-y-3">
+      {visible.map((c) => {
+        const pct = max > 0 ? (c.contribution / max) * 100 : 0;
+        const high = c.contribution >= 15;
+        return (
+          <div key={c.name} className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className={`font-medium ${high ? "text-red-400" : "text-slate-300"}`}>{c.name}</span>
+              <span className={`font-mono ${high ? "text-red-400" : "text-slate-400"}`}>+{c.contribution.toFixed(1)}</span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-slate-800">
+              <div
+                className={`h-1.5 rounded-full ${high ? "bg-red-500" : "bg-amber-500"}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-slate-600">{c.description}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── History Sparkline ────────────────────────────────────────────────────────
+
+function HistoryChart({
+  indicatorName,
+  color = "#38bdf8",
+  unit = "",
+}: {
+  indicatorName: string;
+  color?: string;
+  unit?: string;
+}) {
+  const { data, isLoading } = useSWR(
+    `macro-history-${indicatorName}`,
+    () => fetchMacroHistory(indicatorName, 60),
+  );
+
+  if (isLoading) {
+    return <div className="h-24 flex items-center justify-center text-xs text-slate-600">Loading…</div>;
+  }
+  if (!data || data.series.length === 0) {
+    return <div className="h-24 flex items-center justify-center text-xs text-slate-600">No history yet</div>;
+  }
+
+  return (
+    <div className="h-24 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data.series} margin={{ top: 2, right: 4, left: -24, bottom: 0 }}>
+          <XAxis dataKey="date" hide />
+          <YAxis domain={["auto", "auto"]} fontSize={10} stroke="#475569"
+            tickFormatter={(v) => `${v.toFixed(1)}${unit}`} width={36}
+          />
+          <Tooltip
+            contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "6px", fontSize: 11, color: "#f8fafc" }}
+            formatter={(v: number) => [`${v.toFixed(2)}${unit}`, indicatorName]}
+            labelFormatter={(l) => l}
+          />
+          <Line type="monotone" dataKey="value" stroke={color} strokeWidth={1.5} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── Yield Curve Shape Badge ──────────────────────────────────────────────────
+
+function YieldShapeBadge({ shape }: { shape: string }) {
+  const map: Record<string, { color: "green" | "amber" | "red" | "sky" | "slate"; icon: string }> = {
+    Normal:      { color: "green", icon: "↗" },
+    Steep:       { color: "sky",   icon: "↑↑" },
+    Flat:        { color: "amber", icon: "→" },
+    Inverted:    { color: "red",   icon: "↘" },
+    Humped:      { color: "amber", icon: "∩" },
+    Unavailable: { color: "slate", icon: "—" },
+  };
+  const { color, icon } = map[shape] ?? { color: "slate", icon: "?" };
+  return <Pill label={`${icon} ${shape}`} color={color} />;
+}
+
+// ─── Collapsible leading indicators ──────────────────────────────────────────
+
+function LeadingPanel({ leading }: { leading: MacroAdvancedDto["leading_indicators"] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between">
+        <SectionHeader title="Leading Indicators" subtitle="NFP & Industrial Production" />
+        {open ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+      </button>
+      {open && (
+        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { label: "NFP Level",      value: leading.nonfarm_payrolls_latest,     unit: "k",  decimals: 0 },
+            { label: "NFP MoM Change", value: leading.nonfarm_payrolls_mom,        unit: "k",  decimals: 0 },
+            { label: "Ind. Prod.",     value: leading.industrial_production_latest, unit: "",   decimals: 1 },
+            { label: "IP YoY",         value: leading.industrial_production_yoy,   unit: "%",  decimals: 1 },
+          ].map(({ label, value, unit, decimals }) => (
+            <div key={label}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
+              <p className={`mt-1 text-xl font-semibold ${
+                value === null ? "text-slate-600"
+                : value < 0 ? "text-red-400"
+                : "text-slate-100"
+              }`}>
+                {value !== null ? `${value.toFixed(decimals)}${unit}` : "—"}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+const CORE_LABEL_MAP: Record<string, string> = {
+  fed_funds_rate:      "Fed Funds Rate",
+  unemployment_rate:   "Unemployment",
+  yield_spread_10y_2y: "10Y–2Y Spread",
+  cpi_yoy:             "CPI YoY",
+  vix:                 "VIX",
+};
+
+const HISTORY_CARDS = [
+  { name: "fed_funds_rate",      label: "Fed Funds Rate", color: "#f59e0b", unit: "%" },
+  { name: "cpi_yoy",             label: "CPI YoY",        color: "#f87171", unit: "%" },
+  { name: "yield_spread_10y_2y", label: "10Y–2Y Spread",  color: "#a78bfa", unit: "%" },
+  { name: "vix",                 label: "VIX",            color: "#38bdf8", unit: "" },
+];
+
+export default function MacroPage() {
+  const [view, setView] = useState<"basic" | "advanced">("basic");
+
+  const { data: basicData, error: basicError, isLoading: basicLoading } =
+    useSWR<MacroLatestDto>("macro-latest", fetchMacroLatest);
+
+  const { data: advData, error: advError, isLoading: advLoading } =
+    useSWR<MacroAdvancedDto>(view === "advanced" ? "macro-advanced" : null, fetchMacroAdvanced);
+
+  const macroScore = basicData?.macro_score ?? null;
+  const indicators = basicData?.data ?? {};
+  const loading = view === "basic" ? basicLoading : advLoading;
+  const error   = view === "basic" ? basicError   : advError;
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── Page header ── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Macro Dashboard</h2>
+          <p className="mt-1 text-sm text-slate-400 max-w-xl">
+            Economic backdrop synthesis — rates, inflation, yield curve, labour market and volatility.
+            Educational view only, not a trading signal.
+          </p>
+        </div>
+
+        {/* View toggle */}
+        <div className="flex gap-1 rounded-lg bg-slate-900 border border-slate-800 p-1 self-start">
+          {(["basic", "advanced"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition capitalize ${
+                view === v ? "bg-slate-700 text-slate-100" : "text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              {v === "basic" ? "Overview" : "Advanced"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Error ── */}
+      {error && (
+        <div className="rounded-xl border border-red-800/50 bg-red-950/30 p-4 text-sm text-red-300">
+          Could not load macro data. Ensure the backend is running and indicators are refreshed
+          (POST /api/v1/macro/refresh).
+        </div>
+      )}
+
+      {/* ── Loading skeleton ── */}
+      {loading && !basicData && (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5 animate-pulse">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-28 rounded-xl bg-slate-800/50" />
+          ))}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* OVERVIEW VIEW                                                       */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {view === "basic" && basicData && (
+        <div className="space-y-6">
+
+          {/* Macro score + core indicators */}
+          <div className="grid gap-4 md:grid-cols-5">
+            <Card className="md:col-span-2 flex flex-col justify-between">
+              <SectionHeader title="Macro Score" subtitle="0 = max stress · 100 = ideal backdrop" />
+              <div className="mt-4">
+                {macroScore
+                  ? <ScoreGauge score={macroScore.score} label={macroScore.label} />
+                  : <p className="text-sm text-slate-500">No data — run a macro refresh.</p>
+                }
+              </div>
+            </Card>
+
+            <div className="md:col-span-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {Object.entries(indicators).slice(0, 6).map(([key, val]) => (
+                <IndicatorCard
+                  key={key}
+                  title={CORE_LABEL_MAP[key] ?? key}
+                  value={val.value}
+                  date={val.date}
+                  interpretation={val.interpretation}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* History sparklines */}
+          <div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">60-Day History</p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {HISTORY_CARDS.map(({ name, label, color, unit }) => (
+                <Card key={name}>
+                  <p className="mb-2 text-xs font-medium text-slate-400">{label}</p>
+                  <HistoryChart indicatorName={name} color={color} unit={unit} />
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          {/* Events */}
+          <div className="border-t border-slate-800 pt-6">
+            <Card>
+              <EventTimeline />
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ADVANCED VIEW                                                       */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {view === "advanced" && advData && (
+        <div className="space-y-6">
+
+          {/* Row 1: Macro score + Stress index */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <SectionHeader title="Macro Environment Score" subtitle="Higher = more supportive backdrop" />
+              <div className="mt-4">
+                {advData.core.macro_score
+                  ? <ScoreGauge score={advData.core.macro_score.score} label={advData.core.macro_score.label} />
+                  : <p className="text-sm text-slate-500">No data.</p>
+                }
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeader title="Macro Stress Index" subtitle="Higher = more stress" />
+              <div className="mt-4">
+                <ScoreGauge
+                  score={advData.stress_index.index}
+                  label={advData.stress_index.label}
+                  invert
+                />
+              </div>
+            </Card>
+          </div>
+
+          {/* Row 2: Yield curve + Recession */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <div className="flex items-center justify-between mb-3">
+                <SectionHeader title="Yield Curve" subtitle="Treasury CMT yields by tenor" />
+                <YieldShapeBadge shape={advData.yield_curve.shape} />
+              </div>
+              <YieldCurveChart points={advData.yield_curve.points} />
+              <p className="mt-3 text-xs text-slate-500">{advData.yield_curve.shape_description}</p>
+              <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+                {advData.yield_curve.spread_10y_2y !== null && (
+                  <span>
+                    10Y–2Y spread:{" "}
+                    <span className={advData.yield_curve.spread_10y_2y < 0 ? "text-red-400 font-mono" : "text-emerald-400 font-mono"}>
+                      {advData.yield_curve.spread_10y_2y > 0 ? "+" : ""}{advData.yield_curve.spread_10y_2y.toFixed(3)}%
+                    </span>
+                  </span>
+                )}
+                {advData.yield_curve.spread_30y_2y !== null && (
+                  <span>
+                    30Y–2Y spread:{" "}
+                    <span className="font-mono text-slate-300">
+                      {advData.yield_curve.spread_30y_2y > 0 ? "+" : ""}{advData.yield_curve.spread_30y_2y.toFixed(3)}%
+                    </span>
+                  </span>
+                )}
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeader
+                title="Recession Probability"
+                subtitle="Rule-based estimate — educational only"
+              />
+              <div className="mt-4">
+                <RecessionGauge
+                  probability={advData.recession.probability_pct}
+                  label={advData.recession.label}
+                  nber={advData.recession.nber_in_recession}
+                  drivers={advData.recession.drivers}
+                />
+              </div>
+            </Card>
+          </div>
+
+          {/* Row 3: Stress breakdown */}
+          <Card>
+            <SectionHeader
+              title="Stress Index Breakdown"
+              subtitle="How much each factor contributes to the current stress reading"
+            />
+            <div className="mt-4">
+              <StressBreakdown components={advData.stress_index.components} />
+            </div>
+          </Card>
+
+          {/* Row 4: Core indicators grid */}
+          <div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Core Indicators</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {Object.entries(advData.core.data).map(([key, val]) => (
+                <IndicatorCard
+                  key={key}
+                  title={CORE_LABEL_MAP[key] ?? key}
+                  value={val.value}
+                  date={val.date}
+                  interpretation={val.interpretation}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Row 5: Leading indicators */}
+          <LeadingPanel leading={advData.leading_indicators} />
+
+          {/* Row 6: History sparklines */}
+          <div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">60-Day History</p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {HISTORY_CARDS.map(({ name, label, color, unit }) => (
+                <Card key={name}>
+                  <p className="mb-2 text-xs font-medium text-slate-400">{label}</p>
+                  <HistoryChart indicatorName={name} color={color} unit={unit} />
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          {/* Events */}
+          <div className="border-t border-slate-800 pt-6">
+            <Card>
+              <EventTimeline />
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Advanced loading state */}
+      {view === "advanced" && advLoading && !advData && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 animate-pulse">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-48 rounded-xl bg-slate-800/50" />
+          ))}
+        </div>
+      )}
+
+      {/* Disclaimer */}
+      <div className="rounded-xl border border-slate-800/60 bg-slate-900/20 px-4 py-3 flex gap-2">
+        <Info className="h-4 w-4 shrink-0 mt-0.5 text-slate-600" />
+        <p className="text-xs text-slate-600">
+          All macro data is sourced from FRED (Federal Reserve Bank of St. Louis) and Yahoo Finance.
+          Macro scores, recession probability, and the stress index are simplified educational models —
+          not professional economic forecasts. Past macro regimes do not predict future outcomes.
+        </p>
+      </div>
+    </div>
+  );
+}

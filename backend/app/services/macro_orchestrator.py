@@ -1,57 +1,63 @@
-from sqlalchemy.orm import Session
+"""
+app/services/macro_orchestrator.py
+Orchestrates all FRED + VIX fetches and persists results.
+Extended for P2-MACRO-ADV-01.
+"""
+from __future__ import annotations
+
 import logging
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.crud.macro import upsert_macro_data_async
 from app.services.macro_data import MacroFetcher
 from app.services.market_data import OHLCVFetcher
-from app.crud.macro import upsert_macro_data
 
 logger = logging.getLogger(__name__)
 
-async def refresh_all_macro_indicators(db: Session):
-    """
-    Orchestrates the fetching of all macro indicators and saves them to the database.
-    This should be run periodically (e.g., daily via a background task).
-    """
-    logger.info("Starting refresh of all macro indicators")
-    
-    macro_fetcher = MacroFetcher()
-    
-    # 1. Fetch FRED Indicators
-    try:
-        fed_funds = await macro_fetcher.fetch_fed_funds_rate()
-        if fed_funds:
-            upsert_macro_data(db, fed_funds)
-    except Exception as e:
-        logger.error(f"Failed to refresh FEDFUNDS: {e}")
 
+async def refresh_all_macro_indicators(db: AsyncSession) -> None:
+    """
+    Fetch every macro series and upsert into macro_indicators.
+    Called by the scheduler and the manual POST /macro/refresh endpoint.
+    """
+    logger.info("Starting full macro data refresh")
+    fetcher = MacroFetcher()
+
+    # Ordered dict — name used only for logging; the fetcher sets indicator_name internally
+    fetch_jobs = {
+        "fed_funds_rate":        fetcher.fetch_fed_funds_rate,
+        "unemployment_rate":     fetcher.fetch_unemployment_rate,
+        "yield_spread_10y_2y":   fetcher.fetch_yield_spread,
+        "cpi_yoy":               fetcher.fetch_cpi_yoy,
+        # Advanced yield curve
+        "treasury_2y":           fetcher.fetch_dgs2,
+        "treasury_5y":           fetcher.fetch_dgs5,
+        "treasury_10y":          fetcher.fetch_dgs10,
+        "treasury_30y":          fetcher.fetch_dgs30,
+        # Recession & depth
+        "recession_indicator":   fetcher.fetch_recession_indicator,
+        "nonfarm_payrolls":      fetcher.fetch_nonfarm_payrolls,
+        "industrial_production": fetcher.fetch_industrial_production,
+    }
+
+    for name, fetch_fn in fetch_jobs.items():
+        try:
+            records = await fetch_fn()
+            if records:
+                inserted = await upsert_macro_data_async(db, records)
+                logger.info("  %-30s  fetched=%d  inserted=%d", name, len(records), inserted)
+        except Exception as exc:
+            logger.error("  FAILED %-28s: %s", name, exc)
+
+    # VIX from Yahoo Finance (sync, wrapped here)
     try:
-        unrate = await macro_fetcher.fetch_unemployment_rate()
-        if unrate:
-            upsert_macro_data(db, unrate)
-    except Exception as e:
-        logger.error(f"Failed to refresh UNRATE: {e}")
-        
-    try:
-        yield_spread = await macro_fetcher.fetch_yield_spread()
-        if yield_spread:
-            upsert_macro_data(db, yield_spread)
-    except Exception as e:
-        logger.error(f"Failed to refresh T10Y2Y: {e}")
-        
-    try:
-        cpi_yoy = await macro_fetcher.fetch_cpi_yoy()
-        if cpi_yoy:
-            upsert_macro_data(db, cpi_yoy)
-    except Exception as e:
-        logger.error(f"Failed to refresh CPI YoY: {e}")
-        
-    # 2. Fetch Market Indicators (VIX)
-    # OHLCVFetcher.fetch_vix is synchronous
-    try:
-        vix = OHLCVFetcher.fetch_vix()
-        if vix:
-            upsert_macro_data(db, vix)
-    except Exception as e:
-        logger.error(f"Failed to refresh VIX: {e}")
-        
-    logger.info("Finished refreshing all macro indicators")
+        vix_records = OHLCVFetcher.fetch_vix()
+        if vix_records:
+            inserted = await upsert_macro_data_async(db, vix_records)
+            logger.info("  %-30s  fetched=%d  inserted=%d", "vix", len(vix_records), inserted)
+    except Exception as exc:
+        logger.error("  FAILED vix: %s", exc)
+
+    await db.commit()
+    logger.info("Macro data refresh complete")

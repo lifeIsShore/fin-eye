@@ -39,7 +39,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P2-EVENT-01         | Political/Event Tracking | DONE         | 2026-03-04   | API + EventTimeline component implemented |
 | P2-HEDGE-ADV-01     | P2 – Hedging (adv)    | NOT_STARTED  | -            | Depends on HEDGE-01 |
 | P2-STRAT-01         | P2 – Strategy library | DONE         | 2026-03-05   | Save/load/share, community leaderboard by Sharpe |
-| P2-MACRO-ADV-01     | P2 – Macro (adv)      | NOT_STARTED  | -            | Depends on MACRO-01 |
+| P2-MACRO-ADV-01     | P2 – Macro (adv)      | DONE         | 2026-03-05   | Full yield curve, recession gauge, stress index, advanced UI |
 | P2-CONTENT-ADV-01   | P2 – Content (adv)    | NOT_STARTED  | -            | Depends on LEARN-01 |
 | P3-SENT-ADV-01      | P3 – Sentiment (adv)  | NOT_STARTED  | -            | Depends on SENT-02 |
 | P3-ANALYTICS-01     | P3 – Analytics (adv)  | NOT_STARTED  | -            | Depends on TECH-02 |
@@ -1488,6 +1488,114 @@ This log tracks implementation progress for each user story in `user-stories.md`
     - `P2-MACRO-ADV-01` (Advanced Macro) — yield curve, recession probability, macro stress index. No new dependencies.
     - `CORE-SET-01` (Profile/Settings page) — update name, change password. Simple, high-polish value.
     - `CORE-SUB-01` — Stripe billing (when credentials available).
+
+---
+
+### 2026-03-05 (continued)
+
+**Session 49 — P2-MACRO-ADV-01: Advanced Macro Intelligence (Full Implementation)**
+
+- **Context & Decision**
+    - `P2-STRAT-01` completed and merged. Strategy Library is live.
+    - `P2-MACRO-ADV-01` selected: no new external dependencies (FRED already wired), highest analytical depth addition, directly strengthens GAS score quality, and delivers visible power-user value (yield curve, recession gauge, stress index).
+
+- **Stories touched**
+    - `P2-MACRO-ADV-01` (Advanced Macro Intelligence) — **DONE**
+
+- **Root cause analysis — what was wrong with the existing macro layer**
+    - `macro.py` endpoint used raw `Dict[str, Any]` return types — no typed contracts, impossible to catch shape regressions.
+    - All DB access was synchronous (`Session`) — inconsistent with the rest of the async codebase.
+    - `macro_scoring.py` used a shallow 5-signal heuristic with no decomposed components for UI rendering.
+    - Only 5 FRED series were fetched; full yield curve (DGS2/5/10/30), NBER recession indicator (USREC), NFP (PAYEMS), and industrial production (INDPRO) were missing.
+    - No endpoint for historical time-series per indicator — frontend could only show latest values.
+
+- **Backend work done**
+
+    - ✅ `app/services/macro_data.py` — Full rewrite. Added 7 new FRED fetcher methods: `fetch_dgs2`, `fetch_dgs5`, `fetch_dgs10`, `fetch_dgs30`, `fetch_recession_indicator` (USREC), `fetch_nonfarm_payrolls` (PAYEMS), `fetch_industrial_production` (INDPRO). All existing methods retained. Per-series lookback windows tuned (yield curve 14d, NFP/INDPRO/USREC 90d, CPI 400d for YoY). Central `fetch_series` primitive with consistent error handling.
+
+    - ✅ `app/services/macro_orchestrator.py` — Rewritten to async-first. Iterates all 12 series via a name→coro dict. Calls `upsert_macro_data_async` for each. Closes with `db.commit()`. Single `refresh_all_macro_indicators(db: AsyncSession)` entry point.
+
+    - ✅ `app/services/macro_scoring.py` — Full upgrade. Now exports four separate, composable functions:
+        - `compute_macro_score(indicators)` — upgraded from 5 to 8+ signal inputs (adds NFP MoM, IP YoY). Starts at 50, adjusts by named delta tuples, clamps 0–100. Returns typed `MacroScoreDto`.
+        - `compute_macro_stress_index(indicators)` — NEW. 0–100 index (higher = worse). Decomposed into 5 named components (Yield Curve, VIX, Inflation, Labour Market, Fed Policy) each with their own contribution and human-readable description. Returns `MacroStressIndexDto` with full component list for UI breakdown bars.
+        - `compute_recession_risk(indicators)` — NEW. Rule-based recession probability (0–99%). Respects NBER USREC flag as authoritative (returns 95% immediately if USREC=1). Falls back to yield curve inversion, unemployment, IP contraction, and VIX stress signals. Returns `RecessionDto` with `probability_pct`, `label`, `nber_in_recession`, and `drivers` list.
+        - `compute_yield_curve(indicators, dates)` — NEW. Builds `YieldCurveDto` from individual tenor yields. Classifies shape as Normal / Flat / Inverted / Steep / Unavailable. Computes 10Y–2Y and 30Y–2Y spreads.
+
+    - ✅ `app/crud/macro.py` — Rewritten. Kept sync helpers for backward compat. Added async variants: `upsert_macro_data_async`, `get_latest_async`, `get_history_async` (returns chronological list), `get_latest_batch_async` (fetches latest for a list of indicators in one function call; loops per-indicator for SQLite test compat).
+
+    - ✅ `app/schemas/macro_models.py` — NEW file. Full typed contract:
+        - `IndicatorPoint`, `IndicatorLatest`, `MacroScoreDto`
+        - `MacroLatestResponse` (backward-compat with existing frontend)
+        - `YieldCurvePoint`, `YieldCurveDto`
+        - `RecessionDto`
+        - `StressComponentDto`, `MacroStressIndexDto`
+        - `LeadingIndicatorsDto`
+        - `MacroAdvancedResponse` (full advanced view)
+        - `IndicatorHistoryResponse`
+
+    - ✅ `app/api/v1/endpoints/macro.py` — Full rewrite. Now fully async (`AsyncSession`). Four routes:
+        - `GET /macro/latest` — MVP-compatible. Returns `MacroLatestResponse`. Calls shared `_build_core_response` helper.
+        - `GET /macro/advanced` — NEW. Full `MacroAdvancedResponse`: core indicators, yield curve (4 tenor points), recession gauge, stress index (with component breakdown), leading indicators (NFP level + MoM, IP level + YoY). Derives NFP MoM from last 3 records diff; derives IP YoY from 13-record window.
+        - `GET /macro/history/{indicator_name}` — NEW. Returns up to `limit` (max 365) chronological data points for any single indicator. Validates against a whitelist of 12 known indicators; returns 404 for unknown names.
+        - `POST /macro/refresh` — Upgraded to async, proper 202 response, error handling.
+        - Internal `_interpret(name, value)` dispatches clean interpretations by indicator name. `_build_core_response` helper used by both `/latest` and `/advanced` to avoid duplication.
+
+    - ✅ `alembic/versions/c3d4e5f6a7b8_add_advanced_macro_indicator_names.py` — No-DDL migration (schema unchanged; new indicator names are pure data). Documents all 7 new `indicator_name` values. `downgrade()` includes cleanup DELETE for rollback safety.
+
+- **Tests written**
+
+    - ✅ `tests/services/test_macro_scoring.py` — 26 unit tests, pure Python (no DB, no network):
+        - `TestMacroScore` (6): neutral baseline, ideal ≥70, stressed <40, clamped to 0, NFP+IP inputs lift score, missing indicators graceful.
+        - `TestMacroStressIndex` (5): no data = 0 stress, deeply inverted + high VIX = High Stress, benign = Low Stress, components present for each indicator, clamped to 100.
+        - `TestRecessionRisk` (6): NBER=1 → 95%, no signals = Low, deeply inverted + high unemployment = High, flat curve = Elevated, never reaches 100%, drivers list non-empty.
+        - `TestYieldCurve` (7): normal shape, inverted detected, flat detected, steep detected, unavailable when no data, 4 tenor points always present, 30Y–2Y spread computed.
+
+    - ✅ `tests/api/test_macro_api.py` — 11 API-level tests:
+        - `/latest`: returns 200 with `macro_score.label`, handles empty data gracefully.
+        - `/advanced`: structure correct, yield curve has 4 points, recession fields (`probability_pct`, `nber_in_recession`, `drivers`) present.
+        - `/history/vix`: returns correct series, indicator_name, count. Unknown indicator returns 404. Limit param accepted.
+        - `/refresh`: returns 202 with `{"status": "accepted"}`.
+
+- **Frontend work done**
+
+    - ✅ `lib/api.ts` — Added 7 new interfaces: `YieldCurvePoint`, `YieldCurveDto`, `StressComponentDto`, `MacroStressIndexDto`, `RecessionDto`, `LeadingIndicatorsDto`, `MacroAdvancedDto`, `IndicatorHistoryDto`. Added `fetchMacroAdvanced()` and `fetchMacroHistory(indicatorName, limit)` functions.
+
+    - ✅ `app/macro/page.tsx` — Full rewrite. Two views toggled by an Overview / Advanced tab control:
+
+        **Overview view** (default, shown to all users):
+        - Macro Score gauge (score + bar + label)
+        - 5 core indicator cards (value, date, interpretation, warning colour if flagged)
+        - 60-day history sparklines for Fed Rate, CPI, 10Y–2Y Spread, VIX (each fetched lazily via SWR per indicator)
+        - Event Timeline at bottom
+
+        **Advanced view** (power user):
+        - Macro Environment Score gauge (same gauge, top left)
+        - Macro Stress Index gauge (inverted colour scale, top right)
+        - Yield Curve area chart (4 tenor points with AreaChart gradient fill, shape badge: Normal/Flat/Inverted/Steep/Unavailable, 10Y–2Y and 30Y–2Y spread display)
+        - Recession Probability gauge (% bar, label pill, NBER active banner if USREC=1, signal drivers list)
+        - Stress Index Breakdown (bar chart per component, contribution labels, high-stress components highlighted red)
+        - Core indicator grid (same 5 cards)
+        - Leading Indicators collapsible panel (NFP level, NFP MoM, IP level, IP YoY)
+        - 60-day history sparklines (same 4 as overview)
+        - Event Timeline
+        - Global disclaimer footer (FRED attribution, educational-only notice)
+
+        Component architecture: `ScoreGauge` (supports `invert` prop for stress), `IndicatorCard`, `YieldCurveChart`, `RecessionGauge`, `StressBreakdown`, `HistoryChart` (SWR-fetched sparkline per indicator), `YieldShapeBadge`, `LeadingPanel` (collapsible), `Card`, `SectionHeader`, `Pill`. Loading skeletons for both views. Error banner with refresh instructions.
+
+- **Architecture notes**
+    - All new macro DB access uses `AsyncSession` — consistent with the rest of the async codebase. The sync CRUD helpers are kept but clearly marked legacy.
+    - `_build_core_response` is shared between `/latest` and `/advanced` to ensure the two endpoints never diverge on core indicator data.
+    - The stress index is the complement of the macro score conceptually, but decomposed differently — stress index is additive from 0 (not subtractive from 50) to make the component bars meaningful in the UI.
+    - Recession probability explicitly caps at 99% and bases at 5% (US historical base rate) to avoid communicating false certainty.
+    - History endpoint validates indicator names against a whitelist to prevent DB enumeration attacks.
+
+- **Status**
+    - `P2-MACRO-ADV-01` is fully complete. The Advanced Macro tab now gives power users a full yield curve chart, recession probability gauge with NBER flag, stress index with component breakdown, leading indicators, and 60-day sparklines for all core series.
+
+- **Next recommended stories**
+    - `CORE-SET-01` (Profile/Settings) — wire profile save + password change. Simple, unblocked, high-polish value.
+    - `P2-HEDGE-ADV-01` (Advanced Hedging) — depends on HEDGE-01 (done). Options pricing, tail risk scenarios.
+    - `CORE-SUB-01` (Stripe billing) — when Stripe credentials are available.
 
 ---
 

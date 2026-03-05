@@ -45,6 +45,63 @@ export interface MacroIndicatorDto {
   interpretation: string;
 }
 
+// ── Advanced Macro (P2-MACRO-ADV-01) ────────────────────────────────────────
+
+export interface YieldCurvePoint {
+  tenor: string;
+  tenor_years: number;
+  yield_pct: number | null;
+  date: string | null;
+}
+
+export interface YieldCurveDto {
+  points: YieldCurvePoint[];
+  shape: "Normal" | "Flat" | "Inverted" | "Steep" | "Humped" | "Unavailable";
+  shape_description: string;
+  spread_10y_2y: number | null;
+  spread_30y_2y: number | null;
+}
+
+export interface StressComponentDto {
+  name: string;
+  contribution: number;
+  description: string;
+}
+
+export interface MacroStressIndexDto {
+  index: number;
+  label: "Low Stress" | "Moderate" | "Elevated" | "High Stress";
+  components: StressComponentDto[];
+}
+
+export interface RecessionDto {
+  probability_pct: number;
+  label: "Low" | "Elevated" | "High";
+  nber_in_recession: boolean;
+  drivers: string[];
+}
+
+export interface LeadingIndicatorsDto {
+  nonfarm_payrolls_latest: number | null;
+  nonfarm_payrolls_mom: number | null;
+  industrial_production_latest: number | null;
+  industrial_production_yoy: number | null;
+}
+
+export interface MacroAdvancedDto {
+  core: MacroLatestDto;
+  yield_curve: YieldCurveDto;
+  recession: RecessionDto;
+  stress_index: MacroStressIndexDto;
+  leading_indicators: LeadingIndicatorsDto;
+}
+
+export interface IndicatorHistoryDto {
+  indicator_name: string;
+  series: { date: string; value: number }[];
+  count: number;
+}
+
 export interface MacroLatestDto {
   data: {
     fed_funds_rate: MacroIndicatorDto;
@@ -113,6 +170,31 @@ export async function fetchSentimentSources(
   }
 
   return (await res.json()) as SentimentSourceBreakdownDto;
+}
+
+export async function fetchMacroAdvanced(
+  init?: RequestInit,
+): Promise<MacroAdvancedDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/macro/advanced`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Failed to load advanced macro data: ${res.status}`);
+  return res.json() as Promise<MacroAdvancedDto>;
+}
+
+export async function fetchMacroHistory(
+  indicatorName: string,
+  limit = 60,
+  init?: RequestInit,
+): Promise<IndicatorHistoryDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/macro/history/${encodeURIComponent(indicatorName)}?limit=${limit}`,
+    { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }, cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Failed to load history for ${indicatorName}: ${res.status}`);
+  return res.json() as Promise<IndicatorHistoryDto>;
 }
 
 export async function fetchMacroLatest(
