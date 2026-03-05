@@ -1289,6 +1289,168 @@ export async function fetchAnalyticsRawEvents(
   return res.json();
 }
 
+// ── A/B Experiments (CORE-EXPERIMENT-01) ─────────────────────────────────────────
+
+export interface VariantDefinition {
+  key: string;
+  name: string;
+  weight: number;
+}
+
+export interface ExperimentDto {
+  id: number;
+  key: string;
+  name: string;
+  hypothesis: string | null;
+  variants: VariantDefinition[];
+  traffic_pct: number;
+  status: "draft" | "running" | "paused" | "concluded";
+  starts_at: string | null;
+  ends_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface AssignmentDto {
+  experiment_key: string;
+  experiment_id: number;
+  variant_key: string;
+  variant_name: string;
+  in_traffic: boolean;
+  assigned_at: string;
+}
+
+export interface ExperimentVariantMetric {
+  variant_key: string;
+  variant_name: string;
+  unique_users: number;
+  total_events: number;
+  conversions: number;
+  conversion_rate_pct: number;
+}
+
+export interface ExperimentResultsDto {
+  experiment_id: number;
+  experiment_key: string;
+  experiment_name: string;
+  status: string;
+  goal_event: string;
+  period_days: number;
+  total_assigned_users: number;
+  variants: ExperimentVariantMetric[];
+  winner: string | null;
+  note: string;
+}
+
+export interface ExperimentCreatePayload {
+  key: string;
+  name: string;
+  hypothesis?: string;
+  variants: VariantDefinition[];
+  traffic_pct?: number;
+  starts_at?: string;
+  ends_at?: string;
+  notes?: string;
+}
+
+/** Get (or create) variant assignment — call once per running experiment on app boot */
+export async function assignVariant(
+  experimentKey: string,
+  anonId?: string,
+): Promise<AssignmentDto> {
+  const qs = anonId ? `?anon_id=${encodeURIComponent(anonId)}` : "";
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/experiments/${experimentKey}/assign${qs}`,
+    { headers: authHeaders(), cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Failed to assign variant for ${experimentKey}`);
+  return res.json();
+}
+
+/** Admin: list all experiments */
+export async function fetchExperiments(
+  status?: string,
+): Promise<ExperimentDto[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  const res = await fetch(`${API_BASE_URL}/api/v1/experiments${qs}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load experiments");
+  return res.json();
+}
+
+/** Admin: create experiment */
+export async function createExperiment(
+  payload: ExperimentCreatePayload,
+): Promise<ExperimentDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/experiments`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to create experiment");
+  }
+  return res.json();
+}
+
+/** Admin: update experiment */
+export async function updateExperiment(
+  key: string,
+  payload: Partial<ExperimentCreatePayload> & { status?: string },
+): Promise<ExperimentDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/experiments/${key}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to update experiment");
+  return res.json();
+}
+
+/** Admin: delete experiment */
+export async function deleteExperiment(key: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/experiments/${key}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok && res.status !== 404) throw new Error("Failed to delete experiment");
+}
+
+/** Admin: launch / pause / conclude */
+export async function transitionExperiment(
+  key: string,
+  action: "launch" | "pause" | "conclude",
+): Promise<ExperimentDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/experiments/${key}/${action}`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Failed to ${action} experiment`);
+  return res.json();
+}
+
+/** Admin: get results for an experiment */
+export async function fetchExperimentResults(
+  key: string,
+  goalEvent: string,
+  periodDays = 30,
+): Promise<ExperimentResultsDto> {
+  const qs = new URLSearchParams({
+    goal_event: goalEvent,
+    period_days: String(periodDays),
+  });
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/experiments/${key}/results?${qs}`,
+    { headers: authHeaders(), cache: "no-store" },
+  );
+  if (!res.ok) throw new Error("Failed to load experiment results");
+  return res.json();
+}
+
 export async function deleteAccount(): Promise<{ message: string; anonymised_at: string }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/gdpr/delete`, {
     method: "POST",

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Settings, CreditCard, LogOut, ChevronDown, User, Activity, BarChart2 } from "lucide-react";
+import { Settings, CreditCard, LogOut, ChevronDown, User, Activity, BarChart2, FlaskConical } from "lucide-react";
 
 const NAV_ITEMS = [
     { href: "/", label: "Dashboard" },
@@ -94,7 +94,15 @@ function UserMenu() {
                             >
                                 <BarChart2 className="h-4 w-4 text-indigo-400" />
                                 Analytics
-                                <span className="ml-auto rounded-full bg-indigo-600/20 border border-indigo-500/30 px-1.5 py-0.5 text-[9px] font-bold text-indigo-400">
+                            </Link>
+                            <Link
+                                href="/admin/experiments"
+                                onClick={() => setOpen(false)}
+                                className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
+                            >
+                                <FlaskConical className="h-4 w-4 text-emerald-400" />
+                                Experiments
+                                <span className="ml-auto rounded-full bg-emerald-600/20 border border-emerald-500/30 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400">
                                     NEW
                                 </span>
                             </Link>

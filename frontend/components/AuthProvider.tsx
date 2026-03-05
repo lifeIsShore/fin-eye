@@ -4,9 +4,10 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 interface User {
-    id: number;
+    id: string;
     email: string;
     is_pro: boolean;
+    is_admin: boolean;
     name?: string | null;
 }
 
@@ -38,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         // 1. If bypass is enabled, instantly set a mock user and stop loading.
         if (!REQUIRE_AUTH) {
-            setUser({ id: 9999, email: "dev@mock.local", is_pro: true });
+            setUser({ id: "00000000-0000-0000-0000-000000000001", email: "dev@mock.local", is_pro: true, is_admin: true });
             setLoading(false);
             return;
         }

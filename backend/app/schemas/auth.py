@@ -75,6 +75,7 @@ class UserResponse(BaseModel):
     name: Optional[str]
     is_verified: bool
     is_active: bool
+    is_admin: bool
     subscription_tier: str
     created_at: datetime
 

@@ -68,7 +68,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-SEC-01         | Core – Security       | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SEC-02         | Core – Security       | DONE         | 2026-03-06   | pg_dump backup script, restore script, APScheduler job (02:00 UTC), admin UI panel, DR runbook |
 | CORE-ANALYTICS-01   | Core – Analytics      | DONE         | 2026-03-06   | Self-hosted Postgres analytics, beacon endpoint, admin dashboard |
-| CORE-EXPERIMENT-01  | Core – Experiments    | NOT_STARTED  | -            | Depends on ANALYTICS-01 |
+| CORE-EXPERIMENT-01  | Core – Experiments    | DONE         | 2026-03-06   | Deterministic SHA-256 assignment, Postgres-backed, results from analytics_events |
 | CORE-EMAIL-01       | Core – Email          | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-EMAIL-02       | Core – Email          | NOT_STARTED  | -            | Depends on EMAIL-01 |
 
@@ -1916,3 +1916,55 @@ This log tracks implementation progress for each user story in `user-stories.md`
     - Wire `track()` calls into key frontend pages (dashboard, macro, backtesting, etc.) as part of normal feature work.
     - `CORE-EXPERIMENT-01` is now unblocked (depends on ANALYTICS-01).
     - Remaining unblocked stories: `CORE-SEC-01` (2FA), `CORE-EMAIL-01/02`, `CORE-EXPERIMENT-01`.
+
+---
+
+### 2026-03-06 (continued)
+
+**Session — CORE-EXPERIMENT-01: A/B Experimentation Framework (complete)**
+
+- **Context & Design decisions**
+    - Built entirely on top of the CORE-ANALYTICS-01 infrastructure — results are read from `analytics_events`, no separate results table.
+    - **Deterministic assignment**: `SHA-256(experiment_key + ":" + identity) % 100` maps every user to a bucket permanently — stable, reproducible, no randomness after first call.
+    - Two-tier bucketing: first check if user is inside `traffic_pct` slice, then pick variant proportionally within the slice. Users outside the slice always get `control` with `in_traffic=False` and are excluded from result counts.
+    - Idempotency enforced at both the DB layer (unique constraints) and the service layer (select-before-insert).
+    - GDPR parity: `user_id` FK uses `ON DELETE SET NULL` — experiment assignments survive account anonymisation.
+
+- **Stories completed**
+    - `CORE-EXPERIMENT-01` (A/B Experimentation) — **DONE**
+
+- **Backend (all files were pre-written and wired in `main.py` — verified complete)**
+    - ✅ `app/models/experiment.py` — `Experiment` (key, name, hypothesis, variants JSON, traffic_pct, status, date window) + `ExperimentAssignment` (experiment_id FK CASCADE, user_id FK SET NULL, anon_id, variant_key, in_traffic). Two unique constraints enforce idempotency at DB level.
+    - ✅ `alembic/versions/e5f6a7b8c9d0` — Migration with unique indexes on `experiments.key`, `(experiment_id, user_id)`, `(experiment_id, anon_id)`.
+    - ✅ `app/schemas/experiment_models.py` — `VariantDefinition` (key pattern validation), `ExperimentCreate` (weights-sum-to-100 + control-required validators), `ExperimentUpdate`, `ExperimentResponse`, `AssignmentResponse`, `ExperimentResults`, `VariantMetric`.
+    - ✅ `app/services/experiment_service.py` — `_compute_bucket` (deterministic SHA-256), `_pick_variant` (cumulative weight walk), `get_or_create_assignment` (idempotent), CRUD (`create_experiment`, `list_experiments`, `update_experiment`, `delete_experiment`), `compute_results` (reads from `analytics_events` JSON properties).
+    - ✅ `app/api/v1/endpoints/experiments.py` — 10 endpoints: `GET /{key}/assign` (optional-auth), `GET/POST /` (list/create, admin), `GET/PATCH/DELETE /{key}` (admin), `POST /{key}/launch|pause|conclude` (lifecycle, admin), `GET /{key}/results?goal_event=...` (admin).
+    - ✅ `app/services/auth.py` — `optional_current_user` dependency already implemented and used by assignment endpoint.
+    - ✅ `app/models/__init__.py` — `Experiment`, `ExperimentAssignment` registered.
+    - ✅ `app/main.py` — `experiments` router registered at `/api/v1/experiments`.
+
+- **Tests**
+    - ✅ `tests/api/test_experiments_api.py` — 22 tests: auth guards, create success, duplicate key 409, weights-not-100 422, missing-control 422, list/get/update, all lifecycle transitions, invalid transitions 400, anonymous assignment, idempotency, authenticated assignment, no-identity 400, results access guard, results structure, delete+confirm-gone.
+
+- **Frontend (all files verified complete)**
+    - ✅ `frontend/lib/api.ts` — Types (`VariantDefinition`, `ExperimentDto`, `AssignmentDto`, `ExperimentVariantMetric`, `ExperimentResultsDto`, `ExperimentCreatePayload`) + all 7 API functions (`assignVariant`, `fetchExperiments`, `createExperiment`, `updateExperiment`, `deleteExperiment`, `transitionExperiment`, `fetchExperimentResults`).
+    - ✅ `frontend/hooks/useExperiment.ts` — `useExperiment(key)` hook: module-level assignment cache, stable `anon_id` via sessionStorage, SSR guard, silent error fallback to control, `withExperiment()` helper to attach `{experiment_key, experiment_variant}` to analytics event properties. Also exports `useVariant(key, variantKey)` convenience boolean.
+    - ✅ `frontend/app/admin/experiments/page.tsx` — Full admin dashboard: experiment list with status badges, status filter tabs, create-experiment slide-in panel (variant weight validation, traffic slider, real-time weight-total feedback), lifecycle action buttons (launch/pause/conclude/delete), results panel (goal event picker, period picker, per-variant conversion bars with leading indicator, observational caveat footer), "how it works" guide.
+    - ✅ `frontend/components/Nav.tsx` — Experiments link added to admin dropdown with NEW badge (FlaskConical icon).
+
+- **Architecture notes**
+    - Results are zero-infrastructure: no separate results table. The frontend attaches `{experiment_key, experiment_variant}` to every analytics event via `useExperiment().withExperiment()`. `compute_results` just queries `analytics_events` filtered on those JSON properties.
+    - The `useExperiment` hook is fire-and-forget safe: returns `"control"` immediately while loading, and on any network error — experiments can never break the UI.
+    - Traffic slice works as a ring modulo: if `traffic_pct=50`, only users whose bucket is 0–49 are in-traffic. Users at 50–99 always get control and are excluded from result aggregations.
+    - `withExperiment()` is the integration contract: every page that is under an experiment must call `track(event, { properties: { ...exp.withExperiment() } })` for results to populate.
+
+- **How to run first experiment**
+    1. Go to `/admin/experiments` and create an experiment (e.g. `onboarding_flow_v2`).
+    2. In the relevant page component: `const exp = useExperiment("onboarding_flow_v2")`.
+    3. Conditionally render based on `exp.variant`.
+    4. Tag every `track()` call with `properties: { ...exp.withExperiment() }`.
+    5. Launch the experiment from the admin dashboard.
+    6. Read results in the Results panel — select goal event + period.
+
+- **Next steps**
+    - Remaining unblocked stories: `CORE-SEC-01` (2FA / TOTP), `CORE-EMAIL-01` (onboarding emails, needs provider), `CORE-EMAIL-02` (newsletter digest).
