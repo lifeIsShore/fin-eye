@@ -477,3 +477,167 @@ export async function recordConsent(): Promise<void> {
   });
   if (!res.ok) throw new Error("Failed to record consent");
 }
+
+// ─── GDPR ────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch the user's personal data export package and trigger a browser download.
+ * Returns true on success, throws on error.
+ */
+export async function downloadDataExport(): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/gdpr/export`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to generate data export.");
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "fin-eye-data-export.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ─── CMS / Blog ─────────────────────────────────────────────────────────────
+
+export interface BlogPostSummary {
+  id: number;
+  title: string;
+  slug: string;
+  summary: string;
+  category: string;
+  read_time: string;
+  author: string;
+  status: string;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BlogPostFull extends BlogPostSummary {
+  content_md: string;
+}
+
+export interface BlogPostCreatePayload {
+  title: string;
+  summary: string;
+  category?: string;
+  read_time?: string;
+  author?: string;
+  content_md?: string;
+  slug?: string;
+}
+
+export interface BlogPostUpdatePayload {
+  title?: string;
+  summary?: string;
+  category?: string;
+  read_time?: string;
+  author?: string;
+  content_md?: string;
+  slug?: string;
+}
+
+export async function fetchPublishedPosts(): Promise<BlogPostSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/published`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load blog posts");
+  return res.json();
+}
+
+export async function fetchPostBySlug(slug: string): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/by-slug/${encodeURIComponent(slug)}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Post '${slug}' not found`);
+  return res.json();
+}
+
+// ─── CMS Admin ────────────────────────────────────────────────────────────
+
+export async function adminFetchAllPosts(): Promise<BlogPostSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load posts");
+  return res.json();
+}
+
+export async function adminFetchPost(id: number): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Post not found");
+  return res.json();
+}
+
+export async function adminCreatePost(payload: BlogPostCreatePayload): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to create post");
+  }
+  return res.json();
+}
+
+export async function adminUpdatePost(id: number, payload: BlogPostUpdatePayload): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to update post");
+  }
+  return res.json();
+}
+
+export async function adminPublishPost(id: number): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}/publish`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to publish post");
+  return res.json();
+}
+
+export async function adminUnpublishPost(id: number): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}/unpublish`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to unpublish post");
+  return res.json();
+}
+
+export async function adminDeletePost(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok && res.status !== 404) throw new Error("Failed to delete post");
+}
+
+export async function deleteAccount(): Promise<{ message: string; anonymised_at: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/gdpr/delete`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ confirmation: "DELETE MY ACCOUNT" }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to delete account.");
+  }
+  return res.json();
+}

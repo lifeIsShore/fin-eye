@@ -6,7 +6,7 @@ import logging
 from app.config import settings
 from app.db.database import init_db, test_db_connection
 from app.db.redis_client import init_redis, close_redis, redis_client
-from app.api.v1.endpoints import macro, sentiment, technical, explanation, hedging, auth, portfolios, backtesting, events, watchlist, legal
+from app.api.v1.endpoints import macro, sentiment, technical, explanation, hedging, auth, portfolios, backtesting, events, watchlist, legal, gdpr, cms
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -97,4 +97,14 @@ app.include_router(
     legal.router,
     prefix="/api/v1/legal",
     tags=["legal"],
+)
+app.include_router(
+    gdpr.router,
+    prefix="/api/v1/gdpr",
+    tags=["gdpr"],
+)
+app.include_router(
+    cms.router,
+    prefix="/api/v1/cms",
+    tags=["cms"],
 )

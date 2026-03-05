@@ -23,6 +23,7 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     is_pro: bool
+    is_admin: bool = False
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def signup(user_in: UserCreate, db: Session = Depends(get_db)):

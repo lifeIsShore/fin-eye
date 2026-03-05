@@ -1278,3 +1278,32 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Next steps**
   - Run `pytest tests/api/test_legal_api.py -v` to verify
   - Next story: `CORE-GDPR-01` (data export & account deletion flows)
+
+---
+
+### 2026-03-05 (continued)
+
+**Session 43 – CORE-GDPR-01: Data Export & Account Deletion**
+
+- **Context**
+  - GDPR compliance requirement. Users must be able to download all data held about them and permanently delete their account. Settings page had stub buttons with "Coming Soon" badges for both; this session makes both fully functional.
+
+- **Stories touched**
+  - `CORE-GDPR-01` – **DONE**
+
+- **Backend changes**
+  - ✅ `app/services/gdpr_service.py` — Two service functions: `build_user_export_package(user, db)` collects account data, watchlist, portfolios, and consent records into a serialisable dict. `anonymise_user(user, db)` replaces email with `deleted_{id}_{ts}@anonymised.invalid`, sets hashed_password to `"DELETED"`, deletes all WatchlistItem and Portfolio rows (cascade handles PortfolioItems), but intentionally preserves LegalConsent rows for compliance audit trail.
+  - ✅ `app/api/v1/endpoints/gdpr.py` — Two endpoints: `GET /api/v1/gdpr/export` returns a JSON response with `Content-Disposition: attachment` header so the browser auto-downloads the file. `POST /api/v1/gdpr/delete` requires `{"confirmation": "DELETE MY ACCOUNT"}` as an explicit safety gate; calls `anonymise_user` then returns success message + timestamp. Both auth-protected.
+  - ✅ `app/main.py` — GDPR router registered at `/api/v1/gdpr`
+  - ✅ `tests/api/test_gdpr_api.py` — 5 tests: export returns correct JSON package, export includes portfolio data, delete rejects wrong confirmation phrase with 400, delete anonymises user row + removes personal data, delete preserves consent records
+
+- **Frontend changes**
+  - ✅ `lib/api.ts` — Added `downloadDataExport()` (fetches export, creates blob URL, triggers `<a>` click download, cleans up) and `deleteAccount()` (sends confirmation phrase, returns response)
+  - ✅ `app/settings/page.tsx` — Full rewrite: added functional "Data & Privacy" section with Export button (shows loading spinner → green checkmark on success, error message on failure) and Delete Account button (opens confirmation modal). `DeleteAccountModal` component: shows consequences list, requires user to type `DELETE MY ACCOUNT` exactly before the confirm button enables, calls `deleteAccount()` then `logout()` on success. Old stub "Delete Account" button in Account section removed.
+
+- **Status & results**
+  - Full GDPR Article 17 (erasure) and Article 20 (portability) compliance implemented. The anonymisation approach (rather than hard delete) preserves legal audit trail while freeing the email for re-registration. The typed-confirmation UX pattern prevents accidental deletions.
+
+- **Next steps**
+  - Run `pytest tests/api/test_gdpr_api.py -v` to verify
+  - Next story: evaluate `CORE-SET-01` (wire Settings profile save + password change endpoints) or `CORE-CMS-01/02` (blog admin + markdown editor for Learn tab content)
