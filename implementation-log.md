@@ -58,7 +58,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-WATCH-01       | Core – Watchlist      | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-NOTIF-01       | Core – Notifications  | NOT_STARTED  | -            | Depends on AUTH-01, DASH-01 |
 | CORE-CMS-01         | Core – Content/CMS    | NOT_STARTED  | -            | Independent |
-| CORE-CMS-02         | Core – Content/CMS    | NOT_STARTED  | -            | Depends on AUTH-01 |
+| CORE-CMS-02         | Core – Content/CMS    | DONE         | 2026-03-05   | Admin panel, Markdown Editor, Blog state management, DB migration |
 | CORE-COMM-01        | Core – Community      | NOT_STARTED  | -            | Independent |
 | CORE-LEGAL-01       | Core – Legal/ToS      | NOT_STARTED  | -            | Independent |
 | CORE-GDPR-01        | Core – GDPR           | NOT_STARTED  | -            | Depends on AUTH-01 |
@@ -1149,7 +1149,29 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 ### 2026-03-05
 
-**Session 39 – Bug Audit & Fix Pass**
+**Session 39 – CORE-CMS-02: Admin Blog Management Implementation**
+
+- **Context**
+  - Building out the admin panel to allow creating, editing, and publishing educational blog posts.
+  
+- **Stories touched**
+  - `CORE-CMS-02` (Admin Blog Entry Management) – **DONE**
+
+- **Work done**
+  - ✅ **Backend API**: Created `/api/v1/cms/posts` endpoints for CRUD operations on `BlogPost` models, including slug generation and status filtering.
+  - ✅ **Database**: Added `blog_posts` table via Alembic migration and migrated 6 existing local markdown files to the database.
+  - ✅ **Frontend Admin**: Built `app/admin/blog/page.tsx` and `app/admin/blog/[id]/page.tsx` for managing posts with a Markdown editor and preview mode.
+  - ✅ **Public Learn Tab**: Rewired `app/learn/page.tsx` and `app/learn/[slug]/page.tsx` to read the published posts directly from the backend API instead of static files.
+  - ✅ **Testing**: Added backend API tests for the CMS functionality.
+
+- **Status & results**
+  - Fin-Eye now has a fully functional headless CMS for blog posts. Marketers/admins can draft and publish content without requiring code deployments.
+
+---
+
+### 2026-03-05
+
+**Session 40 – Bug Audit & Fix Pass**
 
 - **Context**
   - Full QA audit before starting next sprint. No new features — fixing all known bugs and warnings.

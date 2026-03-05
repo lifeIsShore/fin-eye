@@ -1,6 +1,3 @@
-import fs from "fs";
-import path from "path";
-import matter from "gray-matter";
 import { BlogCard } from "@/components/learn/BlogCard";
 
 export const metadata = {
@@ -9,11 +6,6 @@ export const metadata = {
         "Educational resources and guides for using Fin-Eye and understanding the market.",
 };
 
-/**
- * Load posts from the DB API (CMS).
- * Falls back to filesystem markdown files if the API is unavailable so that
- * the Learn tab always works even when the backend is down or in dev mode.
- */
 async function loadPosts(): Promise<
     {
         slug: string;
@@ -22,60 +14,39 @@ async function loadPosts(): Promise<
         readTime: string;
         date: string;
         category: string;
-        source: "db" | "file";
     }[]
 > {
     const API_BASE_URL =
         process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-    // --- Try DB first ---
     try {
         const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/published`, {
             cache: "no-store",
-            signal: AbortSignal.timeout(3000),
+            signal: AbortSignal.timeout(5000),
         });
         if (res.ok) {
             const data = await res.json();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return data.map((p: any) => ({
-                slug: `db-${p.slug}`,          // prefix prevents collision with file slugs
+                slug: p.slug,
                 title: p.title,
                 summary: p.summary,
                 readTime: p.read_time,
                 date: p.published_at
                     ? new Date(p.published_at).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                      })
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                    })
                     : "—",
                 category: p.category,
-                source: "db" as const,
             }));
         }
     } catch {
-        // API unreachable — fall through to filesystem
+        // API unreachable or error
     }
 
-    // --- Filesystem fallback ---
-    const contentDir = path.join(process.cwd(), "content", "blog");
-    if (!fs.existsSync(contentDir)) return [];
-
-    const files = fs.readdirSync(contentDir).filter((f) => f.endsWith(".md"));
-    return files.map((filename) => {
-        const slug = filename.replace(".md", "");
-        const raw = fs.readFileSync(path.join(contentDir, filename), "utf-8");
-        const { data: fm } = matter(raw);
-        return {
-            slug,
-            title: fm.title as string,
-            summary: fm.summary as string,
-            readTime: fm.readTime as string,
-            date: fm.date as string,
-            category: fm.category as string,
-            source: "file" as const,
-        };
-    });
+    return [];
 }
 
 export default async function LearnPage() {
