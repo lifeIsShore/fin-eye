@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
+    echo=True
 )
 
 # Sync session factory
