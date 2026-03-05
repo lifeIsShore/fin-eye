@@ -5,3 +5,4 @@ from app.models.macro import MacroIndicator
 from app.models.sentiment import NewsArticle, SentimentAggregate
 from app.models.portfolio import Portfolio, PortfolioItem
 from app.models.watchlist import WatchlistItem
+from app.models.legal import LegalConsent

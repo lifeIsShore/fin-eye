@@ -451,3 +451,29 @@ export async function removeFromWatchlist(symbol: string): Promise<void> {
     throw new Error("Failed to remove from watchlist");
   }
 }
+
+// ─── Legal Consent ─────────────────────────────────────────────────────────
+
+export interface ConsentStatus {
+  has_accepted: boolean;
+  current_version: string;
+  accepted_version: string | null;
+  accepted_at: string | null;
+}
+
+export async function fetchConsentStatus(): Promise<ConsentStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/legal/consent/status`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch consent status");
+  return (await res.json()) as ConsentStatus;
+}
+
+export async function recordConsent(): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/legal/consent`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to record consent");
+}

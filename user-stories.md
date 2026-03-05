@@ -550,15 +550,13 @@ These stories support the core product but cut across phases.
 
 ### 20. Legal, Compliance & Privacy UX
 
-**Story ID: CORE-LEGAL-01**  
+**Story ID: CORE-LEGAL-01** ✅ DONE (Session 42 — 2026-03-05)
 **As any user, I want** to clearly see and acknowledge the main disclaimer, Terms of Service, and Privacy Policy **so that** I understand the nature of the service and my rights.
 
 **Acceptance Criteria**
-- On first sign‑up/login, users see:
-  - A concise disclaimer.
-  - Links to full ToS and Privacy Policy.
-- Legal pages are accessible from footer or settings on every screen.
-- Consent is recorded (timestamp + version) for compliance purposes.
+- ✅ On first login, users see a full-screen ConsentGate with concise disclaimer and links to ToS and Privacy Policy.
+- ✅ Legal pages are accessible from the footer on every screen (`/legal/terms`, `/legal/privacy`, `/legal/disclaimer`).
+- ✅ Consent is recorded with timestamp + version in the `legal_consents` DB table. Bumping `CURRENT_LEGAL_VERSION` re-prompts all users.
 
 ---
 

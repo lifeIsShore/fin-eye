@@ -16,3 +16,4 @@ class User(Base):
     # Relationships
     portfolios = relationship("Portfolio", back_populates="owner", cascade="all, delete-orphan")
     watchlist_items = relationship("WatchlistItem", back_populates="owner", cascade="all, delete-orphan")
+    legal_consents = relationship("LegalConsent", back_populates="owner", cascade="all, delete-orphan")

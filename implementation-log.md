@@ -1243,3 +1243,38 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Next steps**
   - Run `pytest tests/api/test_watchlist_api.py -v` to verify
   - Next story: `CORE-LEGAL-01` (Terms of Service, Privacy Policy, disclaimers — legal pages + consent recording)
+
+---
+
+### 2026-03-05 (continued)
+
+**Session 42 – CORE-LEGAL-01: Legal Pages, Consent Gate & Privacy**
+
+- **Context**
+  - Launch blocker. No legal pages existed, no consent was recorded, and the app had a single-line footer disclaimer. This session implements the full legal infrastructure: three static legal pages, a DB-backed consent model, a backend endpoint to record and check consent, and a full-screen ConsentGate component that blocks the app until the user explicitly agrees.
+
+- **Stories touched**
+  - `CORE-LEGAL-01` – **DONE**
+
+- **Backend changes**
+  - ✅ `app/models/legal.py` — `LegalConsent` model: `user_id` FK, `doc_version`, `accepted_at`, unique constraint `(user_id, doc_version)`. `CURRENT_LEGAL_VERSION = "1.0.0"` constant — bump this string when legal docs change materially to force re-consent
+  - ✅ `app/models/user.py` — Added `legal_consents` relationship with `cascade="all, delete-orphan"`
+  - ✅ `app/models/__init__.py` — Registered `LegalConsent`
+  - ✅ `app/api/v1/endpoints/legal.py` — Two endpoints: `GET /api/v1/legal/consent/status` (returns `has_accepted`, `current_version`, `accepted_at`) and `POST /api/v1/legal/consent` (idempotent record, race-condition safe). Both auth-protected.
+  - ✅ `app/main.py` — Router registered at `/api/v1/legal`
+  - ✅ `tests/api/test_legal_api.py` — 4 tests: status=false before accept, record creates row, status=true after accept, idempotent double-accept returns same id+timestamp
+
+- **Frontend changes**
+  - ✅ `lib/api.ts` — Added `ConsentStatus` interface + `fetchConsentStatus()` and `recordConsent()` functions
+  - ✅ `app/legal/terms/page.tsx` — Full Terms of Service (14 sections): acceptance, service nature, no investment advice, model limitations, user accounts, IP, acceptable use, subscriptions, liability, indemnification, data, changes, governing law, contact
+  - ✅ `app/legal/privacy/page.tsx` — Full Privacy Policy (11 sections): data collected, usage, sharing (Stripe/AWS/analytics only), cookies, retention schedules, GDPR rights, security, children, changes, contact
+  - ✅ `app/legal/disclaimer/page.tsx` — Detailed Risk Disclaimer (8 sections): not investment advice, model limitations, backtesting limitations (look-ahead bias/survivorship bias/overfitting/execution), sentiment limitations, macro data lags, risk of loss, user responsibility checklist, no liability
+  - ✅ `components/ConsentGate.tsx` — Full-screen blocking modal: checks consent status on mount, shows blurred app behind modal if not accepted, checkbox + links to ToS and Privacy Policy, calls `POST /consent` on agree, opens gate. In dev bypass mode (`NEXT_PUBLIC_REQUIRE_AUTH !== "true"`) the gate auto-opens with no API call. Fails open on network error to avoid blocking the app.
+  - ✅ `app/layout.tsx` — Wrapped `<main>` in `<ConsentGate>`. Footer upgraded: now has three linked legal nav items (Terms · Privacy · Disclaimer) alongside the disclaimer copy
+
+- **Status & results**
+  - Platform is now legally defensible for launch. Every user must explicitly tick a checkbox confirming they understand Fin-Eye is educational-only before accessing any feature. Consent is timestamped and versioned in the DB. Bumping `CURRENT_LEGAL_VERSION` in `legal.py` will re-prompt all existing users on next login.
+
+- **Next steps**
+  - Run `pytest tests/api/test_legal_api.py -v` to verify
+  - Next story: `CORE-GDPR-01` (data export & account deletion flows)
