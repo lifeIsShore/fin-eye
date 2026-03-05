@@ -174,3 +174,19 @@ By end of Week 2:
 **Status:** 🟢 Ready to start Sprint 1 Week 1  
 **Start:** Task 1.1 (Project Structure & Config)  
 **Next Steps:** See TASK-1-1-QUICK-START.md for code templates
+
+
+last next:
+validate the product works end-to-end for yourself first, then bolt on billing and 2FA when you're ready to open it up.
+With CORE-SUB-01/02 and CORE-SEC-01 parked, the remaining unblocked stories in priority order are:
+1. CORE-ANALYTICS-01 — Product analytics. Even for personal use this is valuable — you want to know which pages load, which API calls fail, what's slow. Plausible or a simple self-hosted event logger costs nothing and tells you a lot. This also unblocks CORE-EXPERIMENT-01.
+2. CORE-OPS-01 — Monitoring & observability. API latency tracking, error rates, data pipeline health, model inference times. Essential before you rely on the app daily — you need to know when something silently breaks overnight.
+3. CORE-SEC-02 — Automated backups & disaster recovery. Personal use makes this more important, not less. If your Postgres goes down you lose everything. One session to wire up pg_dump on a schedule + offsite copy.
+4. CORE-EMAIL-01 / CORE-EMAIL-02 — Onboarding sequence + newsletter digest. Lower priority for personal use, but if you plan to invite even a handful of beta users before going public, these matter. Can park until then.
+5. CORE-COMM-01 — Community link. Trivially small (a nav link to Discord/Reddit). Can do it in 10 minutes whenever.
+The remaining P3 stories (public API, white-label, bulk analysis, mobile, reports, advanced sentiment, courses) are all correctly deferred — they're enterprise/public-launch concerns.
+
+My recommendation for next session
+CORE-OPS-01 + CORE-SEC-02 together — they're both infra, both short, and they directly serve the "make sure the app works" goal you described. You want observability and backups in place before you start using it daily, not after something breaks.
+Then CORE-ANALYTICS-01 the session after — so you have a dashboard showing real usage signals as you validate the product.
+Ready to start on CORE-OPS-01 + CORE-SEC-02 whenever you say go.
