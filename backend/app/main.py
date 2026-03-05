@@ -17,7 +17,7 @@ from app.api.v1.auth import router as auth_router
 # Import existing endpoint routers
 from app.api.v1.endpoints import (
     macro, sentiment, technical, explanation, hedging,
-    portfolios, backtesting, events, watchlist, legal, gdpr, cms
+    portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts
 )
 
 # Configuration
@@ -98,3 +98,4 @@ app.include_router(watchlist.router, prefix="/api/v1/watchlist", tags=["Watchlis
 app.include_router(legal.router, prefix="/api/v1/legal", tags=["Legal & Privacy"])
 app.include_router(gdpr.router, prefix="/api/v1/gdpr", tags=["GDPR Data Rights"])
 app.include_router(cms.router, prefix="/api/v1/cms", tags=["Content Management"])
+app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts & Notifications"])

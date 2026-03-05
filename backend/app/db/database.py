@@ -1,3 +1,5 @@
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 import logging
 
@@ -61,7 +63,7 @@ async def test_db_connection() -> bool:
     """Test database connection (asynchronous)"""
     try:
         async with async_engine.connect() as conn:
-            await conn.execute("SELECT 1")
+            await conn.execute(text("SELECT 1"))
         logger.info("✅ Database connected (async)")
         return True
     except Exception as e:

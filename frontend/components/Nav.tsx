@@ -14,6 +14,7 @@ const NAV_ITEMS = [
     { href: "/hedge", label: "Hedge" },
     { href: "/backtesting", label: "Backtest" },
     { href: "/portfolios", label: "Portfolio" },
+    { href: "/alerts", label: "Alerts" },
     { href: "/learn", label: "Learn" },
 ];
 

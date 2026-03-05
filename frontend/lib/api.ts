@@ -629,6 +629,86 @@ export async function adminDeletePost(id: number): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error("Failed to delete post");
 }
 
+// ── Alerts ────────────────────────────────────────────────────────────────────
+
+export interface AlertDto {
+  id: number;
+  symbol: string;
+  alert_type: "price_above" | "price_below" | "gas_above" | "gas_below";
+  threshold: number;
+  delivery_channel: string;
+  is_active: boolean;
+  triggered_at: string | null;
+  triggered_value: number | null;
+  created_at: string;
+}
+
+export interface AlertListDto {
+  alerts: AlertDto[];
+  total: number;
+}
+
+export interface TriggeredAlertDto {
+  id: number;
+  symbol: string;
+  alert_type: string;
+  threshold: number;
+  triggered_value: number;
+  triggered_at: string;
+  message: string;
+}
+
+export interface AlertCreatePayload {
+  symbol: string;
+  alert_type: string;
+  threshold: number;
+  delivery_channel?: string;
+}
+
+export async function fetchAlerts(activeOnly = false): Promise<AlertListDto> {
+  const qs = activeOnly ? "?active_only=true" : "";
+  const res = await fetch(`${API_BASE_URL}/api/v1/alerts${qs}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch alerts");
+  return res.json();
+}
+
+export async function createAlert(payload: AlertCreatePayload): Promise<AlertDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/alerts`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to create alert");
+  return res.json();
+}
+
+export async function deleteAlert(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/alerts/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok && res.status !== 404) throw new Error("Failed to delete alert");
+}
+
+export async function fetchTriggeredAlerts(): Promise<TriggeredAlertDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/alerts/triggered`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch triggered alerts");
+  return res.json();
+}
+
+export async function acknowledgeAlert(id: number): Promise<AlertDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/alerts/${id}/ack`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to acknowledge alert");
+  return res.json();
+}
+
 export async function deleteAccount(): Promise<{ message: string; anonymised_at: string }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/gdpr/delete`, {
     method: "POST",

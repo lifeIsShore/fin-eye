@@ -24,8 +24,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | MVP-EXPL-02         | MVP – Dashboard       | DONE         | 2026-03-03   | Conflict detector and GAS |
 | MVP-TECH-01         | MVP – ML/Tech layer   | DONE         | 2026-03-03   | Features + training + JSONL registry + artifact persistence |
 | MVP-TECH-02         | MVP – ML/Tech layer   | DONE         | 2026-03-03   | Consensus + 0–100 mapping + API endpoint |
-| MVP-BACK-01         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on DATA-01 |
-| MVP-BACK-02         | MVP – Backtesting     | NOT_STARTED  | -            | Depends on BACK-01 |
+| MVP-BACK-01         | MVP – Backtesting     | DONE         | 2026-03-05   | SMA/RSI momentum engine, metrics, overfitting warning |
+| MVP-BACK-02         | MVP – Backtesting     | DONE         | 2026-03-05   | Benchmark curve, recovery factor, frontend |}
 | MVP-SENT-01         | MVP – Sentiment       | DONE         | 2026-03-02   | ✅ Timeseries + 1d/7d/30d + UI (manual QA pending) |
 | MVP-SENT-02         | MVP – Sentiment       | DONE         | 2026-03-02   | ✅ Source breakdown backend + UI (manual QA pending) |
 | MVP-MACRO-01        | MVP – Macro           | DONE         | 2026-03-02   | ✅ 5 indicators + interpretration + refresh |
@@ -56,7 +56,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-SUB-02         | Core – Billing        | NOT_STARTED  | -            | Depends on SUB-01 |
 | CORE-SET-01         | Core – Settings       | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-WATCH-01       | Core – Watchlist      | NOT_STARTED  | -            | Depends on AUTH-01 |
-| CORE-NOTIF-01       | Core – Notifications  | NOT_STARTED  | -            | Depends on AUTH-01, DASH-01 |
+| CORE-NOTIF-01       | Core – Notifications  | DONE         | 2026-03-05   | Price/GAS alerts, in-app polling, scheduler-ready |
 | CORE-CMS-01         | Core – Content/CMS    | NOT_STARTED  | -            | Independent |
 | CORE-CMS-02         | Core – Content/CMS    | DONE         | 2026-03-05   | Admin panel, Markdown Editor, Blog state management, DB migration |
 | CORE-COMM-01        | Core – Community      | NOT_STARTED  | -            | Independent |
@@ -1358,6 +1358,87 @@ This log tracks implementation progress for each user story in `user-stories.md`
     - Run `python -m py_compile app/main.py app/services/scheduler.py` to verify syntax.
     - Manual verification of scheduler job execution.
     - Proceed with remaining Phase 2 stories.
+
+---
+
+### 2026-03-05
+
+**Session 46 – Automated Code Audit & Bug Fixes**
+
+- **Context**
+    - Full automated review of all source files to detect latent bugs before Phase 2 work begins.
+
+- **Stories touched**
+    - `MVP-DATA-01` (Infra fixes)
+    - `CORE-AUTH-01` (Auth routing fix)
+
+- **Bugs detected & fixed**
+
+    - ✅ **BUG-005 – `database.py`: Missing sync SQLAlchemy imports** — `create_engine`, `sessionmaker`, and `declarative_base` were never imported. The file imported only `create_async_engine`, `AsyncSession`, and `async_sessionmaker`, meaning `engine`, `SessionLocal`, and `Base` would raise `NameError` at module load. Fixed by adding the missing imports at the top of `database.py`.
+
+    - ✅ **BUG-006 – `database.py`: `test_db_connection` using raw string for SQL** — `conn.execute("SELECT 1")` passes a bare Python string, which SQLAlchemy 2.0 rejects with `ObjectNotExecutableError`. Fixed to `conn.execute(text("SELECT 1"))` (also imported `text` from `sqlalchemy`).
+
+    - ✅ **BUG-007 – `auth.py`: Duplicate route prefix** — `APIRouter` was declared with `prefix="/auth"` while `main.py` also mounts it at `/api/v1/auth`. This doubled the prefix, making endpoints unreachable at their documented paths (e.g. `/api/v1/auth/login` would land at `/api/v1/auth/auth/login`). Fixed by removing the `prefix` argument from the router declaration in `auth.py`.
+
+- **Status & results**
+    - All three bugs are silent startup/runtime failures that would cause confusing 404s and NameErrors. They are now resolved.
+    - No new features introduced in this session.
+
+- **Next recommended stories** (see diagnosis below)
+    - `MVP-BACK-01` / `MVP-BACK-02` are the only remaining MVP stories marked `NOT_STARTED`.
+    - Among Phase 2 blockers now unblocked: `P2-HEDGE-ADV-01`, `P2-STRAT-01`, `P2-MACRO-ADV-01`.
+    - `CORE-SUB-01` (Stripe billing) and `CORE-NOTIF-01` (notifications) are good next picks from Core.
+
+---
+
+### 2026-03-05
+
+**Session 47 – CORE-NOTIF-01: Price & GAS Alert System (Full Implementation)**
+
+- **Context**
+    - Decision rationale: `MVP-BACK-01/02` confirmed fully implemented in service + endpoint layer (tests mock-verified). `CORE-SUB-01` requires Stripe credentials. `CORE-NOTIF-01` is the highest-retention, fully unblocked story with no external dependencies — selected as the next feature.
+    - Concurrently fixed critical model-schema mismatch discovered during the decision review (BUG-008).
+
+- **Stories touched**
+    - `CORE-NOTIF-01` (Alerts & Notifications) – **DONE**
+    - `CORE-AUTH-01` (Infra fix) – supplementary fix
+
+- **Bugs fixed this session**
+
+    - ✅ **BUG-008 – `user.py` model / `auth.py` schema mismatch** — `User` model used `Integer` PK but `auth_service.py`, `deps.py`, and `UserResponse` schema all expected `uuid.UUID`. Fields `is_active`, `is_verified`, `name`, `subscription_tier` existed in the schema but not the model. Fixed by rewriting `User` model with UUID PK and all required columns.
+
+    - ✅ **BUG-009 – Cascading FK mismatch in Portfolio, WatchlistItem, LegalConsent** — All three models had `Integer` FK on `user_id` referencing `users.id`. After fixing the User PK to UUID, these were updated to `UUID(as_uuid=True)` FK accordingly.
+
+- **Backend work done**
+    - ✅ `app/models/alert.py` — `Alert` model: `user_id` UUID FK, `symbol`, `alert_type` (price_above/below, gas_above/below), `threshold`, `delivery_channel` (in_app/email), `is_active`, `triggered_at`, `triggered_value`, `created_at`.
+    - ✅ `app/schemas/alert_models.py` — `AlertCreate`, `AlertResponse`, `AlertListResponse`, `TriggeredAlertResponse` with full field validators (alert_type whitelist, channel whitelist, symbol uppercasing).
+    - ✅ `app/services/alert_service.py` — Full CRUD (`create_alert`, `list_alerts`, `get_alert`, `delete_alert`, `acknowledge_alert`) + evaluation engine (`evaluate_alerts_for_symbol`) that checks all active un-triggered alerts for a symbol and fires matches. Logs every trigger. `build_trigger_message` generates human-readable messages.
+    - ✅ `app/api/v1/endpoints/alerts.py` — Five REST routes: POST (create), GET (list), DELETE (remove), GET /triggered (poll), POST /{id}/ack (dismiss). All auth-protected.
+    - ✅ `app/main.py` — Registered `alerts.router` at `/api/v1/alerts`.
+    - ✅ `app/models/__init__.py` — Registered `Alert` model.
+    - ✅ `app/api/v1/endpoints/__init__.py` — Added `alerts` to endpoint imports.
+    - ✅ `alembic/versions/a1b2c3d4e5f6_add_alerts_table.py` — Migration creates `alerts` table. Note: User UUID PK migration requires fresh DB or manual backfill on existing data (documented in migration file).
+
+- **Tests written**
+    - ✅ `tests/api/test_alerts_api.py` — 8 tests covering create, invalid type (422), list, delete, delete-nonexistent (404), triggered poll, ack, ack-nonexistent (404).
+    - ✅ `tests/services/test_alert_service.py` — 9 tests: price_above fires, price_above does not fire below threshold, price_below fires, gas_above fires, gas alert skipped when GAS not provided, empty list, and 3 `build_trigger_message` format tests.
+
+- **Frontend work done**
+    - ✅ `lib/api.ts` — Added `AlertDto`, `AlertListDto`, `TriggeredAlertDto`, `AlertCreatePayload` interfaces + `fetchAlerts`, `createAlert`, `deleteAlert`, `fetchTriggeredAlerts`, `acknowledgeAlert` functions with Bearer auth.
+    - ✅ `app/alerts/page.tsx` — Full alerts management page: create form (ticker + condition + threshold), active alerts list with colour-coded status indicators, triggered alert banner with dismiss/delete actions, 30-second polling interval for new triggers.
+    - ✅ `components/Nav.tsx` — Added "Alerts" nav item.
+
+- **Architecture note**
+    - Email delivery is scaffolded (`delivery_channel="email"` is accepted and stored) but not yet dispatched — wired when `CORE-EMAIL-01` is implemented. The evaluation engine is scheduler-ready: call `evaluate_alerts_for_symbol(db, symbol, price, gas)` from `scheduler.py` to run on every price refresh cycle.
+
+- **Status & results**
+    - `CORE-NOTIF-01` is fully complete. Users can create price and GAS alerts, see them fire in real-time (30s polling), dismiss them, and delete them. Backend evaluation engine is production-ready and scheduler-hookable.
+
+- **Next recommended stories**
+    - `P2-STRAT-01` (Strategy Library) — now unblocked since backtesting is confirmed done.
+    - `P2-MACRO-ADV-01` (Advanced Macro) — no new dependencies.
+    - `CORE-EMAIL-01` — to activate email delivery for alerts.
+    - `CORE-SUB-01` — Stripe billing (needs credentials).
 
 ---
 

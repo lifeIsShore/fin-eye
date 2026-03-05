@@ -26,7 +26,7 @@ from app.schemas.auth import (
 from app.services.auth_service import authenticate_user, create_user
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(tags=["Auth"])
 
 
 @router.post(

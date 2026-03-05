@@ -1,21 +1,25 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
+"""app/models/portfolio.py"""
+import uuid
 from datetime import datetime
+
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+
 from app.db.database import Base
+
 
 class Portfolio(Base):
     __tablename__ = "portfolios"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    name = Column(String, index=True, nullable=False)
-    description = Column(String, nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(128), index=True, nullable=False)
+    description = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationship to user
     owner = relationship("User", back_populates="portfolios")
-    # Relationship to items
     items = relationship("PortfolioItem", back_populates="portfolio", cascade="all, delete-orphan")
 
 
@@ -23,10 +27,9 @@ class PortfolioItem(Base):
     __tablename__ = "portfolio_items"
 
     id = Column(Integer, primary_key=True, index=True)
-    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False)
-    symbol = Column(String, index=True, nullable=False)
-    weight = Column(Float, nullable=False, default=0.0) # Percentage weight (e.g. 0.5 for 50%)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False)
+    symbol = Column(String(20), index=True, nullable=False)
+    weight = Column(Float, nullable=False, default=0.0)
     added_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationship to portfolio
+
     portfolio = relationship("Portfolio", back_populates="items")
