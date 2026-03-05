@@ -10,6 +10,12 @@ from app.db.redis_client import init_redis, close_redis
 from app.services.scheduler import setup_scheduler
 
 # Import versioned routers
+# Observability middleware
+from app.middleware.metrics_middleware import MetricsMiddleware
+
+# Register models so init_db() creates all tables
+from app.models import blog, showcase  # noqa: F401 — side-effect import
+
 from app.api.v1.health import router as health_router
 from app.api.v1.data import router as data_router
 from app.api.v1.auth import router as auth_router
@@ -17,7 +23,8 @@ from app.api.v1.auth import router as auth_router
 # Import existing endpoint routers
 from app.api.v1.endpoints import (
     macro, sentiment, technical, explanation, hedging,
-    portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts, strategies
+    portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts, strategies,
+    showcase, ops
 )
 
 # Configuration
@@ -68,6 +75,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(MetricsMiddleware)
 
 @app.get("/")
 async def root() -> dict:
@@ -100,3 +108,5 @@ app.include_router(gdpr.router, prefix="/api/v1/gdpr", tags=["GDPR Data Rights"]
 app.include_router(cms.router, prefix="/api/v1/cms", tags=["Content Management"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts & Notifications"])
 app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["Strategy Library"])
+app.include_router(showcase.router, prefix="/api/v1/showcase", tags=["Showcase / Pro Tools"])
+app.include_router(ops.router, prefix="/api/v1/ops", tags=["Ops & Monitoring"])

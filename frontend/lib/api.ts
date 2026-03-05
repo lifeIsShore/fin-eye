@@ -981,6 +981,47 @@ export async function changePassword(
   }
 }
 
+// ── Showcase / Pro Tools (CORE-SHOP-01, CORE-SHOP-02) ───────────────────────
+
+export interface ShowcaseProductDto {
+  id: number;
+  title: string;
+  tagline: string;
+  description: string;
+  features: string[];
+  category: string;
+  price_label: string;
+  external_url: string;
+  sort_order: number;
+}
+
+export async function fetchShowcaseProducts(
+  category?: string,
+): Promise<ShowcaseProductDto[]> {
+  const qs = category ? `?category=${encodeURIComponent(category)}` : "";
+  const res = await fetch(`${API_BASE_URL}/api/v1/showcase/products${qs}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load showcase products");
+  return res.json() as Promise<ShowcaseProductDto[]>;
+}
+
+export async function trackShowcaseClick(
+  productId: number,
+  eventType: "view" | "detail" | "outbound",
+  anonUserId?: string,
+): Promise<void> {
+  try {
+    await fetch(`${API_BASE_URL}/api/v1/showcase/products/${productId}/click`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_type: eventType, anon_user_id: anonUserId ?? null }),
+    });
+  } catch {
+    // Analytics must never break UX
+  }
+}
+
 export async function deleteAccount(): Promise<{ message: string; anonymised_at: string }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/gdpr/delete`, {
     method: "POST",

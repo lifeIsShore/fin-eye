@@ -63,8 +63,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-LEGAL-01       | Core – Legal/ToS      | DONE         | 2026-03-05   | ConsentGate + /legal pages + DB consent recording |
 | CORE-GDPR-01        | Core – GDPR           | DONE         | 2026-03-04   | Export + anonymise/delete endpoints; wired into Settings page |
 | CORE-OPS-01         | Core – Monitoring     | NOT_STARTED  | -            | Independent |
-| CORE-SHOP-01        | Core – Showcase       | NOT_STARTED  | -            | Independent |
-| CORE-SHOP-02        | Core – Showcase       | NOT_STARTED  | -            | Depends on SHOP-01 |
+| CORE-SHOP-01        | Core – Showcase       | DONE         | 2026-03-06   | Product grid + category filter + detail modal + seed catalogue |
+| CORE-SHOP-02        | Core – Showcase       | DONE         | 2026-03-06   | Detail modal + tracked outbound redirect + click stats endpoint |
 | CORE-SEC-01         | Core – Security       | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SEC-02         | Core – Security       | NOT_STARTED  | -            | Independent |
 | CORE-ANALYTICS-01   | Core – Analytics      | NOT_STARTED  | -            | Independent |
@@ -1721,3 +1721,61 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Next steps**
     - True remaining NOT_STARTED unblocked stories: `CORE-COMM-01` (Community integration), `CORE-OPS-01` (Monitoring), `CORE-SHOP-01/02` (Showcase), `CORE-SEC-01` (2FA), `CORE-ANALYTICS-01` (Product analytics).
+
+---
+
+### 2026-03-06 (continued)
+
+**Session — CORE-SHOP-01 + CORE-SHOP-02: Pro Tools Showcase (complete)**
+
+- **Context**
+    - No prior showcase infrastructure existed.
+    - Both stories were tackled together in one session since CORE-SHOP-02 directly depends on CORE-SHOP-01.
+
+- **Stories completed**
+    - `CORE-SHOP-01` — Pro Tools grid: navigation entry, product cards with category filter, "View details" CTA. **DONE**
+    - `CORE-SHOP-02` — Product detail modal + tracked outbound redirect with `product_id` + `source=terminal` tracking params + admin click stats endpoint. **DONE**
+
+- **Files created / modified**
+
+    **Backend**
+    - `backend/app/models/showcase.py` — Two new SQLAlchemy models:
+        - `ShowcaseProduct` (id, title, tagline, description, features JSON, category, price_label, external_url, is_active, sort_order, timestamps)
+        - `ShowcaseClick` (id, product_id FK, event_type [view/detail/outbound], anon_user_id SHA-256, created_at)
+    - `backend/app/api/v1/endpoints/showcase.py` — Full router:
+        - Public: `GET /products` (with optional `?category=` filter), `GET /products/{id}`, `POST /products/{id}/click` (fire-and-forget, never surfaces errors)
+        - Admin-only: `POST /products`, `PUT /products/{id}`, `DELETE /products/{id}`, `GET /stats` (per-product view/detail/outbound counts)
+        - Anonymous user ID derived from SHA-256(IP + User-Agent) — no PII stored
+    - `backend/app/main.py` — Imported `showcase` router + registered at `/api/v1/showcase`; added `from app.models import showcase` side-effect import so `init_db()` creates the new tables
+    - `backend/scripts/seed_showcase.py` — Idempotent seed script with 6 initial products across 3 categories:
+        - Portfolio Tools: Portfolio Risk Dashboard Template ($29), Options Hedge Calculator ($39)
+        - Planning Tools: Macro Regime Cheat Sheet ($9), Backtesting Journal Template ($19)
+        - Educational: Financial Ratios Quick Reference ($7), Sector Rotation Playbook ($24)
+
+    **Frontend**
+    - `frontend/lib/api.ts` — Added `ShowcaseProductDto` interface + `fetchShowcaseProducts(category?)` + `trackShowcaseClick(productId, eventType, anonUserId?)` (swallows all errors silently)
+    - `frontend/app/showcase/page.tsx` — Full client-side page:
+        - SWR-powered product fetch with loading/error states
+        - Category filter pill bar (All / Portfolio Tools / Planning Tools / Educational) with per-category counts and colour-coded active states
+        - `ProductCard` component: category badge, price label, feature preview (first 3 + overflow count), "View details" button; fires `view` tracking event on mount
+        - `ProductModal` component: full description, complete feature checklist, price + "Buy now" CTA; fires `detail` event on open, `outbound` event on buy-click; appends `?product_id=X&source=terminal` to external URL; closes on Escape or backdrop click
+        - Educational disclaimer footer on all product views
+    - `frontend/components/Nav.tsx` — Added `{ href: "/showcase", label: "Pro Tools" }` to NAV_ITEMS (was already present from interrupted write, confirmed)
+
+- **Acceptance criteria coverage**
+    - ✅ Navigation entry for the Showcase/Marketplace present ("Pro Tools" in Nav)
+    - ✅ Product grid with title, short description, category badge, "View details" button
+    - ✅ Cards and details manageable by admin via seed script + CRUD endpoints
+    - ✅ Product detail modal with longer description, key features list, "Buy now" button
+    - ✅ "Buy now" opens external storefront in new tab with `product_id` and `source=terminal` tracking params
+    - ✅ Click statistics stored per product (views, detail-opens, outbound clicks) and exposed via admin-only `/stats` endpoint
+
+- **To run after deploy**
+    ```
+    cd backend
+    python scripts/seed_showcase.py
+    ```
+    Tables are auto-created by `init_db()` on next backend start.
+
+- **Next steps**
+    - Remaining unblocked stories: `CORE-COMM-01` (Community), `CORE-OPS-01` (Monitoring/Ops), `CORE-SEC-01` (2FA), `CORE-ANALYTICS-01` (Product analytics).

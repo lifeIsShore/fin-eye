@@ -13,13 +13,16 @@ All jobs share a single AsyncSession obtained from the DB session factory.
 FIX BUG-001: cache.set_macro_score() -> cache.set_macro() (method did not exist)
 """
 import logging
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import get_settings
 from app.db.database import AsyncSessionLocal
+from app.services.metrics import get_metrics
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -34,11 +37,27 @@ async def job_fetch_ohlcv_daily() -> None:
     from app.services.ohlcv_fetcher import OHLCVFetcher  # noqa: PLC0415
 
     logger.info("Starting daily OHLCV fetch job")
-    fetcher = OHLCVFetcher()
-    async with AsyncSessionLocal() as session:
-        results = await fetcher.fetch_and_store_daily(session)
-        await session.commit()
-    logger.info("Daily OHLCV fetch complete: %s", results)
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        fetcher = OHLCVFetcher()
+        async with AsyncSessionLocal() as session:
+            results = await fetcher.fetch_and_store_daily(session)
+            await session.commit()
+        logger.info("Daily OHLCV fetch complete: %s", results)
+        get_metrics().record_pipeline_run(
+            "fetch_ohlcv_daily", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, str(results),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Daily OHLCV fetch failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "fetch_ohlcv_daily", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        raise
 
 
 async def job_fetch_ohlcv_intraday() -> None:
@@ -46,12 +65,29 @@ async def job_fetch_ohlcv_intraday() -> None:
     from app.services.ohlcv_fetcher import OHLCVFetcher  # noqa: PLC0415
 
     logger.info("Starting intraday OHLCV fetch job")
-    fetcher = OHLCVFetcher()
-    async with AsyncSessionLocal() as session:
-        r1h = await fetcher.fetch_and_store_intraday(session, interval="1h")
-        r4h = await fetcher.fetch_and_store_intraday(session, interval="4h")
-        await session.commit()
-    logger.info("Intraday OHLCV fetch complete: 1h=%s, 4h=%s", r1h, r4h)
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        fetcher = OHLCVFetcher()
+        async with AsyncSessionLocal() as session:
+            r1h = await fetcher.fetch_and_store_intraday(session, interval="1h")
+            r4h = await fetcher.fetch_and_store_intraday(session, interval="4h")
+            await session.commit()
+        detail = f"1h={r1h} 4h={r4h}"
+        logger.info("Intraday OHLCV fetch complete: %s", detail)
+        get_metrics().record_pipeline_run(
+            "fetch_ohlcv_intraday", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Intraday OHLCV fetch failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "fetch_ohlcv_intraday", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        raise
 
 
 async def job_fetch_macro() -> None:
@@ -60,28 +96,59 @@ async def job_fetch_macro() -> None:
     from app.services.cache import get_cache  # noqa: PLC0415
 
     logger.info("Starting macro fetch job")
-    fetcher = MacroFetcher()
-    cache = get_cache()
-    async with AsyncSessionLocal() as session:
-        await fetcher.fetch_and_store(session)
-        score_data = await fetcher.compute_and_store_score(session)
-        await session.commit()
-
-    if score_data:
-        # FIX BUG-001: was cache.set_macro_score() — method now exists as set_macro on CacheService
-        await cache.set_macro(score_data)
-        logger.info("Macro score updated in cache: %s", score_data)
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        fetcher = MacroFetcher()
+        cache = get_cache()
+        async with AsyncSessionLocal() as session:
+            await fetcher.fetch_and_store(session)
+            score_data = await fetcher.compute_and_store_score(session)
+            await session.commit()
+        if score_data:
+            await cache.set_macro(score_data)
+            logger.info("Macro score updated in cache: %s", score_data)
+        get_metrics().record_pipeline_run(
+            "fetch_macro", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True,
+            f"score={score_data.get('score') if score_data else 'n/a'}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Macro fetch failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "fetch_macro", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        raise
 
 async def job_fetch_news() -> None:
     """Fetch latest news articles from Finnhub for all tracked symbols."""
     from app.services.news_data import NewsFetcher  # noqa: PLC0415
 
     logger.info("Starting news fetch job")
-    fetcher = NewsFetcher()
-    async with AsyncSessionLocal() as session:
-        results = await fetcher.fetch_and_store(session, lookback_days=2)
-        await session.commit()
-    logger.info("News fetch complete: %s", results)
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        fetcher = NewsFetcher()
+        async with AsyncSessionLocal() as session:
+            results = await fetcher.fetch_and_store(session, lookback_days=2)
+            await session.commit()
+        logger.info("News fetch complete: %s", results)
+        get_metrics().record_pipeline_run(
+            "fetch_news", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, str(results),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("News fetch failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "fetch_news", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        raise
 
 
 # ── Scheduler Setup ────────────────────────────────────────────────────────────
