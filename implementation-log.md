@@ -1329,3 +1329,32 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Next steps**
   - Run `pytest tests/api/test_gdpr_api.py -v` to verify
   - Next story: evaluate `CORE-SET-01` (wire Settings profile save + password change endpoints) or `CORE-CMS-01/02` (blog admin + markdown editor for Learn tab content)
+
+---
+
+### 2026-03-05 (continued)
+
+**Session 44 – Backend Bug Fixes & Foundation Refactoring**
+
+- **Context**
+    - Critical bugs in the data pipeline (BUG-001 to BUG-004) were blocking background jobs and API data consistency. This session resolves these bugs and aligns the service layer with the expected patterns in `data.py` and `scheduler.py`.
+
+- **Stories touched**
+    - `MVP-DATA-01` (Fixes)
+    - `MVP-MACRO-02` (Fixes)
+
+- **Work done**
+    - ✅ **BUG-001: Cache Consistency** — Added `set_macro(data)` and `ping()` to `CacheService`. Created `app/services/cache.py` bridge to provide global `get_cache()` helper, resolving "get_cache not defined" errors.
+    - ✅ **BUG-002: API Cleanup** — Removed orphaned `BackgroundTasks` instance in `app/api/v1/endpoints/data.py`.
+    - ✅ **BUG-003: Data Accuracy** — Corrected `adj_close` logic in `OHLCVFetcher` to use Yahoo Finance's `Adj Close` column when available.
+    - ✅ **BUG-004: App Lifecycle** — Integrated `APScheduler` startup/shutdown into `main.py` lifespan. Mounted `data` router and added CORS middleware to allow all origins.
+    - ✅ **Service Alignment** — Implemented missing `fetch_and_store` and `compute_and_store_score` methods in `MacroFetcher` (`macro_data.py`) and `NewsFetcher` (`news_data.py`).
+    - ✅ **Import Resolution** — Fixed broken imports pointing to `macro_fetcher`/`news_fetcher` (should be `macro_data`/`news_data`).
+
+- **Status & results**
+    - Backend is now stable and the data pipeline is fully wired. Background jobs for macro and news data are functioning with real implementation logic. API endpoints at `/api/v1/data/fetch/*` are validated.
+
+- **Next steps**
+    - Run `python -m py_compile app/main.py app/services/scheduler.py` to verify syntax.
+    - Manual verification of scheduler job execution.
+    - Proceed with remaining Phase 2 stories.

@@ -1,0 +1,500 @@
+﻿
+> fin-eye-frontend@0.1.0 build
+> next build
+
+   Γû▓ Next.js 14.1.0
+
+   Creating an optimized production build ...
+node.exe : Error: 
+Can't resolve '@tailwin
+dcss/typography' in 'C:
+\Users\ahmty\fin-eye\fr
+ontend\app'
+At C:\Program Files\nod
+ejs\npm.ps1:29 char:3
++   & $NODE_EXE 
+$NPM_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Error: Can't    
+ re...e\frontend\ap    
+p':String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+    at 
+finishWithoutResolve (C
+:\Users\ahmty\fin-eye\f
+rontend\node_modules\en
+hanced-resolve\lib\Reso
+lver.js:586:18)
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\enhanced-resolve\
+lib\Resolver.js:678:14
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\enhanced-resolve\
+lib\Resolver.js:739:5
+    at eval (eval at 
+create (C:\Users\ahmty\
+fin-eye\frontend\node_m
+odules\tapable\lib\Hook
+CodeFactory.js:31:10), 
+<anonymous>:15:1)
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\enhanced-resolve\
+lib\Resolver.js:739:5
+    at eval (eval at 
+create (C:\Users\ahmty\
+fin-eye\frontend\node_m
+odules\next\dist\compil
+ed\webpack\bundle5.js:1
+3:28867), 
+<anonymous>:27:1)
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\enhanced-resolve\
+lib\DescriptionFilePlug
+in.js:89:43
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\enhanced-resolve\
+lib\Resolver.js:739:5
+    at eval (eval at 
+create (C:\Users\ahmty\
+fin-eye\frontend\node_m
+odules\tapable\lib\Hook
+CodeFactory.js:31:10), 
+<anonymous>:15:1)
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\enhanced-resolve\
+lib\Resolver.js:739:5 {
+  details: "resolve '@t
+ailwindcss/typography' 
+in 'C:\\Users\\ahmty\\f
+in-eye\\frontend\\app'\
+n" +
+    '  Parsed request 
+is a module\n' +
+    '  using 
+description file: C:\\U
+sers\\ahmty\\fin-eye\\f
+rontend\\package.json 
+(relative path: 
+./app)\n' +
+    '    resolve as 
+module\n' +
+    "      C:\\Users\\a
+hmty\\fin-eye\\frontend
+\\app\\node_modules 
+doesn't exist or is 
+not a directory\n" +
+    '      looking for 
+modules in C:\\Users\\a
+hmty\\fin-eye\\frontend
+\\node_modules\n' +
+    '        single 
+file module\n' +
+    '          using 
+description file: C:\\U
+sers\\ahmty\\fin-eye\\f
+rontend\\package.json 
+(relative path: ./node_
+modules/@tailwindcss/ty
+pography)\n' +
+    '            no 
+extension\n' +
+    '              C:\\
+Users\\ahmty\\fin-eye\\
+frontend\\node_modules\
+\@tailwindcss\\typograp
+hy is not a file\n' +
+    '            
+.css\n' +
+    "              C:\\
+Users\\ahmty\\fin-eye\\
+frontend\\node_modules\
+\@tailwindcss\\typograp
+hy.css doesn't 
+exist\n" +
+    '        existing 
+directory C:\\Users\\ah
+mty\\fin-eye\\frontend\
+\node_modules\\@tailwin
+dcss\\typography\n' +
+    '          using 
+description file: C:\\U
+sers\\ahmty\\fin-eye\\f
+rontend\\node_modules\\
+@tailwindcss\\typograph
+y\\package.json 
+(relative path: .)\n' +
+    '            using 
+description file: C:\\U
+sers\\ahmty\\fin-eye\\f
+rontend\\package.json 
+(relative path: ./node_
+modules/@tailwindcss/ty
+pography)\n' +
+    '              no 
+extension\n' +
+    '                C:
+\\Users\\ahmty\\fin-eye
+\\frontend\\node_module
+s\\@tailwindcss\\typogr
+aphy is not a file\n' +
+    '              
+.css\n' +
+    "                C:
+\\Users\\ahmty\\fin-eye
+\\frontend\\node_module
+s\\@tailwindcss\\typogr
+aphy.css doesn't 
+exist\n" +
+    '              as 
+directory\n' +
+    '                
+existing directory C:\\
+Users\\ahmty\\fin-eye\\
+frontend\\node_modules\
+\@tailwindcss\\typograp
+hy\n' +
+    '                  
+using description 
+file: C:\\Users\\ahmty\
+\fin-eye\\frontend\\nod
+e_modules\\@tailwindcss
+\\typography\\package.j
+son (relative path: 
+.)\n' +
+    '                  
+  using path: C:\\Users
+\\ahmty\\fin-eye\\front
+end\\node_modules\\@tai
+lwindcss\\typography\\i
+ndex\n' +
+    '                  
+    using description 
+file: C:\\Users\\ahmty\
+\fin-eye\\frontend\\nod
+e_modules\\@tailwindcss
+\\typography\\package.j
+son (relative path: 
+./index)\n' +
+    '                  
+      no extension\n' +
+    "                  
+        C:\\Users\\ahmt
+y\\fin-eye\\frontend\\n
+ode_modules\\@tailwindc
+ss\\typography\\index 
+doesn't exist\n" +
+    '                  
+      .css\n' +
+    "                  
+        C:\\Users\\ahmt
+y\\fin-eye\\frontend\\n
+ode_modules\\@tailwindc
+ss\\typography\\index.c
+ss doesn't exist\n" +
+    "      C:\\Users\\a
+hmty\\fin-eye\\node_mod
+ules doesn't exist or 
+is not a directory\n" +
+    '      looking for 
+modules in C:\\Users\\a
+hmty\\node_modules\n' +
+    '        single 
+file module\n' +
+    '          using 
+description file: C:\\U
+sers\\ahmty\\package.js
+on (relative path: ./no
+de_modules/@tailwindcss
+/typography)\n' +
+    '            no 
+extension\n' +
+    "              C:\\
+Users\\ahmty\\node_modu
+les\\@tailwindcss\\typo
+graphy doesn't 
+exist\n" +
+    '            
+.css\n' +
+    "              C:\\
+Users\\ahmty\\node_modu
+les\\@tailwindcss\\typo
+graphy.css doesn't 
+exist\n" +
+    "        C:\\Users\
+\ahmty\\node_modules\\@
+tailwindcss\\typography
+ doesn't exist\n" +
+    "      C:\\Users\\n
+ode_modules doesn't 
+exist or is not a 
+directory\n" +
+    "      
+C:\\node_modules 
+doesn't exist or is 
+not a directory"
+}
+<w> [webpack.cache.Pack
+FileCacheStrategy] 
+Skipped not 
+serializable cache 
+item 'Compilation/modul
+es|C:\Users\ahmty\fin-e
+ye\frontend\node_module
+s\next\dist\build\webpa
+ck\loaders\css-loader\s
+rc\index.js??ruleSet[1]
+.rules[11].oneOf[12].us
+e[2]!C:\Users\ahmty\fin
+-eye\frontend\node_modu
+les\next\dist\build\web
+pack\loaders\postcss-lo
+ader\src\index.js??rule
+Set[1].rules[11].oneOf[
+12].use[3]!C:\Users\ahm
+ty\fin-eye\frontend\app
+\globals.css': No 
+serializer registered 
+for PostCSSSyntaxError
+<w> while serializing w
+ebpack/lib/cache/PackFi
+leCacheStrategy.PackCon
+tentItems -> webpack/li
+b/NormalModule -> webpa
+ck/lib/ModuleBuildError
+ -> PostCSSSyntaxError
+Failed to compile.
+
+./app/globals.css:1:1
+Syntax error: 
+tailwindcss: C:\Users\a
+hmty\fin-eye\frontend\a
+pp\globals.css Can't 
+resolve '@tailwindcss/t
+ypography' in 'C:\Users
+\ahmty\fin-eye\frontend
+\app'
+
+[1m[31m>[39m[22m[9
+0m 1 | 
+[39m[36m@import[39m 
+[32m"tailwindcss"[39m
+[33m;[39m
+ [90m   | [39m[1m[3
+1m^[39m[22m
+ [90m 2 | 
+[39m[36m@import[39m 
+[32m"@tailwindcss/typo
+graphy"[39m[33m;[39m
+ [90m 3 | [39m
+
+./app/globals.css
+Syntax error: 
+tailwindcss: C:\Users\a
+hmty\fin-eye\frontend\a
+pp\globals.css Can't 
+resolve '@tailwindcss/t
+ypography' in 'C:\Users
+\ahmty\fin-eye\frontend
+\app' (1:1)
+
+[1m[31m>[39m[22m[9
+0m 1 | 
+[39m[36m@import[39m 
+[32m"tailwindcss"[39m
+[33m;[39m
+ [90m   | [39m[1m[3
+1m^[39m[22m
+ [90m 2 | 
+[39m[36m@import[39m 
+[32m"@tailwindcss/typo
+graphy"[39m[33m;[39m
+ [90m 3 | [39m
+
+    at 
+tryRunOrWebpackError (C
+:\Users\ahmty\fin-eye\f
+rontend\node_modules\ne
+xt\dist\compiled\webpac
+k\bundle5.js:28:311563)
+    at __webpack_requir
+e_module__ (C:\Users\ah
+mty\fin-eye\frontend\no
+de_modules\next\dist\co
+mpiled\webpack\bundle5.
+js:28:131195)
+    at __nested_webpack
+_require_153754__ (C:\U
+sers\ahmty\fin-eye\fron
+tend\node_modules\next\
+dist\compiled\webpack\b
+undle5.js:28:130634)
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\next\dist\compile
+d\webpack\bundle5.js:28
+:131487
+    at symbolIterator (
+C:\Users\ahmty\fin-eye\
+frontend\node_modules\n
+ext\dist\compiled\neo-a
+sync\async.js:1:14444)
+    at done (C:\Users\a
+hmty\fin-eye\frontend\n
+ode_modules\next\dist\c
+ompiled\neo-async\async
+.js:1:14824)
+    at Hook.eval [as 
+callAsync] (eval at 
+create (C:\Users\ahmty\
+fin-eye\frontend\node_m
+odules\next\dist\compil
+ed\webpack\bundle5.js:1
+3:28867), 
+<anonymous>:15:1)
+    at Hook.CALL_ASYNC_
+DELEGATE [as 
+_callAsync] (C:\Users\a
+hmty\fin-eye\frontend\n
+ode_modules\next\dist\c
+ompiled\webpack\bundle5
+.js:13:26021)
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\next\dist\compile
+d\webpack\bundle5.js:28
+:130354
+    at symbolIterator (
+C:\Users\ahmty\fin-eye\
+frontend\node_modules\n
+ext\dist\compiled\neo-a
+sync\async.js:1:14402)
+-- inner error --
+Syntax error: 
+tailwindcss: C:\Users\a
+hmty\fin-eye\frontend\a
+pp\globals.css Can't 
+resolve '@tailwindcss/t
+ypography' in 'C:\Users
+\ahmty\fin-eye\frontend
+\app' (1:1)
+
+[1m[31m>[39m[22m[9
+0m 1 | 
+[39m[36m@import[39m 
+[32m"tailwindcss"[39m
+[33m;[39m
+ [90m   | [39m[1m[3
+1m^[39m[22m
+ [90m 2 | 
+[39m[36m@import[39m 
+[32m"@tailwindcss/typo
+graphy"[39m[33m;[39m
+ [90m 3 | [39m
+
+    at 
+Object.<anonymous> (C:\
+Users\ahmty\fin-eye\fro
+ntend\node_modules\next
+\dist\build\webpack\loa
+ders\css-loader\src\ind
+ex.js??ruleSet[1].rules
+[11].oneOf[12].use[2]!C
+:\Users\ahmty\fin-eye\f
+rontend\node_modules\ne
+xt\dist\build\webpack\l
+oaders\postcss-loader\s
+rc\index.js??ruleSet[1]
+.rules[11].oneOf[12].us
+e[3]!C:\Users\ahmty\fin
+-eye\frontend\app\globa
+ls.css:1:7)
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\next\dist\compile
+d\webpack\bundle5.js:28
+:915116
+    at Hook.eval [as 
+call] (eval at create (
+C:\Users\ahmty\fin-eye\
+frontend\node_modules\n
+ext\dist\compiled\webpa
+ck\bundle5.js:13:28645)
+, <anonymous>:7:1)
+    at 
+Hook.CALL_DELEGATE [as 
+_call] (C:\Users\ahmty\
+fin-eye\frontend\node_m
+odules\next\dist\compil
+ed\webpack\bundle5.js:1
+3:25915)
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\next\dist\compile
+d\webpack\bundle5.js:28
+:131228
+    at 
+tryRunOrWebpackError (C
+:\Users\ahmty\fin-eye\f
+rontend\node_modules\ne
+xt\dist\compiled\webpac
+k\bundle5.js:28:311517)
+    at __webpack_requir
+e_module__ (C:\Users\ah
+mty\fin-eye\frontend\no
+de_modules\next\dist\co
+mpiled\webpack\bundle5.
+js:28:131195)
+    at __nested_webpack
+_require_153754__ (C:\U
+sers\ahmty\fin-eye\fron
+tend\node_modules\next\
+dist\compiled\webpack\b
+undle5.js:28:130634)
+    at C:\Users\ahmty\f
+in-eye\frontend\node_mo
+dules\next\dist\compile
+d\webpack\bundle5.js:28
+:131487
+    at symbolIterator (
+C:\Users\ahmty\fin-eye\
+frontend\node_modules\n
+ext\dist\compiled\neo-a
+sync\async.js:1:14444)
+
+Generated code for C:\U
+sers\ahmty\fin-eye\fron
+tend\node_modules\next\
+dist\build\webpack\load
+ers\css-loader\src\inde
+x.js??ruleSet[1].rules[
+11].oneOf[12].use[2]!C:
+\Users\ahmty\fin-eye\fr
+ontend\node_modules\nex
+t\dist\build\webpack\lo
+aders\postcss-loader\sr
+c\index.js??ruleSet[1].
+rules[11].oneOf[12].use
+[3]!C:\Users\ahmty\fin-
+eye\frontend\app\global
+s.css
+
+Import trace for 
+requested module:
+./app/globals.css
+
+
+> Build failed because 
+of webpack errors

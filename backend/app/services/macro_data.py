@@ -118,3 +118,20 @@ class MacroFetcher:
             ))
         return yoy_results
 
+    async def fetch_and_store(self, db: Session) -> None:
+        """Refresh all macro indicators and store in DB."""
+        from app.services.macro_orchestrator import refresh_all_macro_indicators
+        await refresh_all_macro_indicators(db)
+
+    async def compute_and_store_score(self, db: Session) -> Optional[dict]:
+        """Compute the macro score from the latest indicators."""
+        from app.services.macro_scoring import compute_macro_score
+        from app.crud.macro import get_latest_macro_indicator
+
+        indicators = {}
+        for name in ["fed_funds_rate", "unemployment_rate", "yield_spread_10y_2y", "cpi_yoy", "vix"]:
+            latest = get_latest_macro_indicator(db, name)
+            indicators[name] = latest.value if latest else None
+
+        return compute_macro_score(indicators)
+

@@ -33,6 +33,18 @@ class CacheService:
             logger.error(f"Cache SET error for {key}: {e}")
             return False
 
+    async def set_macro(self, data: Dict[str, Any]) -> bool:
+        """Helper to set macro scores in cache with default key."""
+        return await self.set("macro_scores", data)
+
+    async def ping(self) -> bool:
+        """Check if Redis is alive."""
+        try:
+            return await self.redis.ping()
+        except Exception as e:
+            logger.error(f"Cache PING error: {e}")
+            return False
+
     async def delete(self, key: str) -> bool:
         """Delete a key from the cache."""
         try:

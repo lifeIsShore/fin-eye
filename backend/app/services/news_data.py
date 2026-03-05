@@ -87,3 +87,38 @@ class NewsFetcher:
         except Exception as e:
             logger.error(f"Failed to fetch news for {symbol}: {e}")
             return []
+
+    async def fetch_and_store(self, db: Session, symbols: Optional[List[str]] = None, lookback_days: int = 7) -> dict:
+        """Fetch and store news for multiple symbols."""
+        from app.config import settings
+        from app.models.sentiment import NewsArticle
+        from sqlalchemy import select
+
+        symbols = symbols or settings.ohlcv_symbols_default
+        results = {}
+
+        for symbol in symbols:
+            news_items = await self.fetch_recent_news(symbol, days_back=lookback_days)
+            symbol_count = 0
+            for item in news_items:
+                # Basic deduplication by title/symbol/date
+                stmt = select(NewsArticle).where(
+                    NewsArticle.symbol == item.symbol,
+                    NewsArticle.title == item.title,
+                    NewsArticle.published_at == item.published_at
+                )
+                existing = db.execute(stmt).scalar_one_or_none()
+                if not existing:
+                    article = NewsArticle(
+                        symbol=item.symbol,
+                        title=item.title,
+                        source=item.source,
+                        published_at=item.published_at,
+                        sentiment_score=item.sentiment_score
+                    )
+                    db.add(article)
+                    symbol_count += 1
+            results[symbol] = symbol_count
+
+        db.commit()
+        return results

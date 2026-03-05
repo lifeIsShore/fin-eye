@@ -6,7 +6,8 @@ import logging
 from app.config import settings
 from app.db.database import init_db, test_db_connection
 from app.db.redis_client import init_redis, close_redis, redis_client
-from app.api.v1.endpoints import macro, sentiment, technical, explanation, hedging, auth, portfolios, backtesting, events, watchlist, legal, gdpr, cms
+from app.api.v1.endpoints import macro, sentiment, technical, explanation, hedging, auth, portfolios, backtesting, events, watchlist, legal, gdpr, cms, data
+from app.services.scheduler import setup_scheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,9 +19,17 @@ async def lifespan(app: FastAPI):
     test_db_connection()
     init_db()
     await init_redis()
+
+    # Start APScheduler
+    scheduler = setup_scheduler()
+    scheduler.start()
+    logger.info("APScheduler started with %d jobs.", len(scheduler.get_jobs()))
+
     yield
     # Shutdown
     logger.info("🛑 Shutting down Fin-Eye...")
+    scheduler.shutdown(wait=False)
+    logger.info("APScheduler stopped.")
     await close_redis()
 
 app = FastAPI(
@@ -107,4 +116,9 @@ app.include_router(
     cms.router,
     prefix="/api/v1/cms",
     tags=["cms"],
+)
+app.include_router(
+    data.router,
+    prefix="/api/v1/data",
+    tags=["data pipelines"],
 )
