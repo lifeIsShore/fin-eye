@@ -42,6 +42,11 @@ build/
 ehthumbs.db
 Thumbs.db
 
+# Models and ML Artifacts
+model_store/
+*.joblib
+*.pkl
+
 # Logs
 logs
 *.log
