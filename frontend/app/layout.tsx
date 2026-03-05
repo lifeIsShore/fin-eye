@@ -47,6 +47,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                                         <Link href="/legal/disclaimer" className="hover:text-slate-300 transition-colors">
                                             Risk Disclaimer
                                         </Link>
+                                        <span className="text-slate-700">·</span>
+                                        <Link href="/community" className="hover:text-slate-300 transition-colors">
+                                            Community
+                                        </Link>
                                     </nav>
                                 </div>
                             </footer>

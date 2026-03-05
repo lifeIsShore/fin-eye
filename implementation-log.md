@@ -59,7 +59,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-NOTIF-01       | Core – Notifications  | DONE         | 2026-03-05   | Price/GAS alerts, in-app polling, scheduler-ready |
 | CORE-CMS-01         | Core – Content/CMS    | DONE         | 2026-03-05   | CMS CRUD + publish/unpublish + slug generation + migrate_posts script |
 | CORE-CMS-02         | Core – Content/CMS    | DONE         | 2026-03-05   | Admin panel, Markdown Editor, Blog state management, DB migration |
-| CORE-COMM-01        | Core – Community      | NOT_STARTED  | -            | Independent |
+| CORE-COMM-01        | Core – Community      | DONE         | 2026-03-06   | /community page, login-gated, Discord + Reddit channels, guidelines, Nav + footer links |
 | CORE-LEGAL-01       | Core – Legal/ToS      | DONE         | 2026-03-05   | ConsentGate + /legal pages + DB consent recording |
 | CORE-GDPR-01        | Core – GDPR           | DONE         | 2026-03-04   | Export + anonymise/delete endpoints; wired into Settings page |
 | CORE-OPS-01         | Core – Monitoring     | NOT_STARTED  | -            | Independent |
@@ -1779,3 +1779,35 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Next steps**
     - Remaining unblocked stories: `CORE-COMM-01` (Community), `CORE-OPS-01` (Monitoring/Ops), `CORE-SEC-01` (2FA), `CORE-ANALYTICS-01` (Product analytics).
+
+---
+
+### 2026-03-06 (continued)
+
+**Session — CORE-COMM-01: Community Integration (complete)**
+
+- **Stories completed**
+    - `CORE-COMM-01` — Community entry point, login-gated, channel cards, guidelines. **DONE**
+
+- **Files created / modified**
+    - `frontend/app/community/page.tsx` — Full community page:
+        - Login-gated via `useAuth()` — unauthenticated users redirected to `/auth/login?next=/community`
+        - Discord section: platform card with 5 channel cards (#general, #macro-101, #strategy-discussion, #alerts-and-signals, #risk-and-hedging), each with description and colour-coded icon; "Join Discord" button opens invite in new tab
+        - Reddit section: r/fineye card with "Open Reddit" button
+        - Community guidelines block (5 rules reinforcing educational-only ethos)
+        - Disclaimer footer
+        - URLs configurable via two constants at top of file (`DISCORD_INVITE`, `REDDIT_URL`) — update when real links are ready
+    - `frontend/components/Nav.tsx` — Added `{ href: "/community", label: "Community" }` to NAV_ITEMS
+    - `frontend/app/layout.tsx` — Added Community link to footer nav alongside legal links
+
+- **Acceptance criteria coverage**
+    - ✅ Navigation entry present ("Community" in Nav and footer)
+    - ✅ Access gated by login to reduce spam
+    - ✅ Community link highlights key channels (#macro-101, #strategy-discussion, etc.)
+    - ✅ Both Discord and Reddit platforms surfaced
+
+- **Note**
+    - Replace `DISCORD_INVITE` and `REDDIT_URL` constants in `community/page.tsx` with real links when communities are created.
+
+- **Next steps**
+    - `CORE-OPS-01` + `CORE-SEC-02` (monitoring + backups) — next session.

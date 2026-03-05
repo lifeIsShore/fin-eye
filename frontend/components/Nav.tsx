@@ -17,6 +17,7 @@ const NAV_ITEMS = [
     { href: "/alerts", label: "Alerts" },
     { href: "/learn", label: "Learn" },
     { href: "/showcase", label: "Pro Tools" },
+    { href: "/community", label: "Community" },
 ];
 
 function UserMenu() {
