@@ -123,6 +123,36 @@ async def job_fetch_macro() -> None:
         )
         raise
 
+async def job_backup_db() -> None:
+    """Run a full PostgreSQL backup and rotate old local copies."""
+    import sys, os  # noqa: PLC0415
+    sys.path.insert(0, os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "backup")
+    ))
+
+    logger.info("Starting scheduled DB backup job")
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        from backup_db import run_backup  # noqa: PLC0415
+        dump_path = run_backup()
+        detail = f"Saved: {dump_path.name}"
+        logger.info("DB backup complete: %s", detail)
+        get_metrics().record_pipeline_run(
+            "backup_db", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("DB backup failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "backup_db", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        # Don't re-raise — a failed backup must not crash the scheduler
+
+
 async def job_fetch_news() -> None:
     """Fetch latest news articles from Finnhub for all tracked symbols."""
     from app.services.news_data import NewsFetcher  # noqa: PLC0415
@@ -194,6 +224,16 @@ def setup_scheduler() -> AsyncIOScheduler:
         name="Fetch Finnhub News",
         replace_existing=True,
         misfire_grace_time=300,
+    )
+
+    # DB backup — daily at 02:00 UTC (low traffic, before market open)
+    scheduler.add_job(
+        job_backup_db,
+        trigger=CronTrigger(hour=2, minute=0),
+        id="backup_db",
+        name="PostgreSQL DB Backup",
+        replace_existing=True,
+        misfire_grace_time=3600,  # 1h grace — backup can be late, just not skipped
     )
 
     logger.info(

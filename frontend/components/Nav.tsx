@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Settings, CreditCard, LogOut, ChevronDown, User } from "lucide-react";
+import { Settings, CreditCard, LogOut, ChevronDown, User, Activity } from "lucide-react";
 
 const NAV_ITEMS = [
     { href: "/", label: "Dashboard" },
@@ -77,6 +77,16 @@ function UserMenu() {
                             <Settings className="h-4 w-4 text-slate-400" />
                             Settings
                         </Link>
+                        {user.is_admin && (
+                            <Link
+                                href="/admin/ops"
+                                onClick={() => setOpen(false)}
+                                className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
+                            >
+                                <Activity className="h-4 w-4 text-slate-400" />
+                                Ops Dashboard
+                            </Link>
+                        )}
                         <Link
                             href="/billing"
                             onClick={() => setOpen(false)}

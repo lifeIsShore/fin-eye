@@ -981,6 +981,89 @@ export async function changePassword(
   }
 }
 
+// ── Ops & Monitoring (CORE-OPS-01) ─────────────────────────────────────────
+
+export interface OpsHealthDto {
+  status: "ok" | "degraded";
+  checked_at: string;
+  components: { database: string; redis: string; pipelines: string };
+  pipeline_issues: string[];
+}
+
+export interface OpsPipelineRow {
+  job_id: string;
+  last_run_at: string;
+  last_duration_ms: number;
+  last_success: boolean;
+  last_detail: string;
+  success_rate_pct: number;
+  total_runs_recorded: number;
+}
+
+export interface OpsRouteStats {
+  route: string;
+  total_requests: number;
+  error_4xx: number;
+  error_5xx: number;
+  error_rate_pct: number;
+  latency_ms: { p50: number | null; p95: number | null; p99: number | null; avg: number | null };
+}
+
+export interface OpsMetricsDto {
+  server_started_at: string;
+  snapshot_at: string;
+  api: { routes: OpsRouteStats[]; total_routes_tracked: number };
+  pipelines: OpsPipelineRow[];
+  inference: { count: number; avg_ms: number | null; p95_ms: number | null };
+}
+
+export interface OpsAlertBreach {
+  type: string;
+  severity: "warning" | "error";
+  message: string;
+  value: number;
+  threshold: number;
+}
+
+export interface OpsAlertsDto {
+  evaluated_at: string;
+  all_clear: boolean;
+  breach_count: number;
+  thresholds: Record<string, number>;
+  breaches: OpsAlertBreach[];
+}
+
+export interface OpsJobDto {
+  id: string;
+  name: string;
+  trigger: string;
+  next_run_at: string | null;
+}
+
+export async function fetchOpsHealth(): Promise<OpsHealthDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ops/health`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch ops health");
+  return res.json();
+}
+
+export async function fetchOpsMetrics(): Promise<OpsMetricsDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ops/metrics`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch ops metrics");
+  return res.json();
+}
+
+export async function fetchOpsAlerts(): Promise<OpsAlertsDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ops/alerts`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch ops alerts");
+  return res.json();
+}
+
+export async function fetchOpsJobs(): Promise<OpsJobDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ops/jobs`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch ops jobs");
+  return res.json();
+}
+
 // ── Showcase / Pro Tools (CORE-SHOP-01, CORE-SHOP-02) ───────────────────────
 
 export interface ShowcaseProductDto {

@@ -62,11 +62,11 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-COMM-01        | Core – Community      | DONE         | 2026-03-06   | /community page, login-gated, Discord + Reddit channels, guidelines, Nav + footer links |
 | CORE-LEGAL-01       | Core – Legal/ToS      | DONE         | 2026-03-05   | ConsentGate + /legal pages + DB consent recording |
 | CORE-GDPR-01        | Core – GDPR           | DONE         | 2026-03-04   | Export + anonymise/delete endpoints; wired into Settings page |
-| CORE-OPS-01         | Core – Monitoring     | NOT_STARTED  | -            | Independent |
+| CORE-OPS-01         | Core – Monitoring     | DONE         | 2026-03-06   | Metrics service + middleware + ops endpoints + frontend admin ops dashboard |
 | CORE-SHOP-01        | Core – Showcase       | DONE         | 2026-03-06   | Product grid + category filter + detail modal + seed catalogue |
 | CORE-SHOP-02        | Core – Showcase       | DONE         | 2026-03-06   | Detail modal + tracked outbound redirect + click stats endpoint |
 | CORE-SEC-01         | Core – Security       | NOT_STARTED  | -            | Depends on AUTH-01 |
-| CORE-SEC-02         | Core – Security       | NOT_STARTED  | -            | Independent |
+| CORE-SEC-02         | Core – Security       | DONE         | 2026-03-06   | pg_dump backup script, restore script, APScheduler job (02:00 UTC), admin UI panel, DR runbook |
 | CORE-ANALYTICS-01   | Core – Analytics      | NOT_STARTED  | -            | Independent |
 | CORE-EXPERIMENT-01  | Core – Experiments    | NOT_STARTED  | -            | Depends on ANALYTICS-01 |
 | CORE-EMAIL-01       | Core – Email          | NOT_STARTED  | -            | Depends on AUTH-01 |
@@ -1811,3 +1811,64 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Next steps**
     - `CORE-OPS-01` + `CORE-SEC-02` (monitoring + backups) — next session.
+
+---
+
+### 2026-03-06 (continued)
+
+**Session — CORE-OPS-01 + CORE-SEC-02: Ops Dashboard & Backups (complete)**
+
+- **Stories completed**
+    - `CORE-OPS-01` — Monitoring: threshold alerting, composite health check, admin ops dashboard. **DONE**
+    - `CORE-SEC-02` — Automated backups, restore script, scheduler integration, DR runbook. **DONE**
+
+- **Files created / modified**
+
+    **Backend**
+    - `backend/app/api/v1/endpoints/ops.py` — Extended with 4 new endpoints:
+        - `GET /ops/health` — composite health check (DB + Redis + pipeline staleness)
+        - `GET /ops/alerts` — threshold breach evaluation against 4 configurable thresholds (API error rate, P95 latency, pipeline success rate, inference P95)
+        - `GET /ops/backup-status` — last backup run + local file listing
+        - `POST /ops/backup-now` — manual backup trigger via background task
+    - `backend/scripts/backup/backup_db.py` — Full backup script:
+        - `pg_dump -Fc` (custom format, internally compressed)
+        - Local rotation: removes dumps older than `BACKUP_RETAIN_DAYS` (default 14)
+        - Optional S3 offsite upload via boto3 (`BACKUP_S3_BUCKET` env var)
+        - Timestamped filenames: `fin_eye_20260306T020000Z.dump`
+    - `backend/scripts/backup/restore_db.py` — Restore script:
+        - `--file PATH` to specify dump
+        - `--drop` flag for full drop-and-recreate recovery
+        - `--dry-run` flag prints commands without executing
+    - `backend/app/services/scheduler.py` — Added `job_backup_db` + registered as APScheduler job at 02:00 UTC daily with 1h misfire grace (backup can be late, never skipped)
+
+    **Frontend**
+    - `frontend/app/admin/ops/page.tsx` — Full admin ops dashboard:
+        - System Health panel: DB/Redis/pipelines status dots, pipeline issue list
+        - Threshold Alerts panel: all-clear state or breach cards per severity
+        - Data Pipeline Jobs table: job ID, last run time-ago, duration, success rate with colour coding, status badge, detail text
+        - Model Inference stats: count, avg, P95 (highlighted red if > 5s)
+        - API Route Metrics table: route, request count, error rate, P50/P95/P99
+        - Scheduled Jobs table: next fire time per APScheduler job
+        - Database Backups panel: file count, last run status, recent files list, "Backup Now" button
+        - Auto-refreshes every 30s (backup panel every 60s)
+    - `frontend/lib/api.ts` — Added full Ops type definitions and fetch functions
+    - `frontend/components/Nav.tsx` — Added "Ops Dashboard" to user menu dropdown (admin-only, guarded by `user.is_admin`)
+
+    **Docs**
+    - `docs/backup-runbook.md` — Full DR runbook: environment variables, manual backup, step-by-step restore (normal + drop-and-recreate), monthly verification procedure, RTO targets, S3 setup guide
+
+- **Acceptance criteria coverage**
+    - ✅ API latency tracked per route (P50/P95/P99) via MetricsMiddleware
+    - ✅ Error rates tracked (4xx/5xx) per route
+    - ✅ Pipeline job outcomes tracked (success/failure/duration/success rate)
+    - ✅ Threshold alerting with configurable thresholds (error rate, latency, pipeline, inference)
+    - ✅ Composite health check endpoint
+    - ✅ Frontend ops dashboard visible to admins only
+    - ✅ Automated DB backup on schedule (02:00 UTC daily)
+    - ✅ Local backup rotation (14 days)
+    - ✅ Manual backup trigger from admin UI
+    - ✅ Restore script with dry-run and --drop options
+    - ✅ Documented DR runbook
+
+- **Next steps**
+    - `CORE-ANALYTICS-01` (product analytics) — next session.
