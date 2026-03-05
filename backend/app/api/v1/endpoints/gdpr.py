@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.models.user import User
-from app.services.auth import get_current_user
+from app.api.v1.deps import get_current_user
 from app.services.gdpr_service import build_user_export_package, anonymise_user
 
 router = APIRouter()

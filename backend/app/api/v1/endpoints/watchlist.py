@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.db.database import get_db
 from app.models.watchlist import WatchlistItem
 from app.models.user import User
-from app.services.auth import get_current_user
+from app.api.v1.deps import get_current_user
 
 router = APIRouter()
 

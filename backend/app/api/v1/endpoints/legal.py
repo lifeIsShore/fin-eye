@@ -7,7 +7,7 @@ from datetime import datetime
 from app.db.database import get_db
 from app.models.legal import LegalConsent, CURRENT_LEGAL_VERSION
 from app.models.user import User
-from app.services.auth import get_current_user
+from app.api.v1.deps import get_current_user
 
 router = APIRouter()
 
