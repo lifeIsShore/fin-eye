@@ -30,6 +30,48 @@ HEDGE_INSTRUMENTS = {
     },
 }
 
+# ── Advanced multi-leg strategy definitions ───────────────────────────────────
+# annual_cost_pct: total annual drag of holding the hedge (premiums + carry)
+# put_cost_pct:    annual cost of the protective put leg
+# call_credit_pct: annual premium received from the short call leg (collar)
+# etf_cost_pct:    expense ratio of inverse ETF leg
+ADV_STRATEGIES: Dict[str, Dict] = {
+    "unhedged": {
+        "label": "Unhedged",
+        "description": "No hedge — full exposure to the underlying.",
+        "annual_cost_pct": 0.0,
+    },
+    "protective_put": {
+        "label": "Protective Put",
+        "description": "Buy an ATM put for downside protection. ~2% annual premium drag.",
+        "annual_cost_pct": 0.02,
+        "put_cost_pct": 0.02,
+    },
+    "collar": {
+        "label": "Collar",
+        "description": (
+            "Long stock + long OTM put (5% below spot) + short OTM call (5% above spot). "
+            "Put premium partially offset by call premium received. ~1% net cost."
+        ),
+        "annual_cost_pct": 0.01,   # net: put ~2% minus call credit ~1%
+        "put_cost_pct": 0.02,
+        "call_credit_pct": 0.01,
+        "put_strike_pct": 0.95,    # 5% OTM put
+        "call_strike_pct": 1.05,   # 5% OTM call (caps upside)
+    },
+    "stock_put_etf": {
+        "label": "Put + Inverse ETF",
+        "description": (
+            "Dual-layer hedge: protective put for tail risk + 25% allocation to SH "
+            "(inverse ETF) for continuous beta offset. ~3% total annual drag."
+        ),
+        "annual_cost_pct": 0.03,
+        "put_cost_pct": 0.02,
+        "etf_cost_pct": 0.0089,
+        "etf_weight": 0.25,        # fraction of portfolio in inverse ETF
+    },
+}
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -357,5 +399,223 @@ def get_full_hedge_analysis(
             "This is a simplified educational simulation, not investment advice. "
             "Actual hedging costs, slippage, and instrument behaviour may differ. "
             "Always consult a qualified advisor before implementing hedging strategies."
+        ),
+    }
+
+
+# ── Advanced Multi-Leg Hedging (P2-HEDGE-ADV-01) ──────────────────────────────
+
+def _simulate_strategy_equity_curve(
+    stock_returns: pd.Series,
+    spy_returns: pd.Series,
+    strategy_key: str,
+    initial_capital: float,
+    beta: float,
+) -> pd.Series:
+    """
+    Simulate a daily equity curve for one strategy given realised daily returns.
+    Returns a Series indexed by date with portfolio value.
+    """
+    cfg = ADV_STRATEGIES.get(strategy_key, ADV_STRATEGIES["unhedged"])
+    daily_cost = cfg["annual_cost_pct"] / 252
+
+    aligned = pd.DataFrame({"stock": stock_returns, "spy": spy_returns}).dropna()
+    portfolio_value = initial_capital
+    curve: List[Dict] = []
+
+    for date, row in aligned.iterrows():
+        r = float(row["stock"])
+        spy_r = float(row["spy"])
+
+        if strategy_key == "unhedged":
+            daily_return = r
+
+        elif strategy_key == "protective_put":
+            # Put absorbs ~80% of downside; full upside minus daily premium drag
+            if r < 0:
+                daily_return = r * 0.20  # put absorbs ~80% of losses
+            else:
+                daily_return = r
+            daily_return -= daily_cost
+
+        elif strategy_key == "collar":
+            put_strike_pct = cfg.get("put_strike_pct", 0.95)  # 5% OTM
+            call_strike_pct = cfg.get("call_strike_pct", 1.05)  # 5% OTM
+            # Put protection: kicks in below ~5% loss threshold
+            if r < -(1 - put_strike_pct):
+                protected_r = -(1 - put_strike_pct)
+            else:
+                protected_r = r
+            # Call cap: surrenders upside above ~5% gain
+            if protected_r > (call_strike_pct - 1):
+                daily_return = (call_strike_pct - 1)
+            else:
+                daily_return = protected_r
+            daily_return -= daily_cost
+
+        elif strategy_key == "stock_put_etf":
+            etf_w = cfg.get("etf_weight", 0.25)
+            stock_w = 1.0 - etf_w
+            # ETF leg provides inverse SPY return scaled by weight
+            etf_r = -spy_r * abs(beta)  # simplified inverse ETF return
+            # Put leg absorbs residual tail: ~60% of downside after ETF
+            if r < 0:
+                stock_leg = r * 0.40  # put absorbs ~60% after ETF offset
+            else:
+                stock_leg = r
+            daily_return = stock_w * stock_leg + etf_w * etf_r
+            daily_return -= daily_cost
+
+        else:
+            daily_return = r
+
+        portfolio_value *= (1 + daily_return)
+        portfolio_value = max(portfolio_value, 0.0)
+        curve.append({"date": str(date.date()), "value": round(portfolio_value, 2)})
+
+    return curve
+
+
+def _compute_drawdown_stats(curve: List[Dict]) -> Dict:
+    """Compute max drawdown and total return from an equity curve list."""
+    if not curve:
+        return {"max_drawdown_pct": 0.0, "total_return_pct": 0.0}
+
+    values = [c["value"] for c in curve]
+    initial = values[0]
+    final = values[-1]
+    total_return_pct = round((final / initial - 1) * 100, 2) if initial > 0 else 0.0
+
+    peak = values[0]
+    max_dd = 0.0
+    for v in values:
+        if v > peak:
+            peak = v
+        dd = (peak - v) / peak if peak > 0 else 0.0
+        if dd > max_dd:
+            max_dd = dd
+
+    return {
+        "max_drawdown_pct": round(max_dd * 100, 2),
+        "total_return_pct": total_return_pct,
+    }
+
+
+def compute_advanced_hedge(
+    symbol: str,
+    portfolio_value: float = 10_000,
+    period: str = "1y",
+    strategies: Optional[List[str]] = None,
+) -> Dict:
+    """
+    Multi-leg hedging analysis (P2-HEDGE-ADV-01).
+
+    Runs all requested strategies over actual historical returns and returns:
+    - Equity curves for each strategy
+    - Summary comparison table (max drawdown, total return, cost)
+    - Payoff table across scenario returns
+    """
+    if strategies is None:
+        strategies = ["unhedged", "protective_put", "collar", "stock_put_etf"]
+
+    symbol = symbol.upper()
+    stock_closes = _fetch_closes(symbol, period)
+    spy_closes = _fetch_closes("SPY", period)
+
+    if stock_closes.empty:
+        return {
+            "symbol": symbol,
+            "error": f"No price data found for {symbol}.",
+        }
+
+    stock_ret = _daily_returns(stock_closes)
+    spy_ret = _daily_returns(spy_closes) if not spy_closes.empty else pd.Series(0.0, index=stock_ret.index)
+
+    # Beta
+    beta_data = compute_beta(symbol, "SPY", period)
+    beta = beta_data["beta"]
+
+    # Run each strategy
+    equity_curves: Dict[str, List] = {}
+    summary_rows: List[Dict] = []
+
+    for strat_key in strategies:
+        if strat_key not in ADV_STRATEGIES:
+            continue
+        cfg = ADV_STRATEGIES[strat_key]
+        curve = _simulate_strategy_equity_curve(
+            stock_ret, spy_ret, strat_key, portfolio_value, beta
+        )
+        equity_curves[strat_key] = curve
+        stats = _compute_drawdown_stats(curve)
+        annual_cost_pct = cfg["annual_cost_pct"]
+        summary_rows.append({
+            "strategy": strat_key,
+            "label": cfg["label"],
+            "description": cfg["description"],
+            "total_return_pct": stats["total_return_pct"],
+            "max_drawdown_pct": stats["max_drawdown_pct"],
+            "annual_cost_pct": round(annual_cost_pct * 100, 2),
+            "annual_cost_usd": round(portfolio_value * annual_cost_pct, 2),
+        })
+
+    # Scenario payoff comparison (static scenarios across strategies)
+    scenario_returns = [r / 100 for r in range(-40, 45, 5)]
+    payoff_comparison: List[Dict] = []
+    for ret in scenario_returns:
+        row: Dict = {"return_pct": round(ret * 100, 1)}
+        for strat_key in strategies:
+            if strat_key not in ADV_STRATEGIES:
+                continue
+            cfg = ADV_STRATEGIES[strat_key]
+            cost = cfg["annual_cost_pct"]
+            if strat_key == "unhedged":
+                final = portfolio_value * (1 + ret)
+            elif strat_key == "protective_put":
+                if ret < 0:
+                    final = portfolio_value * (1 + ret * 0.20) - portfolio_value * cost
+                else:
+                    final = portfolio_value * (1 + ret) - portfolio_value * cost
+            elif strat_key == "collar":
+                put_floor = -(1 - cfg.get("put_strike_pct", 0.95))
+                call_cap = cfg.get("call_strike_pct", 1.05) - 1
+                capped_ret = min(max(ret, put_floor), call_cap)
+                final = portfolio_value * (1 + capped_ret) - portfolio_value * cost
+            elif strat_key == "stock_put_etf":
+                etf_w = cfg.get("etf_weight", 0.25)
+                stock_w = 1.0 - etf_w
+                etf_r = -ret * abs(beta)
+                if ret < 0:
+                    stock_leg = ret * 0.40
+                else:
+                    stock_leg = ret
+                final = portfolio_value * (stock_w * (1 + stock_leg) + etf_w * (1 + etf_r)) - portfolio_value * cost
+            else:
+                final = portfolio_value * (1 + ret)
+            row[strat_key] = round(max(final, 0), 2)
+        payoff_comparison.append(row)
+
+    return {
+        "symbol": symbol,
+        "portfolio_value": portfolio_value,
+        "period": period,
+        "beta": beta_data,
+        "strategies": strategies,
+        "strategy_definitions": [
+            {
+                "key": k,
+                "label": ADV_STRATEGIES[k]["label"],
+                "description": ADV_STRATEGIES[k]["description"],
+                "annual_cost_pct": round(ADV_STRATEGIES[k]["annual_cost_pct"] * 100, 2),
+            }
+            for k in strategies if k in ADV_STRATEGIES
+        ],
+        "equity_curves": equity_curves,
+        "summary": summary_rows,
+        "payoff_comparison": payoff_comparison,
+        "disclaimer": (
+            "Educational simulation only. Multi-leg options pricing is simplified and "
+            "does not reflect real bid-ask spreads, liquidity, margin requirements, or "
+            "assignment risk. Consult a licensed advisor before implementing any hedge."
         ),
     }

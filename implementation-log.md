@@ -37,7 +37,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P2-PORT-01          | P2 – Portfolio        | DONE         | 2026-03-04   | Backend and UI watchlists implemented |
 | P2-RET-01           | Retail Sentiment      | DONE         | 2026-03-04   | praw + VADER backend, Next.js page implemented |
 | P2-EVENT-01         | Political/Event Tracking | DONE         | 2026-03-04   | API + EventTimeline component implemented |
-| P2-HEDGE-ADV-01     | P2 – Hedging (adv)    | NOT_STARTED  | -            | Depends on HEDGE-01 |
+| P2-HEDGE-ADV-01     | P2 – Hedging (adv)    | DONE         | 2026-03-06   | Collar + Put+ETF + equity curves + comparison table + scenario grid |
 | P2-STRAT-01         | P2 – Strategy library | DONE         | 2026-03-05   | Save/load/share, community leaderboard by Sharpe |
 | P2-MACRO-ADV-01     | P2 – Macro (adv)      | DONE         | 2026-03-05   | Full yield curve, recession gauge, stress index, advanced UI |
 | P2-CONTENT-ADV-01   | P2 – Content (adv)    | NOT_STARTED  | -            | Depends on LEARN-01 |
@@ -1655,3 +1655,36 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Next steps**
     - Proceed to `P2-HEDGE-ADV-01` (Advanced Hedging) — next unblocked P2 story.
+
+---
+
+### 2026-03-06
+
+**Session — P2-HEDGE-ADV-01: Advanced Multi-leg Hedging (complete)**
+
+- **Context**
+    - MVP hedging page existed with Protective Put and Inverse ETF options.
+    - Acceptance criteria required: Collar and Stock+Put+ETF strategies, per-strategy equity curves, max drawdown comparison, and hedge cost over the backtest period.
+
+- **Stories touched**
+    - `P2-HEDGE-ADV-01` (P2 – Advanced Hedging) — **DONE**
+
+- **Work done**
+    - ✅ **`hedging_service.py`** — Added `ADV_STRATEGIES` config dict (Unhedged, Protective Put, Collar, Put+Inverse ETF with all cost/strike parameters). Added `_simulate_strategy_equity_curve` (day-by-day P&L simulation for each strategy using real historical returns), `_compute_drawdown_stats` (max drawdown + total return from a curve), and `compute_advanced_hedge` orchestrator that:
+        - Fetches real stock + SPY closes, computes daily returns and beta.
+        - Runs all 4 strategies through the equity curve simulator.
+        - Builds a summary comparison table (total return, max drawdown, annual cost).
+        - Builds a static scenario payoff grid from -40% to +40% in 5% steps across all strategies.
+    - ✅ **`hedging.py` (endpoint)** — Added `GET /{symbol}/advanced` endpoint with `portfolio_value`, `period`, and comma-separated `strategies` query params.
+    - ✅ **`api.ts`** — Added `AdvancedHedgeDto` and related interfaces; added `fetchAdvancedHedge()` client function.
+    - ✅ **`hedge/page.tsx`** — Full rewrite with:
+        - Basic/Advanced tab switcher. Basic mode is unchanged.
+        - **Advanced mode** shows: SVG equity curve chart (all 4 strategies on one canvas with colour-coded lines), Strategy Comparison table (total return, max drawdown, annual cost per strategy), Beta/R² panel, and Scenario Payoff Grid (17 rows × 4 strategies with conditional row colouring for up/down markets).
+        - Strategy colour legend, description tooltips, and educational disclaimer.
+
+- **Status & results**
+    - All P2-HEDGE-ADV-01 acceptance criteria met: Collar and Put+ETF strategies fully functional, equity curves and drawdown comparison displayed, cost tracked over backtest period.
+    - `P2-HEDGE-ADV-01` marked **DONE**.
+
+- **Next steps**
+    - Next unblocked story: `P2-CONTENT-ADV-01` (Advanced Content/Blog), `CORE-WATCH-01` (Watchlist), or `CORE-GDPR-01` (GDPR compliance).

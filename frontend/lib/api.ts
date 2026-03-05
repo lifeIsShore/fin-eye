@@ -307,6 +307,73 @@ export interface HedgeAnalysisDto {
   disclaimer: string;
 }
 
+// ── Advanced Hedging (P2-HEDGE-ADV-01) ─────────────────────────────────────
+
+export interface AdvHedgeStrategyDefinition {
+  key: string;
+  label: string;
+  description: string;
+  annual_cost_pct: number;
+}
+
+export interface AdvHedgeSummaryRow {
+  strategy: string;
+  label: string;
+  description: string;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  annual_cost_pct: number;
+  annual_cost_usd: number;
+}
+
+export interface AdvHedgeEquityCurvePoint {
+  date: string;
+  value: number;
+}
+
+export interface AdvHedgePayoffRow {
+  return_pct: number;
+  unhedged?: number;
+  protective_put?: number;
+  collar?: number;
+  stock_put_etf?: number;
+  [key: string]: number | undefined;
+}
+
+export interface AdvancedHedgeDto {
+  symbol: string;
+  portfolio_value: number;
+  period: string;
+  beta: { symbol: string; benchmark: string; beta: number; r_squared: number; data_points: number };
+  strategies: string[];
+  strategy_definitions: AdvHedgeStrategyDefinition[];
+  equity_curves: Record<string, AdvHedgeEquityCurvePoint[]>;
+  summary: AdvHedgeSummaryRow[];
+  payoff_comparison: AdvHedgePayoffRow[];
+  disclaimer: string;
+  error?: string;
+}
+
+export async function fetchAdvancedHedge(
+  symbol: string,
+  portfolioValue: number = 10000,
+  period: string = "1y",
+  strategies: string = "unhedged,protective_put,collar,stock_put_etf",
+): Promise<AdvancedHedgeDto> {
+  const params = new URLSearchParams({
+    portfolio_value: portfolioValue.toString(),
+    period,
+    strategies,
+  });
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/hedge/${symbol}/advanced?${params}`,
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to load advanced hedge analysis for ${symbol}: ${res.status}`);
+  }
+  return res.json() as Promise<AdvancedHedgeDto>;
+}
+
 export async function fetchHedgeAnalysis(
   symbol: string,
   hedgeType: string = "protective_put",
