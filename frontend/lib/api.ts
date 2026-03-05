@@ -886,6 +886,34 @@ export async function acknowledgeAlert(id: number): Promise<AlertDto> {
   return res.json();
 }
 
+export async function updateProfile(name: string): Promise<{ id: string; email: string; name: string | null; is_pro: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to update profile.");
+  }
+  return res.json();
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/change-password`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to change password.");
+  }
+}
+
 export async function deleteAccount(): Promise<{ message: string; anonymised_at: string }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/gdpr/delete`, {
     method: "POST",

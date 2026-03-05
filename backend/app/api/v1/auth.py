@@ -1,10 +1,12 @@
 """
 app/api/v1/auth.py
 Authentication endpoints:
-  POST /auth/register  — create account
-  POST /auth/login     — get access + refresh tokens
-  POST /auth/refresh   — exchange refresh token for new access token
-  GET  /auth/me        — return current user profile
+  POST /auth/register       — create account
+  POST /auth/login          — get access + refresh tokens
+  POST /auth/refresh        — exchange refresh token for new access token
+  GET  /auth/me             — return current user profile
+  PATCH /auth/me            — update display name
+  POST  /auth/change-password — change password (requires current password)
 """
 import logging
 from typing import Annotated
@@ -17,13 +19,15 @@ from app.core.security import create_access_token, create_refresh_token, decode_
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
+    UpdateProfileRequest,
     UserResponse,
 )
-from app.services.auth_service import authenticate_user, create_user
+from app.services.auth_service import authenticate_user, create_user, update_user_name, change_user_password
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth"])
@@ -96,3 +100,39 @@ async def me(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
     return current_user
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Update display name",
+)
+async def update_profile(
+    body: UpdateProfileRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    return await update_user_name(db, current_user, name=body.name)
+
+
+@router.post(
+    "/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Change password — requires current password for verification",
+)
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    ok = await change_user_password(
+        db,
+        current_user,
+        current_password=body.current_password,
+        new_password=body.new_password,
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )

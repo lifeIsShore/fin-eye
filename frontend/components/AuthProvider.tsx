@@ -7,6 +7,7 @@ interface User {
     id: number;
     email: string;
     is_pro: boolean;
+    name?: string | null;
 }
 
 interface AuthContextType {
@@ -14,6 +15,7 @@ interface AuthContextType {
     loading: boolean;
     login: (token: string, userData: User) => void;
     logout: () => void;
+    updateUser: (patch: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -21,6 +23,7 @@ const AuthContext = createContext<AuthContextType>({
     loading: true,
     login: () => { },
     logout: () => { },
+    updateUser: () => { },
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -74,8 +77,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.push("/auth/login");
     };
 
+    const updateUser = (patch: Partial<User>) => {
+        setUser((prev) => {
+            if (!prev) return prev;
+            const updated = { ...prev, ...patch };
+            localStorage.setItem("user_data", JSON.stringify(updated));
+            return updated;
+        });
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
             {/* Hide rendering until auth state determines if we should redirect or show app */}
             {!loading && children}
         </AuthContext.Provider>

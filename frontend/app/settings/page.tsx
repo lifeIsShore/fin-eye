@@ -4,9 +4,9 @@ import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import {
     User, Lock, Bell, Palette, LogOut, Construction,
-    Download, Trash2, AlertTriangle, Loader2, CheckCircle2, X,
+    Download, Trash2, AlertTriangle, Loader2, CheckCircle2, X, Eye, EyeOff,
 } from "lucide-react";
-import { downloadDataExport, deleteAccount } from "@/lib/api";
+import { downloadDataExport, deleteAccount, updateProfile, changePassword } from "@/lib/api";
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
@@ -28,17 +28,21 @@ function SectionCard({ title, children }: { title: string; children: React.React
     );
 }
 
-function FieldRow({ label, value }: { label: string; value?: string }) {
+function StatusMessage({ type, message }: { type: "success" | "error"; message: string }) {
     return (
-        <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-400">{label}</label>
-            <input
-                type="text"
-                defaultValue={value ?? ""}
-                disabled
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-400 placeholder-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-                placeholder="—"
-            />
+        <div
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${
+                type === "success"
+                    ? "border border-emerald-800/40 bg-emerald-950/30 text-emerald-400"
+                    : "border border-red-800/40 bg-red-950/30 text-red-400"
+            }`}
+        >
+            {type === "success" ? (
+                <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+            ) : (
+                <X className="h-3.5 w-3.5 flex-shrink-0" />
+            )}
+            {message}
         </div>
     );
 }
@@ -62,7 +66,6 @@ function DeleteAccountModal({
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm px-4">
             <div className="w-full max-w-md rounded-2xl border border-red-900/50 bg-slate-900 shadow-2xl">
-                {/* Header */}
                 <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
                     <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-950/50 border border-red-900/40">
@@ -75,7 +78,6 @@ function DeleteAccountModal({
                     </button>
                 </div>
 
-                {/* Body */}
                 <div className="px-6 py-5 space-y-4">
                     <div className="rounded-lg border border-red-900/30 bg-red-950/10 p-4 text-sm text-red-300/90 space-y-1">
                         <p className="font-semibold">This action is permanent and cannot be undone.</p>
@@ -100,12 +102,9 @@ function DeleteAccountModal({
                         />
                     </div>
 
-                    {error && (
-                        <p className="text-xs text-red-400">{error}</p>
-                    )}
+                    {error && <p className="text-xs text-red-400">{error}</p>}
                 </div>
 
-                {/* Footer */}
                 <div className="border-t border-slate-800 px-6 py-4 flex justify-end gap-3">
                     <button
                         onClick={onClose}
@@ -131,20 +130,104 @@ function DeleteAccountModal({
     );
 }
 
+// ─── Password field with show/hide toggle ────────────────────────────────────
+
+function PasswordField({
+    label,
+    value,
+    onChange,
+    placeholder,
+}: {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    placeholder?: string;
+}) {
+    const [show, setShow] = useState(false);
+    return (
+        <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400">{label}</label>
+            <div className="relative">
+                <input
+                    type={show ? "text" : "password"}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={placeholder ?? "••••••••"}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pr-10 text-sm text-slate-200 placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                    type="button"
+                    onClick={() => setShow((s) => !s)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                    {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-    const { user, logout } = useAuth();
+    const { user, logout, updateUser } = useAuth();
 
-    // Data export state
+    // ── Profile state ──────────────────────────────────────────────────────
+    const [displayName, setDisplayName] = useState(user?.name ?? "");
+    const [profileLoading, setProfileLoading] = useState(false);
+    const [profileStatus, setProfileStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+    const handleSaveProfile = async () => {
+        setProfileLoading(true);
+        setProfileStatus(null);
+        try {
+            const updated = await updateProfile(displayName.trim());
+            updateUser({ name: updated.name });
+            setProfileStatus({ type: "success", message: "Display name saved." });
+        } catch (err: unknown) {
+            setProfileStatus({ type: "error", message: err instanceof Error ? err.message : "Save failed." });
+        } finally {
+            setProfileLoading(false);
+            setTimeout(() => setProfileStatus(null), 4000);
+        }
+    };
+
+    // ── Security state ─────────────────────────────────────────────────────
+    const [currentPw, setCurrentPw] = useState("");
+    const [newPw, setNewPw] = useState("");
+    const [confirmPw, setConfirmPw] = useState("");
+    const [pwLoading, setPwLoading] = useState(false);
+    const [pwStatus, setPwStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+    const handleChangePassword = async () => {
+        if (newPw !== confirmPw) {
+            setPwStatus({ type: "error", message: "New passwords don't match." });
+            return;
+        }
+        if (newPw.length < 8) {
+            setPwStatus({ type: "error", message: "New password must be at least 8 characters." });
+            return;
+        }
+        setPwLoading(true);
+        setPwStatus(null);
+        try {
+            await changePassword(currentPw, newPw);
+            setCurrentPw("");
+            setNewPw("");
+            setConfirmPw("");
+            setPwStatus({ type: "success", message: "Password updated successfully." });
+        } catch (err: unknown) {
+            setPwStatus({ type: "error", message: err instanceof Error ? err.message : "Password change failed." });
+        } finally {
+            setPwLoading(false);
+            setTimeout(() => setPwStatus(null), 5000);
+        }
+    };
+
+    // ── Data export state ──────────────────────────────────────────────────
     const [exportLoading, setExportLoading] = useState(false);
     const [exportDone, setExportDone] = useState(false);
     const [exportError, setExportError] = useState<string | null>(null);
-
-    // Delete account state
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [deleteLoading, setDeleteLoading] = useState(false);
-    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     const handleExport = async () => {
         setExportLoading(true);
@@ -161,12 +244,16 @@ export default function SettingsPage() {
         }
     };
 
+    // ── Delete account state ───────────────────────────────────────────────
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteLoading, setDeleteLoading] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
+
     const handleDeleteConfirm = async () => {
         setDeleteLoading(true);
         setDeleteError(null);
         try {
             await deleteAccount();
-            // Account is gone — log out immediately
             logout();
         } catch (err: unknown) {
             setDeleteError(err instanceof Error ? err.message : "Deletion failed.");
@@ -197,7 +284,7 @@ export default function SettingsPage() {
                 <SectionCard title="Profile">
                     <div className="flex items-center gap-4 mb-4">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white font-semibold text-lg">
-                            {user?.email?.[0]?.toUpperCase() ?? "?"}
+                            {(user?.name?.[0] ?? user?.email?.[0] ?? "?").toUpperCase()}
                         </div>
                         <div>
                             <p className="text-sm font-medium text-slate-200">{user?.email ?? "—"}</p>
@@ -206,23 +293,42 @@ export default function SettingsPage() {
                             </span>
                         </div>
                     </div>
-                    <FieldRow label="Display Name" value="" />
-                    <div className="mt-4">
+
+                    <div>
+                        <label className="mb-1.5 block text-xs font-medium text-slate-400">Display Name</label>
+                        <input
+                            type="text"
+                            value={displayName}
+                            onChange={(e) => setDisplayName(e.target.value)}
+                            placeholder="Your name"
+                            maxLength={128}
+                            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    {profileStatus && <StatusMessage type={profileStatus.type} message={profileStatus.message} />}
+
+                    <div className="mt-2">
                         <button
-                            disabled
-                            className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-400 cursor-not-allowed opacity-50"
+                            onClick={handleSaveProfile}
+                            disabled={profileLoading || displayName.trim() === (user?.name ?? "")}
+                            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                         >
-                            Save Changes
-                            <ComingSoonBadge />
+                            {profileLoading ? (
+                                <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+                            ) : (
+                                "Save Changes"
+                            )}
                         </button>
                     </div>
                 </SectionCard>
 
                 {/* Security */}
                 <SectionCard title="Security">
-                    <FieldRow label="Current Password" />
-                    <FieldRow label="New Password" />
-                    <FieldRow label="Confirm New Password" />
+                    <PasswordField label="Current Password" value={currentPw} onChange={setCurrentPw} />
+                    <PasswordField label="New Password" value={newPw} onChange={setNewPw} placeholder="Min. 8 characters" />
+                    <PasswordField label="Confirm New Password" value={confirmPw} onChange={setConfirmPw} placeholder="Repeat new password" />
+
                     <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/50 px-4 py-3">
                         <div className="flex items-center gap-2">
                             <Lock className="h-4 w-4 text-slate-400" />
@@ -236,13 +342,20 @@ export default function SettingsPage() {
                             Enable
                         </button>
                     </div>
+
+                    {pwStatus && <StatusMessage type={pwStatus.type} message={pwStatus.message} />}
+
                     <div className="mt-2">
                         <button
-                            disabled
-                            className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-400 cursor-not-allowed opacity-50"
+                            onClick={handleChangePassword}
+                            disabled={pwLoading || !currentPw || !newPw || !confirmPw}
+                            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                         >
-                            Update Password
-                            <ComingSoonBadge />
+                            {pwLoading ? (
+                                <><Loader2 className="h-4 w-4 animate-spin" /> Updating…</>
+                            ) : (
+                                "Update Password"
+                            )}
                         </button>
                     </div>
                 </SectionCard>
@@ -286,7 +399,7 @@ export default function SettingsPage() {
                     </div>
                 </SectionCard>
 
-                {/* Data & Privacy — GDPR (FUNCTIONAL) */}
+                {/* Data & Privacy */}
                 <SectionCard title="Data & Privacy">
                     <p className="text-xs text-slate-500 leading-relaxed">
                         Under GDPR and applicable privacy law you have the right to access all data
@@ -294,7 +407,6 @@ export default function SettingsPage() {
                         actions are immediate and irreversible.
                     </p>
 
-                    {/* Export */}
                     <div className="rounded-lg border border-slate-700 bg-slate-950/50 px-4 py-4">
                         <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-3">
@@ -321,12 +433,9 @@ export default function SettingsPage() {
                                 )}
                             </button>
                         </div>
-                        {exportError && (
-                            <p className="mt-2 text-xs text-red-400">{exportError}</p>
-                        )}
+                        {exportError && <p className="mt-2 text-xs text-red-400">{exportError}</p>}
                     </div>
 
-                    {/* Delete */}
                     <div className="rounded-lg border border-red-900/30 bg-red-950/10 px-4 py-4">
                         <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-3">

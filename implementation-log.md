@@ -54,7 +54,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-AUTH-01        | Core – Auth           | DONE         | 2026-03-04   | NextAuth/JWT implemented |
 | CORE-SUB-01         | Core – Billing        | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SUB-02         | Core – Billing        | NOT_STARTED  | -            | Depends on SUB-01 |
-| CORE-SET-01         | Core – Settings       | NOT_STARTED  | -            | Depends on AUTH-01 |
+| CORE-SET-01         | Core – Settings       | DONE         | 2026-03-05   | Update name + change password fully wired (backend + frontend) |
 | CORE-WATCH-01       | Core – Watchlist      | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-NOTIF-01       | Core – Notifications  | DONE         | 2026-03-05   | Price/GAS alerts, in-app polling, scheduler-ready |
 | CORE-CMS-01         | Core – Content/CMS    | NOT_STARTED  | -            | Independent |
@@ -1626,3 +1626,32 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Next steps**
     - Manual verification via `/api/v1/health` and `/docs`.
     - Proceed with frontend integration of the new auth endpoints.
+
+---
+
+### 2026-03-05
+
+**Session — CORE-SET-01: Profile & Settings (complete)**
+
+- **Context**
+    - Settings page stub existed with disabled "Save Changes" and "Update Password" buttons marked Coming Soon.
+    - Backend routes for `PATCH /auth/me` and `POST /auth/change-password` had been scaffolded in a prior partial session; service layer and frontend wiring were still missing.
+
+- **Stories touched**
+    - `CORE-SET-01` (Core – Settings) — **DONE**
+
+- **Work done**
+    - ✅ **`auth_service.py`** — Added `update_user_name` (updates `User.name`, commits, refreshes) and `change_user_password` (verifies current password via `verify_password`, hashes and saves new password, returns `bool`).
+    - ✅ **`lib/api.ts`** — Added `updateProfile(name)` (`PATCH /auth/me`) and `changePassword(currentPassword, newPassword)` (`POST /auth/change-password`) client functions.
+    - ✅ **`AuthProvider.tsx`** — Added `name?: string | null` to `User` interface and `updateUser(patch)` helper that merges a partial update into context state and persists to `localStorage`.
+    - ✅ **`settings/page.tsx`** — Fully rewrote Profile and Security sections:
+        - Profile: controlled text input for display name, disabled Save button when value is unchanged, calls `updateProfile` then `updateUser`, shows success/error inline feedback with auto-dismiss.
+        - Security: three password fields with show/hide toggles, client-side validation (match + min length), calls `changePassword`, clears fields on success, shows inline status message.
+        - Removed all "Coming Soon" badges and `disabled` attributes from the two functional sections.
+
+- **Status & results**
+    - All acceptance criteria met: name persists and reflects across app (avatar initial updates immediately); password change requires current password verification.
+    - `CORE-SET-01` marked **DONE**.
+
+- **Next steps**
+    - Proceed to `P2-HEDGE-ADV-01` (Advanced Hedging) — next unblocked P2 story.

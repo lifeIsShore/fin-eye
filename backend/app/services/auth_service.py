@@ -66,3 +66,37 @@ async def authenticate_user(
     if not user.is_active:
         return None
     return user
+
+
+async def update_user_name(
+    db: AsyncSession,
+    user: User,
+    name: Optional[str],
+) -> User:
+    """
+    Update the user's display name and persist the change.
+    """
+    user.name = name
+    await db.commit()
+    await db.refresh(user)
+    logger.info("Updated display name for user id=%s", user.id)
+    return user
+
+
+async def change_user_password(
+    db: AsyncSession,
+    user: User,
+    current_password: str,
+    new_password: str,
+) -> bool:
+    """
+    Verify current_password then replace it with new_password.
+    Returns True on success, False if current_password is wrong.
+    """
+    if not verify_password(current_password, user.hashed_password):
+        return False
+    user.hashed_password = hash_password(new_password)
+    await db.commit()
+    await db.refresh(user)
+    logger.info("Password changed for user id=%s", user.id)
+    return True
