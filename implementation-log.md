@@ -40,7 +40,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P2-HEDGE-ADV-01     | P2 – Hedging (adv)    | DONE         | 2026-03-06   | Collar + Put+ETF + equity curves + comparison table + scenario grid |
 | P2-STRAT-01         | P2 – Strategy library | DONE         | 2026-03-05   | Save/load/share, community leaderboard by Sharpe |
 | P2-MACRO-ADV-01     | P2 – Macro (adv)      | DONE         | 2026-03-05   | Full yield curve, recession gauge, stress index, advanced UI |
-| P2-CONTENT-ADV-01   | P2 – Content (adv)    | NOT_STARTED  | -            | Depends on LEARN-01 |
+| P2-CONTENT-ADV-01   | P2 – Content (adv)    | DONE         | 2026-03-06   | 2008 + 2020 case studies seeded; category filter on Learn page |
 | P3-SENT-ADV-01      | P3 – Sentiment (adv)  | NOT_STARTED  | -            | Depends on SENT-02 |
 | P3-ANALYTICS-01     | P3 – Analytics (adv)  | NOT_STARTED  | -            | Depends on TECH-02 |
 | P3-API-01           | P3 – Public API       | NOT_STARTED  | -            | Depends on AUTH-01 |
@@ -55,13 +55,13 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-SUB-01         | Core – Billing        | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SUB-02         | Core – Billing        | NOT_STARTED  | -            | Depends on SUB-01 |
 | CORE-SET-01         | Core – Settings       | DONE         | 2026-03-05   | Update name + change password fully wired (backend + frontend) |
-| CORE-WATCH-01       | Core – Watchlist      | NOT_STARTED  | -            | Depends on AUTH-01 |
+| CORE-WATCH-01       | Core – Watchlist      | DONE         | 2026-03-04   | Backend + WatchlistWidget + dashboard sidebar integration |
 | CORE-NOTIF-01       | Core – Notifications  | DONE         | 2026-03-05   | Price/GAS alerts, in-app polling, scheduler-ready |
-| CORE-CMS-01         | Core – Content/CMS    | NOT_STARTED  | -            | Independent |
+| CORE-CMS-01         | Core – Content/CMS    | DONE         | 2026-03-05   | CMS CRUD + publish/unpublish + slug generation + migrate_posts script |
 | CORE-CMS-02         | Core – Content/CMS    | DONE         | 2026-03-05   | Admin panel, Markdown Editor, Blog state management, DB migration |
 | CORE-COMM-01        | Core – Community      | NOT_STARTED  | -            | Independent |
-| CORE-LEGAL-01       | Core – Legal/ToS      | NOT_STARTED  | -            | Independent |
-| CORE-GDPR-01        | Core – GDPR           | NOT_STARTED  | -            | Depends on AUTH-01 |
+| CORE-LEGAL-01       | Core – Legal/ToS      | DONE         | 2026-03-05   | ConsentGate + /legal pages + DB consent recording |
+| CORE-GDPR-01        | Core – GDPR           | DONE         | 2026-03-04   | Export + anonymise/delete endpoints; wired into Settings page |
 | CORE-OPS-01         | Core – Monitoring     | NOT_STARTED  | -            | Independent |
 | CORE-SHOP-01        | Core – Showcase       | NOT_STARTED  | -            | Independent |
 | CORE-SHOP-02        | Core – Showcase       | NOT_STARTED  | -            | Depends on SHOP-01 |
@@ -1688,3 +1688,36 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Next steps**
     - Next unblocked story: `P2-CONTENT-ADV-01` (Advanced Content/Blog), `CORE-WATCH-01` (Watchlist), or `CORE-GDPR-01` (GDPR compliance).
+
+---
+
+### 2026-03-06
+
+**Session — P2-CONTENT-ADV-01: Advanced Case Studies & Content (complete) + log reconciliation**
+
+- **Context**
+    - Blog/CMS infrastructure was fully in place (CORE-CMS-01, CORE-CMS-02 done).
+    - User stories file had CORE-WATCH-01, CORE-GDPR-01, CORE-CMS-01, CORE-LEGAL-01 already marked done but implementation log still showed NOT_STARTED.
+    - P2-CONTENT-ADV-01 required a Case Studies category with at least one detailed post referencing how GAS/macro indicators would have behaved.
+
+- **Stories touched**
+    - `P2-CONTENT-ADV-01` (P2 – Advanced Content) — **DONE**
+    - `CORE-WATCH-01`, `CORE-GDPR-01`, `CORE-CMS-01`, `CORE-LEGAL-01` — log reconciled to **DONE**
+
+- **Work done**
+    - ✅ **`scripts/seed_case_studies.py`** — Idempotent seed script that inserts two full case study blog posts directly into the database via the ORM:
+        - *"Case Study: The 2008 Global Financial Crisis"* (12 min read) — reconstructed GAS trajectory, macro score timeline, sentiment arc, technical regime cascade, conflict detector behaviour, and lessons for using Fin-Eye.
+        - *"Case Study: The 2020 COVID-19 Crash & Recovery"* (10 min read) — exogenous shock vs. macro-driven crises, fastest sentiment collapse on record, multi-timeframe cascade table, V-shape recovery dynamics, and Technical vs. Macro conflict during April–June 2020.
+        - Both posts include prominent hindsight/educational disclaimers and reference actual GAS score tables.
+    - ✅ **`frontend/app/learn/page.tsx`** — Converted from server component to client component and added:
+        - Category filter pill bar (dynamically built from post categories, sorted by defined priority order).
+        - "Case Studies" pills rendered in violet to visually distinguish them from standard categories.
+        - Contextual hero banner shown when Case Studies filter is active, explaining the retrospective nature of the content.
+        - Loading and error states via SWR.
+
+- **Status & results**
+    - P2-CONTENT-ADV-01 acceptance criteria met: Case Studies category exists with 2 detailed posts referencing GAS/macro, videos placeholder noted for future (no video embeds currently required for v1).
+    - Log reconciled: 4 previously-done stories now correctly marked DONE.
+
+- **Next steps**
+    - True remaining NOT_STARTED unblocked stories: `CORE-COMM-01` (Community integration), `CORE-OPS-01` (Monitoring), `CORE-SHOP-01/02` (Showcase), `CORE-SEC-01` (2FA), `CORE-ANALYTICS-01` (Product analytics).
