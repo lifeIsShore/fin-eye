@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = Field(default="development", alias="ENVIRONMENT")
     debug: bool = False
+    allowed_origins: list[str] = Field(default=["*"], alias="ALLOWED_ORIGINS")
 
     # Database
     database_url: str = Field(
@@ -23,8 +24,10 @@ class Settings(BaseSettings):
     fred_api_key: str = Field(default="", alias="FRED_API_KEY")
 
     # JWT
-    jwt_secret: str = Field(default="change-in-production", alias="JWT_SECRET")
-    jwt_algorithm: str = "HS256"
+    secret_key: str = Field(default="change-in-production", alias="JWT_SECRET")
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
     require_auth: bool = Field(default=False, alias="REQUIRE_AUTH")
 
     # Model storage (local filesystem for MVP)
@@ -35,3 +38,6 @@ class Settings(BaseSettings):
         case_sensitive = False
 
 settings = Settings()
+
+def get_settings() -> Settings:
+    return settings

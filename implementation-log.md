@@ -1358,3 +1358,27 @@ This log tracks implementation progress for each user story in `user-stories.md`
     - Run `python -m py_compile app/main.py app/services/scheduler.py` to verify syntax.
     - Manual verification of scheduler job execution.
     - Proceed with remaining Phase 2 stories.
+
+---
+
+### 2026-03-05 (continued)
+
+**Session 45 – Backend Consolidation & Auth Integration**
+
+- **Context**
+    - After the authentication refactor, `main.py` contained duplicated `FastAPI` app instances and redundant imports. Additionally, the existing `database.py` and `config.py` were missing support for `AsyncSession` and JWT settings required by the new auth services. This session consolidates the foundation and unifies the API routing.
+
+- **Stories touched**
+    - `MVP-AUTH-01` (Registration & Login)
+    - `MVP-AUTH-04` (Consolidation)
+
+- **Work done**
+    - ✅ **Configuration Alignment** — Updated `app/config.py` with `secret_key`, `algorithm`, `access_token_expire_minutes`, and `refresh_token_expire_days`. Added `get_settings()` and `allowed_origins`.
+    - ✅ **Database Modernisation** — Updated `app/db/database.py` to support SQLAlchemy 2.0 `AsyncSession` and `async_sessionmaker`. `get_db()` refactored to an async generator.
+    - ✅ **Health Monitoring** — Created `app/api/v1/health.py` with async DB and Redis connectivity checks.
+    - ✅ **Main App Unification** — Rewrote `app/main.py` from scratch. Unified the `lifespan` manager (DB init, async test connection, Redis init, Scheduler). Consolidated all 15+ API routers under versioned `/api/v1/` prefixes.
+    - ✅ **Syntax Verification** — Verified full compilation of `main.py`, `database.py`, `config.py`, and all `v1` routers using `py_compile`.
+    - ✅ **Cleanup** — Deleted redundant `app/api/v1/endpoints/auth.py` and `app/services/auth.py`.
+
+- **Status & results**
+    - Backend is clean, unified, and supports the new async authentication architecture. All services are properly initialized during the application lifespan.

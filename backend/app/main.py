@@ -1,36 +1,58 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import logging
 
-from app.config import settings
+from app.config import get_settings
 from app.db.database import init_db, test_db_connection
-from app.db.redis_client import init_redis, close_redis, redis_client
-from app.api.v1.endpoints import macro, sentiment, technical, explanation, hedging, auth, portfolios, backtesting, events, watchlist, legal, gdpr, cms, data
+from app.db.redis_client import init_redis, close_redis
 from app.services.scheduler import setup_scheduler
 
+# Import versioned routers
+from app.api.v1.health import router as health_router
+from app.api.v1.data import router as data_router
+from app.api.v1.auth import router as auth_router
+
+# Import existing endpoint routers
+from app.api.v1.endpoints import (
+    macro, sentiment, technical, explanation, hedging,
+    portfolios, backtesting, events, watchlist, legal, gdpr, cms
+)
+
+# Configuration
+settings = get_settings()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    logger.info("🚀 Starting Fin-Eye...")
-    test_db_connection()
+    """
+    Handle application startup and shutdown events.
+    """
+    logger.info("🚀 Starting Fin-Eye Backend...")
+    
+    # 1. Initialize Database (Sync tables creation)
     init_db()
+    
+    # 2. Test Database Connection (Async)
+    await test_db_connection()
+    
+    # 3. Initialize Redis
     await init_redis()
-
-    # Start APScheduler
+    
+    # 4. Setup and Start Scheduler
     scheduler = setup_scheduler()
     scheduler.start()
-    logger.info("APScheduler started with %d jobs.", len(scheduler.get_jobs()))
-
+    logger.info("📅 APScheduler started with %d jobs.", len(scheduler.get_jobs()))
+    
     yield
+    
     # Shutdown
-    logger.info("🛑 Shutting down Fin-Eye...")
+    logger.info("🛑 Shutting down Fin-Eye Backend...")
     scheduler.shutdown(wait=False)
-    logger.info("APScheduler stopped.")
     await close_redis()
+    logger.info("👋 Shutdown complete.")
 
 app = FastAPI(
     title=settings.app_name,
@@ -38,87 +60,41 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/health")
-async def health_check() -> dict:
-    redis_status = "connected" if redis_client and await redis_client.ping() else "disconnected"
-    return {"status": "ok", "version": settings.app_version, "redis_status": redis_status}
-
 @app.get("/")
 async def root() -> dict:
-    return {"message": "Fin-Eye Backend", "docs": "/docs"}
+    return {
+        "message": "Fin-Eye API",
+        "version": settings.app_version,
+        "docs": "/docs",
+        "health": "/api/v1/health"
+    }
 
-app.include_router(macro.router, prefix="/api/v1/macro", tags=["macro"])
-app.include_router(
-    sentiment.router,
-    prefix="/api/v1/sentiment",
-    tags=["sentiment"],
-)
-app.include_router(
-    technical.router,
-    prefix="/api/v1/technical",
-    tags=["technical"],
-)
-app.include_router(
-    explanation.router,
-    prefix="/api/v1/explanation",
-    tags=["explanation"],
-)
-app.include_router(
-    hedging.router,
-    prefix="/api/v1/hedge",
-    tags=["hedging"],
-)
-app.include_router(
-    auth.router,
-    prefix="/api/v1/auth",
-    tags=["auth"],
-)
-app.include_router(
-    portfolios.router,
-    prefix="/api/v1/portfolios",
-    tags=["portfolios"],
-)
-app.include_router(
-    backtesting.router,
-    prefix="/api/v1/backtest",
-    tags=["backtesting"],
-)
-app.include_router(
-    events.router,
-    prefix="/api/v1/events",
-    tags=["events"],
-)
-app.include_router(
-    watchlist.router,
-    prefix="/api/v1/watchlist",
-    tags=["watchlist"],
-)
-app.include_router(
-    legal.router,
-    prefix="/api/v1/legal",
-    tags=["legal"],
-)
-app.include_router(
-    gdpr.router,
-    prefix="/api/v1/gdpr",
-    tags=["gdpr"],
-)
-app.include_router(
-    cms.router,
-    prefix="/api/v1/cms",
-    tags=["cms"],
-)
-app.include_router(
-    data.router,
-    prefix="/api/v1/data",
-    tags=["data pipelines"],
-)
+# --- Include Routers ---
+
+# Core API v1 (Consolidated)
+app.include_router(health_router, prefix="/api/v1/health", tags=["Health"])
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
+app.include_router(data_router, prefix="/api/v1/data", tags=["Data Pipelines"])
+
+# Domain Specific Endpoints (v1)
+app.include_router(macro.router, prefix="/api/v1/macro", tags=["Macro Analysis"])
+app.include_router(sentiment.router, prefix="/api/v1/sentiment", tags=["Sentiment Analysis"])
+app.include_router(technical.router, prefix="/api/v1/technical", tags=["Technical Analysis"])
+app.include_router(explanation.router, prefix="/api/v1/explanation", tags=["AI Explanations"])
+app.include_router(hedging.router, prefix="/api/v1/hedge", tags=["Hedging Strategy"])
+app.include_router(portfolios.router, prefix="/api/v1/portfolios", tags=["Portfolio Management"])
+app.include_router(backtesting.router, prefix="/api/v1/backtest", tags=["Backtesting"])
+app.include_router(events.router, prefix="/api/v1/events", tags=["Market Events"])
+app.include_router(watchlist.router, prefix="/api/v1/watchlist", tags=["Watchlist"])
+app.include_router(legal.router, prefix="/api/v1/legal", tags=["Legal & Privacy"])
+app.include_router(gdpr.router, prefix="/api/v1/gdpr", tags=["GDPR Data Rights"])
+app.include_router(cms.router, prefix="/api/v1/cms", tags=["Content Management"])
