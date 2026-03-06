@@ -5,8 +5,9 @@ from datetime import date
 
 # Import all models so Base.metadata is fully populated before
 # conftest.py creates the SQLite in-memory schema.
-import app.models  # noqa: F401 — side-effect import
+import app.models  # noqa: F401
 from app.models.macro import MacroIndicator
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Mock data for our database
 mock_macro_data = [
@@ -18,10 +19,10 @@ mock_macro_data = [
 ]
 
 @pytest.mark.asyncio
-async def test_get_latest_macro_dashboard(client: AsyncClient, test_app, test_db):
-    # Setup test DB - test_db is injected via conftest.py and also wired into the client
+async def test_get_latest_macro_dashboard(client: AsyncClient, test_app, test_db: AsyncSession):
+    # Setup test DB - test_db is an AsyncSession
     test_db.add_all(mock_macro_data)
-    test_db.commit()
+    await test_db.commit()
 
     response = await client.get("/api/v1/macro/latest")
     assert response.status_code == 200
@@ -56,8 +57,9 @@ async def test_refresh_macro_data(mock_refresh, client: AsyncClient):
     mock_refresh.return_value = None
     
     response = await client.post("/api/v1/macro/refresh")
-    assert response.status_code == 200
+    # Endpoint now returns 202 Accepted and "status": "accepted"
+    assert response.status_code == 202
     
     data = response.json()
-    assert data["status"] == "success"
+    assert data["status"] == "accepted"
     mock_refresh.assert_called_once()
