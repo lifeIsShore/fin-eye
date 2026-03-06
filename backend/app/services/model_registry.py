@@ -66,7 +66,7 @@ class InMemoryModelRegistry:
                 continue
             if symbol is not None and record.symbol != symbol:
                 continue
-                return record
+            return record
         return None
 
 

@@ -281,7 +281,8 @@ class DbFeatureBuilder:
                 if "vix" in wide.columns and pd.notna(wide.at[d, "vix"])
                 else None,
             }
-            macro_scores.append(compute_macro_score(indicators)["score"])
+            _ms = compute_macro_score(indicators)
+            macro_scores.append(_ms.score if hasattr(_ms, "score") else _ms.get("score", 50.0))
         macro_score_by_date = pd.Series(macro_scores, index=wide.index).fillna(50.0)
 
         # Map date-indexed macro series back to timestamp index (same order as ohlcv_df)

@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     # Model storage (local filesystem for MVP)
     model_store_dir: str = Field(default="model_store", alias="MODEL_STORE_DIR")
 
+    # OHLCV pipeline defaults
+    ohlcv_lookback_years: int = Field(default=5, alias="OHLCV_LOOKBACK_YEARS")
+    ohlcv_symbols_default: list[str] = Field(
+        default=["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "SPY", "QQQ", "NVDA"],
+        alias="OHLCV_SYMBOLS_DEFAULT",
+    )
+
     class Config:
         env_file = ".env"
         case_sensitive = False

@@ -92,27 +92,24 @@ async def job_fetch_ohlcv_intraday() -> None:
 
 async def job_fetch_macro() -> None:
     """Fetch FRED macro data and recompute the daily macro score."""
-    from app.services.macro_data import MacroFetcher  # noqa: PLC0415
+    from app.services.macro_orchestrator import refresh_all_macro_indicators  # noqa: PLC0415
     from app.services.cache import get_cache  # noqa: PLC0415
 
     logger.info("Starting macro fetch job")
     started = datetime.now(timezone.utc).isoformat()
     t0 = time.perf_counter()
     try:
-        fetcher = MacroFetcher()
-        cache = get_cache()
         async with AsyncSessionLocal() as session:
-            await fetcher.fetch_and_store(session)
-            score_data = await fetcher.compute_and_store_score(session)
-            await session.commit()
-        if score_data:
-            await cache.set_macro(score_data)
-            logger.info("Macro score updated in cache: %s", score_data)
+            await refresh_all_macro_indicators(session)
+            # session.commit() is already called inside refresh_all_macro_indicators
+        cache = get_cache()
+        if cache:
+            await cache.set("macro:last_refresh", started)
+            logger.info("Macro refresh complete, cache updated")
         get_metrics().record_pipeline_run(
             "fetch_macro", started,
             datetime.now(timezone.utc).isoformat(),
-            (time.perf_counter() - t0) * 1000, True,
-            f"score={score_data.get('score') if score_data else 'n/a'}",
+            (time.perf_counter() - t0) * 1000, True, "ok",
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("Macro fetch failed: %s", exc)

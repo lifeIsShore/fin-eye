@@ -89,37 +89,46 @@ class NewsFetcher:
             logger.error(f"Failed to fetch news for {symbol}: {e}")
             return []
 
-    async def fetch_and_store(self, db: Session, symbols: Optional[List[str]] = None, lookback_days: int = 7) -> dict:
-        """Fetch and store news for multiple symbols."""
-        from app.config import settings
+    async def fetch_and_store(self, db, symbols: Optional[List[str]] = None, lookback_days: int = 7) -> dict:
+        """Fetch and store news for multiple symbols. Accepts both sync and async sessions."""
+        from app.config import settings as _settings
         from app.models.sentiment import NewsArticle
         from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
 
-        symbols = symbols or settings.ohlcv_symbols_default
+        _is_async = isinstance(db, _AsyncSession)
+        symbols = symbols or _settings.ohlcv_symbols_default
         results = {}
 
         for symbol in symbols:
             news_items = await self.fetch_recent_news(symbol, days_back=lookback_days)
             symbol_count = 0
             for item in news_items:
-                # Basic deduplication by title/symbol/date
                 stmt = select(NewsArticle).where(
                     NewsArticle.symbol == item.symbol,
                     NewsArticle.title == item.title,
-                    NewsArticle.published_at == item.published_at
+                    NewsArticle.published_at == item.published_at,
                 )
-                existing = db.execute(stmt).scalar_one_or_none()
+                if _is_async:
+                    result = await db.execute(stmt)
+                    existing = result.scalar_one_or_none()
+                else:
+                    existing = db.execute(stmt).scalar_one_or_none()
+
                 if not existing:
                     article = NewsArticle(
                         symbol=item.symbol,
                         title=item.title,
                         source=item.source,
                         published_at=item.published_at,
-                        sentiment_score=item.sentiment_score
+                        sentiment_score=item.sentiment_score,
                     )
                     db.add(article)
                     symbol_count += 1
             results[symbol] = symbol_count
 
-        db.commit()
+        if _is_async:
+            await db.commit()
+        else:
+            db.commit()
         return results
