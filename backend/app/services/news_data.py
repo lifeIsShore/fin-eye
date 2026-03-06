@@ -1,5 +1,6 @@
 import httpx
 from typing import List, Optional
+from sqlalchemy.orm import Session
 import logging
 from datetime import datetime, timedelta
 import pytz
