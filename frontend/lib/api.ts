@@ -1545,6 +1545,44 @@ export async function fetchExperimentResults(
   return res.json();
 }
 
+// ─── Email Preferences (CORE-EMAIL-01/02) ────────────────────────────────────
+
+export interface EmailPreferenceDto {
+  marketing_opted_in: boolean;
+  digest_opted_in: boolean;
+  digest_frequency: "weekly" | "biweekly";
+  onboarding_step: number;
+}
+
+export async function fetchEmailPreferences(): Promise<EmailPreferenceDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/email/preferences`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load email preferences");
+  return res.json();
+}
+
+export async function updateEmailPreferences(
+  patch: Partial<Pick<EmailPreferenceDto, "marketing_opted_in" | "digest_opted_in" | "digest_frequency">>,
+): Promise<EmailPreferenceDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/email/preferences`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error("Failed to update email preferences");
+  return res.json();
+}
+
+export async function unsubscribeByToken(token: string): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/email/unsubscribe?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Invalid or expired unsubscribe token");
+  return res.json();
+}
+
 export async function deleteAccount(): Promise<{ message: string; anonymised_at: string }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/gdpr/delete`, {
     method: "POST",

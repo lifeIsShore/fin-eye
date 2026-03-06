@@ -30,6 +30,9 @@ fredapi>=0.5.1
 requests>=2.31.0
 httpx>=0.27.0
 
+# Email (CORE-EMAIL-01/02) — Resend via httpx REST (no extra SDK needed)
+# resend>=0.7.0  # Optional: install if you prefer the official SDK
+
 # NLP / Sentiment
 transformers>=4.38.0
 torch>=2.2.0

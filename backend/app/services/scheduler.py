@@ -123,6 +123,81 @@ async def job_fetch_macro() -> None:
         )
         raise
 
+async def job_onboarding_day3() -> None:
+    """Send Day-3 onboarding email to eligible users."""
+    from app.services.onboarding_email_service import run_onboarding_day3_batch  # noqa: PLC0415
+
+    logger.info("Starting onboarding day-3 email job")
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            sent = await run_onboarding_day3_batch(session)
+        get_metrics().record_pipeline_run(
+            "onboarding_day3", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, f"sent={sent}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Onboarding day-3 job failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "onboarding_day3", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+
+
+async def job_onboarding_day7() -> None:
+    """Send Day-7 onboarding email to eligible users."""
+    from app.services.onboarding_email_service import run_onboarding_day7_batch  # noqa: PLC0415
+
+    logger.info("Starting onboarding day-7 email job")
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            sent = await run_onboarding_day7_batch(session)
+        get_metrics().record_pipeline_run(
+            "onboarding_day7", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, f"sent={sent}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Onboarding day-7 job failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "onboarding_day7", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+
+
+async def job_weekly_digest() -> None:
+    """Send weekly digest to all opted-in users. Bi-weekly users get it on even ISO weeks."""
+    from app.services.onboarding_email_service import run_weekly_digest_batch  # noqa: PLC0415
+
+    week_number = datetime.now(timezone.utc).isocalendar()[1]
+    is_biweekly_week = (week_number % 2 == 0)
+
+    logger.info("Starting weekly digest job (week=%d, biweekly=%s)", week_number, is_biweekly_week)
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            sent = await run_weekly_digest_batch(session, is_biweekly_week=is_biweekly_week)
+        get_metrics().record_pipeline_run(
+            "weekly_digest", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, f"sent={sent}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Weekly digest job failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "weekly_digest", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+
+
 async def job_backup_db() -> None:
     """Run a full PostgreSQL backup and rotate old local copies."""
     import sys, os  # noqa: PLC0415
@@ -224,6 +299,36 @@ def setup_scheduler() -> AsyncIOScheduler:
         name="Fetch Finnhub News",
         replace_existing=True,
         misfire_grace_time=300,
+    )
+
+    # Onboarding email Day-3 — daily at 09:00 UTC
+    scheduler.add_job(
+        job_onboarding_day3,
+        trigger=CronTrigger(hour=9, minute=0),
+        id="onboarding_day3",
+        name="Onboarding Email Day 3",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+    # Onboarding email Day-7 — daily at 09:05 UTC
+    scheduler.add_job(
+        job_onboarding_day7,
+        trigger=CronTrigger(hour=9, minute=5),
+        id="onboarding_day7",
+        name="Onboarding Email Day 7",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+    # Weekly digest — every Monday at 08:00 UTC
+    scheduler.add_job(
+        job_weekly_digest,
+        trigger=CronTrigger(day_of_week="mon", hour=8, minute=0),
+        id="weekly_digest",
+        name="Weekly Email Digest",
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
 
     # DB backup — daily at 02:00 UTC (low traffic, before market open)

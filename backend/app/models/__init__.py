@@ -11,3 +11,4 @@ from app.models.alert import Alert
 from app.models.strategy import SavedStrategy
 from app.models.analytics import AnalyticsEvent
 from app.models.experiment import Experiment, ExperimentAssignment
+from app.models.email_preference import EmailPreference, EmailLog

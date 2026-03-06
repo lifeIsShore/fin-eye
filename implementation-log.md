@@ -69,8 +69,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-SEC-02         | Core – Security       | DONE         | 2026-03-06   | pg_dump backup script, restore script, APScheduler job (02:00 UTC), admin UI panel, DR runbook |
 | CORE-ANALYTICS-01   | Core – Analytics      | DONE         | 2026-03-06   | Self-hosted Postgres analytics, beacon endpoint, admin dashboard |
 | CORE-EXPERIMENT-01  | Core – Experiments    | DONE         | 2026-03-06   | Deterministic SHA-256 assignment, Postgres-backed, results from analytics_events |
-| CORE-EMAIL-01       | Core – Email          | NOT_STARTED  | -            | Depends on AUTH-01 |
-| CORE-EMAIL-02       | Core – Email          | NOT_STARTED  | -            | Depends on EMAIL-01 |
+| CORE-EMAIL-01       | Core – Email          | DONE         | 2026-03-06   | Resend integration, 3-email onboarding, opt-out, deduplication |
+| CORE-EMAIL-02       | Core – Email          | DONE         | 2026-03-06   | Weekly digest, digest opt-in toggle, biweekly support, GDPR unsubscribe |
 
 ---
 
@@ -2014,3 +2014,52 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Next steps**
     - `CORE-EMAIL-01` (onboarding sequence, Resend) — pending Resend API key + from-address from user.
     - `CORE-EMAIL-02` (weekly digest) — depends on EMAIL-01.
+
+---
+
+### 2026-03-06 (continued)
+
+**Session — CORE-EMAIL-01 + CORE-EMAIL-02: Email System (complete)**
+
+- **Context & Design decisions**
+    - Resend REST API called directly via `httpx` — no additional SDK dependency (`httpx` was already in `requirements.txt`).
+    - Sending address: `noreply@fin-eye.com`.
+    - 3-email onboarding sequence (welcome / day-3 tips / day-7 power features) with step tracking in `EmailPreference.onboarding_step` and deduplication via `EmailLog` (unique constraint on `user_id + email_type`).
+    - Marketing opt-out respected by Day-3 and Day-7 batch jobs before sending.
+    - Weekly digest is an explicit double opt-in (separate toggle from marketing, defaults to `False`).
+    - Bi-weekly support: users on "biweekly" frequency get the digest on even ISO week numbers only.
+    - One-click GDPR unsubscribe via a URL-safe 32-byte `unsubscribe_token` stored in `EmailPreference`. Token used as credential — no login required. Sets both `marketing_opted_in=False` and `digest_opted_in=False`.
+    - Welcome email triggered **immediately at signup** inside the `/auth/register` endpoint (wrapped in try/except — never breaks registration).
+    - Day-3 and Day-7 emails sent by daily APScheduler jobs (09:00 and 09:05 UTC).
+    - Weekly digest sent by a Monday 08:00 UTC APScheduler job.
+    - All email jobs recorded in the `ops` metrics pipeline for monitoring.
+
+- **Stories completed**
+    - `CORE-EMAIL-01` (Onboarding Sequence) — **DONE**
+    - `CORE-EMAIL-02` (Weekly Digest) — **DONE**
+
+- **Backend**
+    - ✅ `app/services/email_service.py` — low-level Resend REST sender + 4 HTML email templates (welcome, day3, day7, weekly digest). Dark-mode, responsive, branded HTML. Educational disclaimer in every footer.
+    - ✅ `app/models/email_preference.py` — `EmailPreference` (step, marketing_opted_in, digest_opted_in, digest_frequency, unsubscribe_token) + `EmailLog` (deduplication, unique on user+type).
+    - ✅ `app/services/onboarding_email_service.py` — orchestration: `trigger_onboarding_welcome`, `run_onboarding_day3_batch`, `run_onboarding_day7_batch`, `run_weekly_digest_batch`, `_build_macro_summary` (pulls live macro indicators for digest context).
+    - ✅ `app/api/v1/endpoints/email.py` — `GET/PATCH /email/preferences` (auth-protected), `GET/POST /email/unsubscribe?token=` (no auth required).
+    - ✅ `app/config.py` — `RESEND_API_KEY`, `FROM_EMAIL`, `FRONTEND_URL` settings added.
+    - ✅ `app/api/v1/auth.py` — `trigger_onboarding_welcome` called on register (non-fatal).
+    - ✅ `app/services/scheduler.py` — 3 new jobs: `onboarding_day3` (daily 09:00), `onboarding_day7` (daily 09:05), `weekly_digest` (Monday 08:00).
+    - ✅ `app/models/__init__.py` + `app/main.py` — model and router registered.
+    - ✅ `alembic/versions/g7a8b9c0d1e2_add_email_preferences_and_logs.py` — creates `email_preferences` and `email_logs` tables.
+    - ✅ `.env.example` — documented `RESEND_API_KEY`, `FROM_EMAIL`, `FRONTEND_URL`.
+
+- **Frontend**
+    - ✅ `frontend/lib/api.ts` — `EmailPreferenceDto`, `fetchEmailPreferences`, `updateEmailPreferences`, `unsubscribeByToken`.
+    - ✅ `frontend/app/settings/page.tsx` — replaced Coming-Soon Notifications section with live `EmailPreferencesSection`: marketing opt-in toggle, digest opt-in toggle, weekly/biweekly frequency picker (shown when digest is on), inline save feedback.
+    - ✅ `frontend/app/unsubscribe/page.tsx` — token-based one-click unsubscribe page (no login required). Handles loading/success/error/no-token states.
+
+- **Activation instructions**
+    1. Add to `.env`: `RESEND_API_KEY=re_Cxjiqnrb_9wRqaUHN9FRG6e88VDC2HvBS` and `FROM_EMAIL=noreply@fin-eye.com` and `FRONTEND_URL=https://your-domain.com`.
+    2. Run `alembic upgrade head` to create the two new tables.
+    3. New signups will receive the welcome email automatically. Day-3/Day-7 batches fire from the scheduler. Users can enable the weekly digest from Settings → Notifications & Email.
+
+- **Next steps**
+    - `CORE-SUB-01` (Stripe billing) — when Stripe credentials are available.
+    - Remaining P3 stories (SENT-ADV-01, ANALYTICS-01, API-01, etc.).

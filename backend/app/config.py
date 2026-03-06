@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     require_auth: bool = Field(default=False, alias="REQUIRE_AUTH")
 
+    # Email (CORE-EMAIL-01/02) — Resend integration
+    resend_api_key: str = Field(default="", alias="RESEND_API_KEY")
+    from_email: str = Field(default="noreply@fin-eye.com", alias="FROM_EMAIL")
+    frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
+
     # Two-Factor Authentication (TOTP) — CORE-SEC-01
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     totp_encryption_key: str = Field(default="", alias="TOTP_ENCRYPTION_KEY")

@@ -103,6 +103,14 @@ async def register(
     except Exception:
         logger.warning("Analytics: failed to record user_signed_up", exc_info=True)
 
+    # ── Trigger onboarding email sequence (CORE-EMAIL-01) ──────────────────
+    try:
+        from app.services.onboarding_email_service import trigger_onboarding_welcome  # noqa: PLC0415
+        await trigger_onboarding_welcome(db, user)
+        await db.commit()
+    except Exception:
+        logger.warning("Email: failed to send welcome email for user_id=%s", user.id, exc_info=True)
+
     return user
 
 

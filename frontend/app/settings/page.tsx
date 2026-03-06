@@ -10,7 +10,8 @@ import {
 import {
     downloadDataExport, deleteAccount, updateProfile, changePassword,
     setup2fa, enable2fa, disable2fa, get2faStatus,
-    type TotpSetupDto,
+    fetchEmailPreferences, updateEmailPreferences,
+    type TotpSetupDto, type EmailPreferenceDto,
 } from "@/lib/api";
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
@@ -391,7 +392,142 @@ function TwoFactorSection() {
     );
 }
 
-// ─── Main page ───────────────────────────────────────────────────────────────
+// ─── Email / Notifications section (CORE-EMAIL-01/02) ─────────────────────
+
+function Toggle({
+    checked,
+    onChange,
+    disabled,
+}: {
+    checked: boolean;
+    onChange: (v: boolean) => void;
+    disabled?: boolean;
+}) {
+    return (
+        <button
+            role="switch"
+            aria-checked={checked}
+            onClick={() => !disabled && onChange(!checked)}
+            disabled={disabled}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                checked ? "bg-blue-600" : "bg-slate-700"
+            } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+        >
+            <span
+                className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+                    checked ? "translate-x-[18px]" : "translate-x-1"
+                }`}
+            />
+        </button>
+    );
+}
+
+function EmailPreferencesSection() {
+    const [prefs, setPrefs] = useState<EmailPreferenceDto | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+    useEffect(() => {
+        fetchEmailPreferences()
+            .then(setPrefs)
+            .catch(() => setPrefs(null));
+    }, []);
+
+    const update = async (patch: Partial<Pick<EmailPreferenceDto, "marketing_opted_in" | "digest_opted_in" | "digest_frequency">>) => {
+        setSaving(true);
+        setStatus(null);
+        try {
+            const updated = await updateEmailPreferences(patch);
+            setPrefs(updated);
+            setStatus({ type: "success", message: "Email preferences saved." });
+        } catch {
+            setStatus({ type: "error", message: "Failed to save preferences." });
+        } finally {
+            setSaving(false);
+            setTimeout(() => setStatus(null), 3000);
+        }
+    };
+
+    if (!prefs) {
+        return (
+            <div className="flex items-center gap-2 text-xs text-slate-500 py-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading email preferences…
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-3">
+            {/* Marketing / onboarding emails */}
+            <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3">
+                <div className="flex items-start gap-2.5">
+                    <Bell className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-400" />
+                    <div>
+                        <p className="text-sm text-slate-300">Onboarding &amp; product emails</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            Tips, feature announcements, and the 3-email welcome sequence.
+                        </p>
+                    </div>
+                </div>
+                <Toggle
+                    checked={prefs.marketing_opted_in}
+                    onChange={(v) => update({ marketing_opted_in: v })}
+                    disabled={saving}
+                />
+            </div>
+
+            {/* Weekly digest */}
+            <div className="rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3 space-y-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-2.5">
+                        <Bell className="mt-0.5 h-4 w-4 flex-shrink-0 text-indigo-400" />
+                        <div>
+                            <p className="text-sm text-slate-300">Weekly market digest</p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Optional email with macro snapshot, recent articles, and platform tips.
+                                No trade recommendations.
+                            </p>
+                        </div>
+                    </div>
+                    <Toggle
+                        checked={prefs.digest_opted_in}
+                        onChange={(v) => update({ digest_opted_in: v })}
+                        disabled={saving}
+                    />
+                </div>
+
+                {prefs.digest_opted_in && (
+                    <div className="flex items-center gap-3 pl-6.5">
+                        <span className="text-xs text-slate-500">Frequency:</span>
+                        {(["weekly", "biweekly"] as const).map((f) => (
+                            <button
+                                key={f}
+                                onClick={() => update({ digest_frequency: f })}
+                                disabled={saving}
+                                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                                    prefs.digest_frequency === f
+                                        ? "bg-indigo-600 text-white"
+                                        : "border border-slate-700 text-slate-400 hover:border-slate-500"
+                                }`}
+                            >
+                                {f === "weekly" ? "Weekly" : "Bi-weekly"}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {status && <StatusMessage type={status.type} message={status.message} />}
+
+            <p className="text-xs text-slate-600">
+                You can also unsubscribe at any time via the link in any email we send.
+            </p>
+        </div>
+    );
+}
+
+// ─── Main page ─────────────────────────────────────────────────────
 
 export default function SettingsPage() {
     const { user, logout, updateUser } = useAuth();
@@ -572,31 +708,9 @@ export default function SettingsPage() {
                     </div>
                 </SectionCard>
 
-                {/* Notifications */}
-                <SectionCard title="Notifications">
-                    {[
-                        "GAS threshold alerts",
-                        "Regime change alerts",
-                        "Weekly market digest email",
-                        "Onboarding email sequence",
-                    ].map((item) => (
-                        <div
-                            key={item}
-                            className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
-                        >
-                            <div className="flex items-center gap-2">
-                                <Bell className="h-4 w-4 text-slate-500" />
-                                <span className="text-sm text-slate-400">{item}</span>
-                                <ComingSoonBadge />
-                            </div>
-                            <button
-                                disabled
-                                className="relative inline-flex h-5 w-9 items-center rounded-full bg-slate-700 cursor-not-allowed opacity-50"
-                            >
-                                <span className="inline-block h-3.5 w-3.5 translate-x-1 rounded-full bg-slate-400 transition-transform" />
-                            </button>
-                        </div>
-                    ))}
+                {/* Notifications & Email Preferences */}
+                <SectionCard title="Notifications & Email">
+                    <EmailPreferencesSection />
                 </SectionCard>
 
                 {/* Preferences */}
