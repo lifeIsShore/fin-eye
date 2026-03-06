@@ -65,7 +65,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-OPS-01         | Core – Monitoring     | DONE         | 2026-03-06   | Metrics service + middleware + ops endpoints + frontend admin ops dashboard |
 | CORE-SHOP-01        | Core – Showcase       | DONE         | 2026-03-06   | Product grid + category filter + detail modal + seed catalogue |
 | CORE-SHOP-02        | Core – Showcase       | DONE         | 2026-03-06   | Detail modal + tracked outbound redirect + click stats endpoint |
-| CORE-SEC-01         | Core – Security       | NOT_STARTED  | -            | Depends on AUTH-01 |
+| CORE-SEC-01         | Core – Security       | DONE         | 2026-03-06   | TOTP 2FA with Fernet-encrypted secrets, 2-phase setup, pending-token login flow |
 | CORE-SEC-02         | Core – Security       | DONE         | 2026-03-06   | pg_dump backup script, restore script, APScheduler job (02:00 UTC), admin UI panel, DR runbook |
 | CORE-ANALYTICS-01   | Core – Analytics      | DONE         | 2026-03-06   | Self-hosted Postgres analytics, beacon endpoint, admin dashboard |
 | CORE-EXPERIMENT-01  | Core – Experiments    | DONE         | 2026-03-06   | Deterministic SHA-256 assignment, Postgres-backed, results from analytics_events |
@@ -1968,3 +1968,49 @@ This log tracks implementation progress for each user story in `user-stories.md`
 
 - **Next steps**
     - Remaining unblocked stories: `CORE-SEC-01` (2FA / TOTP), `CORE-EMAIL-01` (onboarding emails, needs provider), `CORE-EMAIL-02` (newsletter digest).
+
+---
+
+### 2026-03-06 (continued)
+
+**Session — CORE-SEC-01: Two-Factor Authentication (TOTP) — complete**
+
+- **Design decisions**
+    - TOTP secret encrypted at rest using **Fernet symmetric encryption** (`cryptography` library). DB stores ciphertext only. Key in `TOTP_ENCRYPTION_KEY` env var.
+    - Dev fallback: if `TOTP_ENCRYPTION_KEY` is empty, secrets stored in plaintext with a loud warning. Never acceptable in production.
+    - Two-phase setup flow: `POST /auth/2fa/setup` stores the secret but does NOT activate 2FA. `POST /auth/2fa/enable` verifies the first code then flips `totp_enabled=True`. This ensures 2FA is never activated if the user can't read the QR code.
+    - Login flow: if `totp_enabled`, `/auth/login` returns `totp_required=true` + a short-lived `2fa_pending` JWT (5 min TTL, type=`2fa_pending`). The client then calls `/auth/2fa/verify` with the code. This token type is explicitly rejected by `get_current_user` (type guard in deps).
+    - Disable requires a valid TOTP code — not a password — so that a stolen password alone cannot silently remove 2FA.
+    - `valid_window=1` in pyotp (±1 interval) gives 90 seconds of clock drift tolerance.
+    - QR code rendered via `api.qrserver.com` API in the frontend — zero npm dependencies.
+
+- **Stories completed**
+    - `CORE-SEC-01` (TOTP 2FA) — **DONE**
+
+- **Backend**
+    - ✅ `alembic/versions/f6a7b8c9d0e1` — Adds `totp_secret` (String 256, nullable) + `totp_enabled` (Boolean, default false) to `users`.
+    - ✅ `app/models/user.py` — `totp_secret` + `totp_enabled` columns added.
+    - ✅ `app/config.py` — `TOTP_ENCRYPTION_KEY` + `TOTP_ISSUER_NAME` settings added.
+    - ✅ `.env.example` — `TOTP_ENCRYPTION_KEY`, `TOTP_ISSUER_NAME` documented with generation command.
+    - ✅ `app/services/totp_service.py` — `generate_totp_secret()`, `build_provisioning_uri()`, `verify_totp_code()`, `_encrypt_secret()`, `_decrypt_secret()`, `begin_totp_setup()`, `complete_totp_setup()`, `disable_totp()`, `check_totp_for_login()`.
+    - ✅ `app/core/security.py` — `create_2fa_pending_token()` added (5 min TTL, type=`2fa_pending`).
+    - ✅ `app/schemas/auth.py` — `TotpSetupResponse`, `TotpVerifyRequest` (digit validator), `TotpLoginRequest`, `TotpStatusResponse`, `LoginResponse` (adds `totp_required` + `pending_token` fields), `UserResponse` (adds `totp_enabled` field).
+    - ✅ `app/api/v1/auth.py` — Full rewrite adding: `GET /2fa/status`, `POST /2fa/setup`, `POST /2fa/enable`, `POST /2fa/disable`, `POST /2fa/verify`. Login endpoint updated to return `LoginResponse` with 2FA gate.
+
+- **Tests**
+    - ✅ `tests/api/test_totp_api.py` — 18 tests: status default-off, status requires auth, setup returns secret+URI, setup doesn't activate, enable-wrong-code 400, enable-correct-code activates, enable-twice 400, disable-not-enabled 400, disable-wrong-code 400, disable-correct-code deactivates, login-with-2fa returns pending-token, verify-wrong-code 401, verify-correct-code issues tokens, garbage-pending-token 401, pending-token-used-as-access-token 401, non-numeric code 422, wrong-length code 422.
+
+- **Frontend**
+    - ✅ `frontend/lib/api.ts` — Types: `TotpSetupDto`, `TotpStatusDto`, `LoginResponseDto`. Functions: `loginWithTotp()`, `verify2faLogin()`, `setup2fa()`, `enable2fa()`, `disable2fa()`, `get2faStatus()`.
+    - ✅ `frontend/app/auth/login/page.tsx` — Full rewrite. Step-1 (email+password) calls `loginWithTotp()`. If `totp_required=true`, transitions to Step-2 (TOTP code input): large monospace input, auto-submits on 6 digits, "Back to login" escape. Uses JSON body + `API_BASE_URL` (fixes old `x-www-form-urlencoded` + hardcoded localhost).
+    - ✅ `frontend/app/settings/page.tsx` — Replaced Coming Soon stub with live `<TwoFactorSection />`: Enable button calls setup → shows QR code (via api.qrserver.com, no npm dep) + manual key fallback → confirm code step → active. Disable button shows code-confirm step → deactivates. All states handled inline.
+
+- **Activation instructions**
+    1. Generate a Fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+    2. Add `TOTP_ENCRYPTION_KEY=<key>` and `TOTP_ISSUER_NAME=Fin-Eye` to `.env`.
+    3. Run `alembic upgrade head` to add the two columns.
+    4. Users can now enable 2FA from Settings → Security.
+
+- **Next steps**
+    - `CORE-EMAIL-01` (onboarding sequence, Resend) — pending Resend API key + from-address from user.
+    - `CORE-EMAIL-02` (weekly digest) — depends on EMAIL-01.

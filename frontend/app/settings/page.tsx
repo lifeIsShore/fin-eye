@@ -1,12 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import {
     User, Lock, Bell, Palette, LogOut, Construction,
     Download, Trash2, AlertTriangle, Loader2, CheckCircle2, X, Eye, EyeOff,
+    ShieldCheck, ShieldOff, QrCode, KeyRound,
 } from "lucide-react";
-import { downloadDataExport, deleteAccount, updateProfile, changePassword } from "@/lib/api";
+import {
+    downloadDataExport, deleteAccount, updateProfile, changePassword,
+    setup2fa, enable2fa, disable2fa, get2faStatus,
+    type TotpSetupDto,
+} from "@/lib/api";
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
@@ -163,6 +168,225 @@ function PasswordField({
                     {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
             </div>
+        </div>
+    );
+}
+
+// ─── Two-Factor Authentication section ─────────────────────────────────────
+
+type TwoFaStep = "idle" | "setup-qr" | "setup-confirm" | "disable-confirm";
+
+function TwoFactorSection() {
+    const [enabled, setEnabled] = useState<boolean | null>(null);
+    const [step, setStep] = useState<TwoFaStep>("idle");
+    const [setupData, setSetupData] = useState<TotpSetupDto | null>(null);
+    const [code, setCode] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+    const [showSecret, setShowSecret] = useState(false);
+
+    useEffect(() => {
+        get2faStatus().then((s) => setEnabled(s.totp_enabled)).catch(() => setEnabled(false));
+    }, []);
+
+    const startSetup = async () => {
+        setLoading(true);
+        setStatus(null);
+        try {
+            const data = await setup2fa();
+            setSetupData(data);
+            setStep("setup-qr");
+        } catch (e) {
+            setStatus({ type: "error", message: e instanceof Error ? e.message : "Failed to start setup." });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const confirmEnable = async () => {
+        if (code.length !== 6) return;
+        setLoading(true);
+        setStatus(null);
+        try {
+            await enable2fa(code);
+            setEnabled(true);
+            setStep("idle");
+            setSetupData(null);
+            setCode("");
+            setStatus({ type: "success", message: "Two-factor authentication is now active." });
+        } catch (e) {
+            setStatus({ type: "error", message: e instanceof Error ? e.message : "Invalid code." });
+            setCode("");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const confirmDisable = async () => {
+        if (code.length !== 6) return;
+        setLoading(true);
+        setStatus(null);
+        try {
+            await disable2fa(code);
+            setEnabled(false);
+            setStep("idle");
+            setCode("");
+            setStatus({ type: "success", message: "Two-factor authentication has been disabled." });
+        } catch (e) {
+            setStatus({ type: "error", message: e instanceof Error ? e.message : "Invalid code." });
+            setCode("");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const cancel = () => { setStep("idle"); setCode(""); setSetupData(null); setStatus(null); setShowSecret(false); };
+
+    // QR code via Google Charts API (no npm dep)
+    const qrUrl = setupData
+        ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(setupData.uri)}`
+        : null;
+
+    return (
+        <div className="rounded-lg border border-slate-700 bg-slate-950/50 overflow-hidden">
+            {/* Header row */}
+            <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                    {enabled ? (
+                        <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                    ) : (
+                        <Lock className="h-4 w-4 text-slate-400" />
+                    )}
+                    <span className="text-sm text-slate-300">Two-Factor Authentication</span>
+                    {enabled === null ? null : enabled ? (
+                        <span className="rounded-full bg-emerald-900/40 border border-emerald-700/40 px-2 py-0.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">On</span>
+                    ) : (
+                        <span className="rounded-full bg-slate-800 border border-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Off</span>
+                    )}
+                </div>
+                {step === "idle" && (
+                    enabled ? (
+                        <button
+                            onClick={() => setStep("disable-confirm")}
+                            className="rounded-md border border-red-800/50 bg-red-950/30 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-900/40 transition-colors"
+                        >
+                            Disable
+                        </button>
+                    ) : (
+                        <button
+                            onClick={startSetup}
+                            disabled={loading || enabled === null}
+                            className="rounded-md border border-indigo-700/50 bg-indigo-900/30 px-3 py-1 text-xs font-medium text-indigo-400 hover:bg-indigo-900/50 disabled:opacity-40 transition-colors"
+                        >
+                            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Enable"}
+                        </button>
+                    )
+                )}
+            </div>
+
+            {/* QR code step */}
+            {step === "setup-qr" && qrUrl && (
+                <div className="border-t border-slate-800 px-4 py-5 space-y-4">
+                    <p className="text-xs text-slate-400">
+                        Scan this QR code with <span className="text-slate-300 font-medium">Google Authenticator</span>, <span className="text-slate-300 font-medium">Authy</span>, or <span className="text-slate-300 font-medium">1Password</span>.
+                    </p>
+                    <div className="flex justify-center">
+                        <div className="rounded-xl bg-white p-3 shadow-lg">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={qrUrl} alt="TOTP QR Code" width={180} height={180} />
+                        </div>
+                    </div>
+                    <div>
+                        <button
+                            onClick={() => setShowSecret((s) => !s)}
+                            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                        >
+                            <KeyRound className="h-3.5 w-3.5" />
+                            {showSecret ? "Hide" : "Can't scan? Show"} manual entry key
+                        </button>
+                        {showSecret && (
+                            <div className="mt-2 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2">
+                                <p className="text-xs text-slate-500 mb-1">Enter this key manually in your app:</p>
+                                <p className="font-mono text-sm text-slate-200 break-all select-all">{setupData?.secret}</p>
+                            </div>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => setStep("setup-confirm")}
+                        className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition-colors"
+                    >
+                        I've scanned it — next
+                    </button>
+                    <button onClick={cancel} className="w-full text-xs text-slate-500 hover:text-slate-300">Cancel</button>
+                </div>
+            )}
+
+            {/* Confirm step (enable) */}
+            {step === "setup-confirm" && (
+                <div className="border-t border-slate-800 px-4 py-5 space-y-4">
+                    <p className="text-xs text-slate-400">
+                        Enter the 6-digit code from your authenticator app to confirm setup.
+                    </p>
+                    <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={code}
+                        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-center text-xl font-mono tracking-[0.4em] text-slate-50 placeholder-slate-600 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    {status && <StatusMessage type={status.type} message={status.message} />}
+                    <div className="flex gap-3">
+                        <button onClick={cancel} className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-400 hover:bg-slate-700 transition-colors">Cancel</button>
+                        <button
+                            onClick={confirmEnable}
+                            disabled={loading || code.length !== 6}
+                            className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white transition-colors"
+                        >
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                            Activate 2FA
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Confirm step (disable) */}
+            {step === "disable-confirm" && (
+                <div className="border-t border-slate-800 px-4 py-5 space-y-4">
+                    <div className="rounded-lg border border-red-900/30 bg-red-950/10 p-3 text-xs text-red-300/80">
+                        Enter a valid code from your authenticator app to disable 2FA. This will make your account less secure.
+                    </div>
+                    <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={code}
+                        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-center text-xl font-mono tracking-[0.4em] text-slate-50 placeholder-slate-600 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                    />
+                    {status && <StatusMessage type={status.type} message={status.message} />}
+                    <div className="flex gap-3">
+                        <button onClick={cancel} className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-400 hover:bg-slate-700 transition-colors">Cancel</button>
+                        <button
+                            onClick={confirmDisable}
+                            disabled={loading || code.length !== 6}
+                            className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-red-700 hover:bg-red-600 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white transition-colors"
+                        >
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+                            Disable 2FA
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Success/error feedback at idle */}
+            {step === "idle" && status && (
+                <div className="border-t border-slate-800 px-4 py-3">
+                    <StatusMessage type={status.type} message={status.message} />
+                </div>
+            )}
         </div>
     );
 }
@@ -329,19 +553,7 @@ export default function SettingsPage() {
                     <PasswordField label="New Password" value={newPw} onChange={setNewPw} placeholder="Min. 8 characters" />
                     <PasswordField label="Confirm New Password" value={confirmPw} onChange={setConfirmPw} placeholder="Repeat new password" />
 
-                    <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/50 px-4 py-3">
-                        <div className="flex items-center gap-2">
-                            <Lock className="h-4 w-4 text-slate-400" />
-                            <span className="text-sm text-slate-300">Two-Factor Authentication</span>
-                            <ComingSoonBadge />
-                        </div>
-                        <button
-                            disabled
-                            className="rounded-md border border-slate-700 bg-slate-800 px-3 py-1 text-xs text-slate-400 cursor-not-allowed opacity-50"
-                        >
-                            Enable
-                        </button>
-                    </div>
+                    <TwoFactorSection />
 
                     {pwStatus && <StatusMessage type={pwStatus.type} message={pwStatus.message} />}
 

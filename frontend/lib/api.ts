@@ -1289,6 +1289,100 @@ export async function fetchAnalyticsRawEvents(
   return res.json();
 }
 
+// ── Two-Factor Authentication (CORE-SEC-01) ─────────────────────────────────────
+
+export interface TotpSetupDto {
+  secret: string;   // base32 plaintext — show as manual entry fallback
+  uri: string;      // otpauth:// URI — encode as QR code
+}
+
+export interface TotpStatusDto {
+  totp_enabled: boolean;
+}
+
+export interface LoginResponseDto {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  totp_required: boolean;
+  pending_token: string;
+}
+
+/** POST /auth/login — returns either full tokens or a 2FA pending state */
+export async function loginWithTotp(email: string, password: string): Promise<LoginResponseDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Invalid email or password.");
+  }
+  return res.json();
+}
+
+/** POST /auth/2fa/verify — exchange pending_token + TOTP code for full tokens */
+export async function verify2faLogin(pendingToken: string, code: string): Promise<{ access_token: string; refresh_token: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pending_token: pendingToken, code }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Invalid code.");
+  }
+  return res.json();
+}
+
+/** POST /auth/2fa/setup — generate TOTP secret + QR URI */
+export async function setup2fa(): Promise<TotpSetupDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/setup`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to start 2FA setup.");
+  return res.json();
+}
+
+/** POST /auth/2fa/enable — confirm first TOTP code to activate 2FA */
+export async function enable2fa(code: string): Promise<TotpStatusDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/enable`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Invalid code.");
+  }
+  return res.json();
+}
+
+/** POST /auth/2fa/disable — verify TOTP code then disable 2FA */
+export async function disable2fa(code: string): Promise<TotpStatusDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/disable`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Invalid code.");
+  }
+  return res.json();
+}
+
+/** GET /auth/2fa/status */
+export async function get2faStatus(): Promise<TotpStatusDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/status`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch 2FA status.");
+  return res.json();
+}
+
 // ── A/B Experiments (CORE-EXPERIMENT-01) ─────────────────────────────────────────
 
 export interface VariantDefinition {

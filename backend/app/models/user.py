@@ -29,6 +29,10 @@ class User(Base):
     # Subscription tier: "free" | "pro" | "institutional"
     subscription_tier = Column(String(32), default="free", nullable=False)
 
+    # Two-factor authentication (TOTP) — CORE-SEC-01
+    totp_secret  = Column(String(256), nullable=True)   # Fernet-encrypted; null until setup
+    totp_enabled = Column(Boolean, default=False, nullable=False)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 

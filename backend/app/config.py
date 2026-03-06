@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     require_auth: bool = Field(default=False, alias="REQUIRE_AUTH")
 
+    # Two-Factor Authentication (TOTP) — CORE-SEC-01
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    totp_encryption_key: str = Field(default="", alias="TOTP_ENCRYPTION_KEY")
+    # App name shown in authenticator apps (Google Authenticator, Authy, etc.)
+    totp_issuer_name: str = Field(default="Fin-Eye", alias="TOTP_ISSUER_NAME")
+
     # Model storage (local filesystem for MVP)
     model_store_dir: str = Field(default="model_store", alias="MODEL_STORE_DIR")
 

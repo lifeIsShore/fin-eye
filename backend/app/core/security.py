@@ -52,6 +52,19 @@ def create_refresh_token(user_id: str) -> str:
     )
 
 
+def create_2fa_pending_token(user_id: str) -> str:
+    """
+    Short-lived token (5 minutes) issued when a user with 2FA enabled successfully
+    enters their password. The client must then call POST /auth/2fa/verify with
+    this token + their TOTP code to receive full access/refresh tokens.
+    """
+    return _make_token(
+        subject=user_id,
+        expires_delta=timedelta(minutes=5),
+        token_type="2fa_pending",
+    )
+
+
 def decode_token(token: str) -> Optional[dict]:
     """
     Decode and validate a JWT. Returns the payload dict or None if invalid.
