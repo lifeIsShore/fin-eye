@@ -5,13 +5,14 @@ import { useAuth } from "@/components/AuthProvider";
 import {
     User, Lock, Bell, Palette, LogOut, Construction,
     Download, Trash2, AlertTriangle, Loader2, CheckCircle2, X, Eye, EyeOff,
-    ShieldCheck, ShieldOff, QrCode, KeyRound,
+    ShieldCheck, ShieldOff, QrCode, KeyRound, Key, Plus, Copy, Check, ChevronDown, ChevronUp, Activity,
 } from "lucide-react";
 import {
     downloadDataExport, deleteAccount, updateProfile, changePassword,
     setup2fa, enable2fa, disable2fa, get2faStatus,
     fetchEmailPreferences, updateEmailPreferences,
-    type TotpSetupDto, type EmailPreferenceDto,
+    fetchApiKeys, createApiKey, revokeApiKey, fetchApiKeyUsage,
+    type TotpSetupDto, type EmailPreferenceDto, type ApiKeyDto, type ApiKeyCreatedDto, type ApiKeyUsageEntry,
 } from "@/lib/api";
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
@@ -392,6 +393,256 @@ function TwoFactorSection() {
     );
 }
 
+// ─── API Key Management section (P3-API-01) ─────────────────────────────────
+
+const ALL_SCOPES = ["gas", "macro", "sentiment", "technical", "risk", "backtest"];
+
+function ApiKeySection() {
+    const [keys, setKeys] = useState<ApiKeyDto[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [creating, setCreating] = useState(false);
+    const [showCreate, setShowCreate] = useState(false);
+    const [newName, setNewName] = useState("");
+    const [newScopes, setNewScopes] = useState<string[]>(["gas", "macro", "sentiment"]);
+    const [newRateLimit, setNewRateLimit] = useState(30);
+    const [createError, setCreateError] = useState<string | null>(null);
+    const [justCreated, setJustCreated] = useState<ApiKeyCreatedDto | null>(null);
+    const [copied, setCopied] = useState(false);
+    const [expandedUsage, setExpandedUsage] = useState<string | null>(null);
+    const [usageLogs, setUsageLogs] = useState<Record<string, ApiKeyUsageEntry[]>>({});
+    const [usageLoading, setUsageLoading] = useState<string | null>(null);
+
+    useEffect(() => {
+        fetchApiKeys()
+            .then(setKeys)
+            .catch(() => setKeys([]))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const handleCreate = async () => {
+        if (!newName.trim()) return;
+        setCreating(true);
+        setCreateError(null);
+        try {
+            const created = await createApiKey({ name: newName.trim(), scopes: newScopes, rate_limit_per_minute: newRateLimit });
+            setJustCreated(created);
+            setKeys((prev) => [created, ...prev]);
+            setShowCreate(false);
+            setNewName("");
+            setNewScopes(["gas", "macro", "sentiment"]);
+        } catch (e) {
+            setCreateError(e instanceof Error ? e.message : "Failed to create key");
+        } finally {
+            setCreating(false);
+        }
+    };
+
+    const handleRevoke = async (id: string) => {
+        try {
+            await revokeApiKey(id);
+            setKeys((prev) => prev.map((k) => k.id === id ? { ...k, is_active: false } : k));
+        } catch {}
+    };
+
+    const loadUsage = async (id: string) => {
+        if (expandedUsage === id) { setExpandedUsage(null); return; }
+        setExpandedUsage(id);
+        if (usageLogs[id]) return;
+        setUsageLoading(id);
+        try {
+            const logs = await fetchApiKeyUsage(id);
+            setUsageLogs((prev) => ({ ...prev, [id]: logs }));
+        } catch {}
+        finally { setUsageLoading(null); }
+    };
+
+    const copyKey = (key: string) => {
+        navigator.clipboard.writeText(key).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+    };
+
+    const toggleScope = (s: string) =>
+        setNewScopes((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
+
+    if (loading) return <div className="flex items-center gap-2 text-xs text-slate-500 py-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading API keys…</div>;
+
+    return (
+        <div className="space-y-4">
+            {/* Raw key reveal (shown once) */}
+            {justCreated && (
+                <div className="rounded-xl border border-emerald-800/40 bg-emerald-950/20 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-emerald-300">API Key Created — Save it now!</p>
+                        <button onClick={() => setJustCreated(null)} className="text-slate-500 hover:text-slate-300"><X className="h-4 w-4" /></button>
+                    </div>
+                    <p className="text-xs text-emerald-400/70">{justCreated.warning}</p>
+                    <div className="flex items-center gap-2 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2">
+                        <code className="flex-1 text-xs font-mono text-emerald-300 break-all select-all">{justCreated.raw_key}</code>
+                        <button
+                            onClick={() => copyKey(justCreated.raw_key)}
+                            className="flex-shrink-0 p-1.5 rounded text-slate-400 hover:text-emerald-300 transition-colors"
+                        >
+                            {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Key list */}
+            <div className="space-y-2">
+                {keys.length === 0 && !showCreate && (
+                    <p className="text-xs text-slate-500 py-1">No API keys yet. Create one to access the public API.</p>
+                )}
+                {keys.map((k) => (
+                    <div key={k.id} className="rounded-lg border border-slate-800 bg-slate-950/40 overflow-hidden">
+                        <div className="flex items-center gap-3 px-4 py-3">
+                            <Key className={`h-4 w-4 flex-shrink-0 ${k.is_active ? "text-blue-400" : "text-slate-600"}`} />
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-sm font-medium ${k.is_active ? "text-slate-200" : "text-slate-500 line-through"}`}>{k.name}</span>
+                                    {!k.is_active && <span className="text-[10px] text-slate-500 bg-slate-800 rounded-full px-2 py-0.5">Revoked</span>}
+                                </div>
+                                <p className="text-xs text-slate-500 font-mono mt-0.5">
+                                    fe_live_{k.key_prefix}… · {k.scopes.join(", ")} · {k.rate_limit_per_minute} req/min · {k.total_calls.toLocaleString()} calls
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => loadUsage(k.id)}
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
+                                    title="View usage"
+                                >
+                                    {usageLoading === k.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
+                                </button>
+                                {k.is_active && (
+                                    <button
+                                        onClick={() => handleRevoke(k.id)}
+                                        className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-950/20 transition-colors"
+                                        title="Revoke key"
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Usage log */}
+                        {expandedUsage === k.id && (
+                            <div className="border-t border-slate-800">
+                                {usageLogs[k.id]?.length === 0 ? (
+                                    <p className="px-4 py-3 text-xs text-slate-500">No usage recorded yet.</p>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-xs">
+                                            <thead>
+                                                <tr className="border-b border-slate-800 text-slate-500">
+                                                    <th className="text-left px-4 py-2">Endpoint</th>
+                                                    <th className="text-left px-3 py-2">Method</th>
+                                                    <th className="text-right px-3 py-2">Status</th>
+                                                    <th className="text-right px-4 py-2">ms</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(usageLogs[k.id] ?? []).map((l, i) => (
+                                                    <tr key={i} className="border-b border-slate-800/50 last:border-0">
+                                                        <td className="px-4 py-1.5 font-mono text-slate-300 truncate max-w-[200px]">{l.endpoint}</td>
+                                                        <td className="px-3 py-1.5 text-slate-500">{l.method}</td>
+                                                        <td className={`text-right px-3 py-1.5 tabular-nums ${l.status_code && l.status_code < 300 ? "text-emerald-400" : "text-red-400"}`}>{l.status_code ?? "—"}</td>
+                                                        <td className="text-right px-4 py-1.5 text-slate-500 tabular-nums">{l.response_ms ?? "—"}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            {/* Create form */}
+            {showCreate ? (
+                <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-slate-200">New API Key</p>
+                        <button onClick={() => setShowCreate(false)} className="text-slate-500 hover:text-slate-300"><X className="h-4 w-4" /></button>
+                    </div>
+
+                    <div>
+                        <label className="mb-1.5 block text-xs font-medium text-slate-400">Key Name</label>
+                        <input
+                            type="text"
+                            value={newName}
+                            onChange={(e) => setNewName(e.target.value)}
+                            placeholder="e.g. My Trading Bot"
+                            maxLength={128}
+                            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="mb-1.5 block text-xs font-medium text-slate-400">Scopes</label>
+                        <div className="flex flex-wrap gap-2">
+                            {ALL_SCOPES.map((s) => (
+                                <button
+                                    key={s}
+                                    onClick={() => toggleScope(s)}
+                                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${newScopes.includes(s) ? "bg-blue-600 text-white" : "border border-slate-700 text-slate-400 hover:border-slate-500"}`}
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="mb-1.5 block text-xs font-medium text-slate-400">Rate Limit (req/min)</label>
+                        <input
+                            type="number"
+                            value={newRateLimit}
+                            onChange={(e) => setNewRateLimit(parseInt(e.target.value) || 30)}
+                            min={1}
+                            max={300}
+                            className="w-32 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm tabular-nums text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    {createError && <p className="text-xs text-red-400">{createError}</p>}
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setShowCreate(false)}
+                            className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-400 hover:bg-slate-700 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleCreate}
+                            disabled={creating || !newName.trim() || newScopes.length === 0}
+                            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {creating ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating…</> : <><Key className="h-4 w-4" /> Create Key</>}
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <button
+                    onClick={() => setShowCreate(true)}
+                    className="flex items-center gap-2 rounded-lg border border-dashed border-slate-700 px-4 py-2.5 text-xs font-medium text-slate-400 hover:border-blue-600 hover:text-blue-400 transition-colors w-full"
+                >
+                    <Plus className="h-3.5 w-3.5" />
+                    Create new API key
+                </button>
+            )}
+
+            <p className="text-xs text-slate-600">
+                Use the <code className="text-slate-500">X-API-Key</code> header when calling <code className="text-slate-500">/public/v1/*</code> endpoints.
+                Keys can be revoked at any time.
+            </p>
+        </div>
+    );
+}
+
 // ─── Email / Notifications section (CORE-EMAIL-01/02) ─────────────────────
 
 function Toggle({
@@ -711,6 +962,11 @@ export default function SettingsPage() {
                 {/* Notifications & Email Preferences */}
                 <SectionCard title="Notifications & Email">
                     <EmailPreferencesSection />
+                </SectionCard>
+
+                {/* API Key Management */}
+                <SectionCard title="API Keys">
+                    <ApiKeySection />
                 </SectionCard>
 
                 {/* Preferences */}

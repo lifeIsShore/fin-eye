@@ -14,7 +14,7 @@ from app.services.scheduler import setup_scheduler
 from app.middleware.metrics_middleware import MetricsMiddleware
 
 # Register models so init_db() creates all tables
-from app.models import blog, showcase, analytics, experiment, email_preference  # noqa: F401 — side-effect import
+from app.models import blog, showcase, analytics, experiment, email_preference, api_key  # noqa: F401 — side-effect import
 
 from app.api.v1.health import router as health_router
 from app.api.v1.data import router as data_router
@@ -24,8 +24,9 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.endpoints import (
     macro, sentiment, technical, explanation, hedging,
     portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts, strategies,
-    showcase, ops, analytics, experiments, email
+    showcase, ops, analytics, experiments, email, api_keys, risk
 )
+from app.api.public.v1 import router as public_v1_router
 
 # Configuration
 settings = get_settings()
@@ -113,3 +114,8 @@ app.include_router(ops.router, prefix="/api/v1/ops", tags=["Ops & Monitoring"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Product Analytics"])
 app.include_router(experiments.router, prefix="/api/v1/experiments", tags=["A/B Experiments"])
 app.include_router(email.router, prefix="/api/v1/email", tags=["Email Preferences"])
+app.include_router(api_keys.router, prefix="/api/v1/api-keys", tags=["API Key Management"])
+app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk & Stress Testing"])
+
+# Public external API (API-key authenticated)
+app.include_router(public_v1_router.router, prefix="/public/v1", tags=["Public API"])

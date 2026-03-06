@@ -2063,3 +2063,74 @@ This log tracks implementation progress for each user story in `user-stories.md`
 - **Next steps**
     - `CORE-SUB-01` (Stripe billing) — when Stripe credentials are available.
     - Remaining P3 stories (SENT-ADV-01, ANALYTICS-01, API-01, etc.).
+
+---
+
+### 2026-03-06 (continued)
+
+**Session — P3-RISK-01 + P3-API-01: Scenario & Stress Testing + Public API (complete)**
+
+- **Stories completed**
+    - `P3-RISK-01` (Scenario & Stress Tests) — **DONE**
+    - `P3-API-01` (Public API with key auth + rate limiting) — **DONE**
+
+#### P3-RISK-01 — Scenario & Stress Testing
+
+- **Design decisions**
+    - Pure-Python engine — no new dependencies (uses `yfinance` + `numpy`/`pandas` already in stack).
+    - 10-scenario library: 5 historical (2008 GFC, COVID 2020, 2022 rate shock, dot-com, Black Monday) + 3 hypothetical (mild/severe recession, flash crash) + 2 macro (inflation spike, soft landing).
+    - Beta-scaled impact model: `stock_shock ≈ beta_vs_SPY × SPY_shock`. Known benchmarks (SPY, QQQ, TLT, GLD) use direct scenario shocks.
+    - Historical simulation VaR/CVaR at 95th and 99th percentile from 5 years of daily returns.
+    - Portfolio-level stress aggregates per-position impacts and computes portfolio-weighted VaR/CVaR series.
+    - Recovery estimate: `|loss| / mean_daily_return`, capped at 3,650 days.
+    - Custom scenario endpoint: user defines per-ticker shock magnitudes, result applied to any symbol.
+    - Full educational disclaimer on every response.
+
+- **Backend**
+    - ✅ `app/services/risk_service.py` — `SCENARIO_LIBRARY` (10 scenarios), `SCENARIO_MAP`, `compute_var_cvar()`, `compute_max_drawdown()`, `_annualised_vol()`, `_beta()`, `stress_test_symbol()` → `StockStressResult`, `stress_test_portfolio()` → `PortfolioStressResult`, `build_custom_scenario()`.
+    - ✅ `app/api/v1/endpoints/risk.py` — 7 routes: `GET /risk/scenarios`, `GET /risk/scenarios/{id}`, `GET /risk/stress/{symbol}`, `GET /risk/stress/{symbol}/multi`, `POST /risk/portfolio/stress`, `POST /risk/portfolio/stress/multi`, `POST /risk/custom`. Full Pydantic schemas.
+    - ✅ `app/api/v1/endpoints/__init__.py` — `risk` registered.
+    - ✅ `app/main.py` — `risk.router` mounted at `/api/v1/risk`.
+
+- **Frontend**
+    - ✅ `frontend/app/risk/page.tsx` — Full 3-tab UI: (1) Single Stock — symbol + value + scenario picker + result card with expandable VaR/CVaR/beta/recovery detail; (2) All Scenarios — run every scenario at once, sortable comparison table with worst/best highlighting; (3) Portfolio Stress — multi-position builder (symbol/weight/$ value, up to 20 positions), single or all-scenarios mode, per-position breakdown table + aggregate VaR. Educational disclaimer banner.
+    - ✅ `frontend/lib/api.ts` — `ScenarioDto`, `StockStressDto`, `MultiScenarioStockDto`, `PortfolioStressPositionInput`, `PortfolioStressDto`. Functions: `fetchScenarios()`, `stressTestSymbol()`, `stressTestSymbolMulti()`, `stressTestPortfolio()`, `stressTestPortfolioMulti()`.
+
+#### P3-API-01 — Public API
+
+- **Design decisions**
+    - Key format: `fe_live_<64 hex chars>` — only prefix (chars 8–19) stored in DB for display; full key SHA-256-hashed.
+    - Raw key shown **exactly once** at creation, never retrievable again.
+    - Auth: `X-API-Key` header (preferred) or `?api_key=` query param (fallback).
+    - Scopes: `gas`, `macro`, `sentiment`, `technical`, `risk`, `backtest` — checked per-endpoint.
+    - Rate limiting: sliding-window counter in Redis sorted sets (ZRANGEBYSCORE). Fails open if Redis unavailable.
+    - Usage logging: every call writes to `api_key_usage_logs` (endpoint, method, status, latency ms). `ApiKey.total_calls` counter updated in-band.
+    - Public API lives at `/public/v1/*` — separate from the internal `/api/v1/*` namespace.
+    - Max 10 active keys per account.
+    - Keys can expire (optional `expires_at`).
+
+- **Backend**
+    - ✅ `app/models/api_key.py` — `ApiKey` (user FK, name, prefix, hashed_key, scopes, rate_limit, total_calls, last_used_at, is_active, expires_at, revoked_at) + `ApiKeyUsageLog` (api_key_id FK, endpoint, method, status_code, response_ms, called_at).
+    - ✅ `app/models/__init__.py` — `ApiKey`, `ApiKeyUsageLog` registered.
+    - ✅ `app/services/api_key_service.py` — `create_api_key()`, `list_api_keys()`, `revoke_api_key()`, `update_api_key_scopes()`, `authenticate_api_key()`, `record_api_call()`, `check_rate_limit()` (Redis sliding window, fail-open).
+    - ✅ `app/api/v1/endpoints/api_keys.py` — management endpoints (JWT-auth, user-scoped): `GET /api-keys`, `POST /api-keys`, `PATCH /api-keys/{id}/scopes`, `DELETE /api-keys/{id}`, `GET /api-keys/{id}/usage` (last 100 calls).
+    - ✅ `app/api/public/v1/router.py` — developer-facing public API: `GET /public/v1/me`, `/gas/{symbol}`, `/macro/latest`, `/macro/advanced`, `/risk/scenarios`, `/risk/stress/{symbol}`, `POST /public/v1/backtest`. Each endpoint checks scope, runs rate limit, records usage.
+    - ✅ `app/api/public/__init__.py` + `app/api/public/v1/__init__.py` — package init files.
+    - ✅ `app/main.py` — `api_keys.router` at `/api/v1/api-keys`, `risk.router` at `/api/v1/risk`, `public_v1_router.router` at `/public/v1`.
+    - ✅ `alembic/versions/h8b9c0d1e2f3_add_api_keys_and_usage_logs.py` — creates `api_keys` and `api_key_usage_logs` tables with indexes.
+
+- **Frontend**
+    - ✅ `frontend/lib/api.ts` — `ApiKeyDto`, `ApiKeyCreatedDto`, `ApiKeyUsageEntry`. Functions: `fetchApiKeys()`, `createApiKey()`, `revokeApiKey()`, `fetchApiKeyUsage()`, `updateApiKeyScopes()`.
+    - ✅ `frontend/app/settings/page.tsx` — `ApiKeySection` component: key list (active/revoked badge, prefix, scopes, rate limit, total calls); one-click raw key reveal with copy button (shown once); create form (name, scope toggles, rate limit); per-key usage log table (endpoint/method/status/ms) toggled with Activity button.
+
+- **Activation instructions**
+    1. Run `alembic upgrade head` to create `api_keys` and `api_key_usage_logs` tables.
+    2. Users can create keys from Settings → API Keys.
+    3. Call public endpoints with `X-API-Key: fe_live_<key>` header.
+    4. Rate limiting requires Redis to be running (fails open if Redis is down).
+
+- **Next steps**
+    - `P3-SENT-ADV-01` (Advanced Sentiment — Twitter/X, Google Trends, earnings transcripts)
+    - `P3-ANALYTICS-01` (No-Code Indicator Builder)
+    - `P3-BULK-01` (Bulk Analysis)
+    - `CORE-SUB-01` (Stripe billing) — last, when credentials are provided.

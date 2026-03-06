@@ -1583,6 +1583,298 @@ export async function unsubscribeByToken(token: string): Promise<{ status: strin
   return res.json();
 }
 
+// ─── API Key Management (P3-API-01) ─────────────────────────────────────────
+
+export interface ApiKeyDto {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+  rate_limit_per_minute: number;
+  total_calls: number;
+  last_used_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface ApiKeyCreatedDto extends ApiKeyDto {
+  raw_key: string;
+  warning: string;
+}
+
+export interface ApiKeyUsageEntry {
+  endpoint: string;
+  method: string;
+  status_code: number | null;
+  response_ms: number | null;
+  called_at: string;
+}
+
+export async function fetchApiKeys(): Promise<ApiKeyDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load API keys");
+  return res.json();
+}
+
+export async function createApiKey(payload: {
+  name: string;
+  scopes: string[];
+  rate_limit_per_minute: number;
+}): Promise<ApiKeyCreatedDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to create API key");
+  }
+  return res.json();
+}
+
+export async function revokeApiKey(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to revoke API key");
+}
+
+export async function fetchApiKeyUsage(id: string): Promise<ApiKeyUsageEntry[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys/${id}/usage`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load usage");
+  return res.json();
+}
+
+// ─── Risk & Stress Testing (P3-RISK-01) ───────────────────────────────────────
+
+export interface ScenarioDto {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  start_date: string | null;
+  end_date: string | null;
+  macro_notes: string;
+  market_shocks: Record<string, number>;
+}
+
+export interface StockStressDto {
+  symbol: string;
+  scenario_id: string;
+  scenario_name: string;
+  portfolio_value: number;
+  estimated_pnl: number;
+  estimated_pnl_pct: number;
+  beta_adjusted_pnl: number;
+  var_95: number | null;
+  var_99: number | null;
+  cvar_95: number | null;
+  cvar_99: number | null;
+  max_drawdown_historical: number;
+  annualised_vol: number;
+  beta_vs_spy: number;
+  macro_notes: string;
+  recovery_estimate_days: number | null;
+  disclaimer: string;
+}
+
+export interface MultiScenarioStockDto {
+  symbol: string;
+  portfolio_value: number;
+  results: StockStressDto[];
+  worst_scenario: string | null;
+  best_scenario: string | null;
+}
+
+export interface PortfolioStressPositionInput {
+  symbol: string;
+  weight: number;
+  value: number;
+}
+
+export interface PortfolioStressDto {
+  scenario_id: string;
+  scenario_name: string;
+  total_portfolio_value: number;
+  total_estimated_pnl: number;
+  total_estimated_pnl_pct: number;
+  positions: Array<{
+    symbol: string;
+    value: number;
+    weight_pct: number;
+    estimated_pnl: number;
+    estimated_pnl_pct: number;
+    beta_vs_spy: number;
+  }>;
+  portfolio_var_95: number | null;
+  portfolio_var_99: number | null;
+  portfolio_cvar_95: number | null;
+  worst_position: string | null;
+  best_position: string | null;
+  macro_notes: string;
+  disclaimer: string;
+}
+
+export async function fetchScenarios(category?: string): Promise<ScenarioDto[]> {
+  const qs = category ? `?category=${category}` : "";
+  const res = await fetch(`${API_BASE_URL}/api/v1/risk/scenarios${qs}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load scenarios");
+  return res.json();
+}
+
+export async function stressTestSymbol(
+  symbol: string,
+  scenarioId: string,
+  portfolioValue: number,
+): Promise<StockStressDto> {
+  const qs = new URLSearchParams({
+    scenario_id: scenarioId,
+    portfolio_value: String(portfolioValue),
+  });
+  const res = await fetch(`${API_BASE_URL}/api/v1/risk/stress/${symbol}?${qs}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Stress test failed");
+  return res.json();
+}
+
+export async function stressTestSymbolMulti(
+  symbol: string,
+  portfolioValue: number,
+): Promise<MultiScenarioStockDto> {
+  const qs = new URLSearchParams({ portfolio_value: String(portfolioValue) });
+  const res = await fetch(`${API_BASE_URL}/api/v1/risk/stress/${symbol}/multi?${qs}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Multi-scenario stress test failed");
+  return res.json();
+}
+
+export async function stressTestPortfolio(
+  positions: PortfolioStressPositionInput[],
+  scenarioId: string,
+): Promise<PortfolioStressDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/risk/portfolio/stress`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ positions, scenario_id: scenarioId }),
+  });
+  if (!res.ok) throw new Error("Portfolio stress test failed");
+  return res.json();
+}
+
+export async function stressTestPortfolioMulti(
+  positions: PortfolioStressPositionInput[],
+  scenarioIds?: string[],
+): Promise<PortfolioStressDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/risk/portfolio/stress/multi`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ positions, scenario_ids: scenarioIds ?? [] }),
+  });
+  if (!res.ok) throw new Error("Portfolio multi-stress test failed");
+  return res.json();
+}
+
+// ─── API Key Management (P3-API-01) ──────────────────────────────────────────
+
+export interface ApiKeyDto {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+  rate_limit_per_minute: number;
+  total_calls: number;
+  last_used_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface ApiKeyCreatedDto extends ApiKeyDto {
+  raw_key: string;
+  warning: string;
+}
+
+export interface ApiKeyUsageEntry {
+  endpoint: string;
+  method: string;
+  status_code: number | null;
+  response_ms: number | null;
+  called_at: string;
+}
+
+export async function fetchApiKeys(): Promise<ApiKeyDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load API keys");
+  return res.json();
+}
+
+export async function createApiKey(payload: {
+  name: string;
+  scopes: string[];
+  rate_limit_per_minute: number;
+  expires_at?: string | null;
+}): Promise<ApiKeyCreatedDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to create API key");
+  }
+  return res.json();
+}
+
+export async function revokeApiKey(keyId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys/${keyId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to revoke API key");
+}
+
+export async function fetchApiKeyUsage(keyId: string): Promise<ApiKeyUsageEntry[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys/${keyId}/usage`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load usage log");
+  return res.json();
+}
+
+export async function updateApiKeyScopes(
+  keyId: string,
+  scopes: string[],
+): Promise<ApiKeyDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys/${keyId}/scopes`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ scopes }),
+  });
+  if (!res.ok) throw new Error("Failed to update scopes");
+  return res.json();
+}
+
 export async function deleteAccount(): Promise<{ message: string; anonymised_at: string }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/gdpr/delete`, {
     method: "POST",
