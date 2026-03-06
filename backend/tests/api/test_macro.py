@@ -16,7 +16,7 @@ mock_macro_data = [
 
 @pytest.mark.asyncio
 async def test_get_latest_macro_dashboard(client: AsyncClient, test_app, test_db):
-    # Setup test DB
+    # Setup test DB - test_db is injected via conftest.py and also wired into the client
     test_db.add_all(mock_macro_data)
     test_db.commit()
 
