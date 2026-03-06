@@ -1,37 +1,144 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Fin-Eye — Frontend CI
+#
+# Jobs:
+#   lint    → ESLint (TypeScript-aware)
+#   type    → tsc --noEmit (type-check without producing output files)
+#   build   → next build (catches missing env vars, broken imports, etc.)
+#
+# Triggers:
+#   • push / PR to main or develop   (only when frontend/** changes)
+#   • manual trigger (workflow_dispatch)
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: Frontend CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
     paths:
-      - 'frontend/**'
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
     paths:
-      - 'frontend/**'
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: ./frontend
+
+# Cancel any in-progress run for the same branch
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  # ── 1. Lint ────────────────────────────────────────────────────────────────
+  lint:
+    name: ESLint
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend
+    timeout-minutes: 10
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: "20"
-        cache: 'npm'
-        cache-dependency-path: './frontend/package-lock.json'
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Run linting
-      run: npm run lint
+      - name: Run ESLint
+        run: npm run lint
 
-    - name: Build project
-      run: npm run build
+  # ── 2. Type check ──────────────────────────────────────────────────────────
+  typecheck:
+    name: TypeScript type check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: tsc — type check (no emit)
+        # Next.js type-checking without producing output files.
+        # We use next's built-in type-check command if available, else raw tsc.
+        run: |
+          if npm run | grep -q "type-check"; then
+            npm run type-check
+          else
+            npx tsc --noEmit
+          fi
+
+  # ── 3. Build ───────────────────────────────────────────────────────────────
+  build:
+    name: Next.js build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Build depends on both lint and typecheck passing
+    needs: [lint, typecheck]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      # Cache Next.js build output — dramatically speeds up repeated builds
+      # when only a small number of pages change.
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-${{ hashFiles('frontend/**/*.ts', 'frontend/**/*.tsx', 'frontend/**/*.js') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-
+            nextjs-${{ runner.os }}-
+
+      # Stub the env vars that Next.js requires at build time.
+      # These are NOT secrets — they're just placeholders so the build
+      # doesn't crash on missing NEXT_PUBLIC_* variables.
+      - name: Write CI .env.local
+        run: |
+          cat > .env.local <<'EOF'
+          NEXT_PUBLIC_API_URL=http://localhost:8000
+          NEXT_PUBLIC_APP_NAME=Fin-Eye
+          NEXT_PUBLIC_APP_ENV=ci
+          EOF
+
+      - name: Build Next.js
+        run: npm run build
+        env:
+          # Suppress Next.js telemetry in CI
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: |
+            frontend/.next
+            !frontend/.next/cache
+          retention-days: 7

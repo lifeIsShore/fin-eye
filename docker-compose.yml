@@ -1,25 +1,103 @@
-version: '3.8'
+# ─────────────────────────────────────────────────────────────────────────────
+# Fin-Eye — Local Development Stack
+#
+# Services:
+#   db        PostgreSQL 15          → localhost:5432
+#   redis     Redis 7                → localhost:6379
+#   pgadmin   pgAdmin 4 (optional)   → http://localhost:5050
+#
+# Usage:
+#   Start infra only:        docker compose up -d db redis
+#   Start with pgAdmin:      docker compose up -d
+#   Tear down + wipe data:   docker compose down -v
+#
+# Backend and frontend are run locally (uvicorn + next dev), not in Docker.
+# Use the Dockerfile (when created) for production deployments only.
+# ─────────────────────────────────────────────────────────────────────────────
 
 services:
+  # ── PostgreSQL ───────────────────────────────────────────────────────────
   db:
     image: postgres:15-alpine
     container_name: fin-eye-db
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: fin_eye
+      # Increase max_connections for APScheduler + async SQLAlchemy pool
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fin_eye"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fin-eye-net
+    # Tune shared_buffers for a dev machine (~25% of RAM is typical)
+    command: >
+      postgres
+        -c shared_buffers=256MB
+        -c max_connections=100
+        -c log_min_duration_statement=1000
+        -c log_statement=none
 
+  # ── Redis ────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: fin-eye-redis
-    restart: always
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - fin-eye-net
+    # Enable append-only persistence so cache survives a container restart.
+    # Remove this command line if you want a purely ephemeral cache.
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # ── pgAdmin (optional — comment out if you don't need it) ───────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: fin-eye-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@fin-eye.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"       # single-user mode, no login required
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - fin-eye-net
+    profiles:
+      # Only starts when you explicitly request the "tools" profile:
+      #   docker compose --profile tools up -d
+      # This keeps `docker compose up -d db redis` fast for daily dev.
+      - tools
+
+networks:
+  fin-eye-net:
+    driver: bridge
 
 volumes:
   postgres_data:
+  redis_data:
+  pgadmin_data:

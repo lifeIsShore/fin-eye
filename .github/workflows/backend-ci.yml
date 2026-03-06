@@ -1,43 +1,228 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Fin-Eye — Backend CI
+#
+# Jobs:
+#   lint    → flake8 (syntax + style) + safety (CVE scan)
+#   test    → pytest with PostgreSQL + Redis services, coverage gate
+#   type    → (future-ready stub) mypy --ignore-missing-imports
+#
+# Triggers:
+#   • push / PR to main or develop   (only when backend/** changes)
+#   • manual trigger (workflow_dispatch)
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: Backend CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
     paths:
-      - 'backend/**'
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
     paths:
-      - 'backend/**'
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: ./backend
+
+# Cancel any in-progress run for the same branch (saves CI minutes)
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  # ── 1. Lint ────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Security Scan
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
+    timeout-minutes: 10
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "backend/requirements.txt"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest pytest-asyncio
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Install lint tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 safety
 
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: flake8 — hard errors (syntax / undefined names)
+        run: |
+          flake8 app tests \
+            --count \
+            --select=E9,F63,F7,F82 \
+            --show-source \
+            --statistics
 
-    - name: Run tests with pytest
-      run: |
-        pytest
+      - name: flake8 — style warnings (non-blocking, for visibility)
+        run: |
+          flake8 app tests \
+            --count \
+            --exit-zero \
+            --max-complexity=12 \
+            --max-line-length=127 \
+            --extend-ignore=E203,W503 \
+            --statistics
+
+      - name: Safety — CVE scan on dependencies
+        # Warn only (exit-zero) so a newly published CVE doesn't block a hotfix deploy.
+        # Change --continue-on-error to false once you have a safety policy file.
+        run: |
+          pip install -r requirements.txt --quiet
+          safety check --continue-on-error || echo "⚠️  Safety found issues — review above"
+
+  # ── 2. Test ────────────────────────────────────────────────────────────────
+  test:
+    name: pytest (Python 3.11)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Real PostgreSQL + Redis — matches your docker-compose.yml exactly
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fin_eye_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "backend/requirements.txt"
+
+      # ── Dependency cache (heavy: torch, transformers, prophet) ──────────────
+      # Cache the full site-packages directory. Key busts only when
+      # requirements.txt changes — typically saves 4-6 min per run.
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        id: pip-cache
+        with:
+          path: ~/.cache/pip
+          key: pip-py311-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            pip-py311-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Extra test-only tools not in requirements.txt
+          pip install pytest-cov aiosqlite
+
+      # ── Inject CI environment ───────────────────────────────────────────────
+      # Tests use SQLite in-memory (see conftest.py), but a real Postgres/Redis
+      # is available for any integration tests that need it.
+      - name: Write CI .env
+        run: |
+          cat > .env <<'EOF'
+          # ── Database ──────────────────────────────────────────────────────
+          DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/fin_eye_test
+          SYNC_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fin_eye_test
+
+          # ── Redis ─────────────────────────────────────────────────────────
+          REDIS_URL=redis://localhost:6379/0
+
+          # ── Auth ──────────────────────────────────────────────────────────
+          JWT_SECRET=ci-test-jwt-secret-not-for-production
+          ACCESS_TOKEN_EXPIRE_MINUTES=30
+          TOTP_ENCRYPTION_KEY=ci-dummy-totp-key-32-chars-padded!
+
+          # ── Feature flags ─────────────────────────────────────────────────
+          REQUIRE_AUTH=False
+          DEBUG=True
+
+          # ── Stub API keys (tests use mocks, not real APIs) ─────────────────
+          FINNHUB_API_KEY=ci_stub_key
+          FRED_API_KEY=ci_stub_key
+          RESEND_API_KEY=ci_stub_key
+          EOF
+
+      - name: Run Alembic migrations against CI database
+        run: |
+          alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/fin_eye_test
+
+      - name: Run pytest with coverage
+        run: |
+          pytest \
+            --tb=short \
+            --asyncio-mode=auto \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=40 \
+            -q
+        # Coverage gate: 40% now. Raise to 60% once partial stories are wired up.
+        # The --cov-fail-under flag makes pytest exit non-zero below the threshold.
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+          retention-days: 14
+
+  # ── 3. Type check (optional, non-blocking for now) ─────────────────────────
+  typecheck:
+    name: mypy (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "backend/requirements.txt"
+
+      - name: Install mypy + stubs
+        run: |
+          pip install mypy types-redis types-requests
+
+      - name: mypy — type check (exit-zero, for visibility only)
+        # Remove --exit-zero once you've added type annotations to the core services.
+        run: |
+          mypy app \
+            --ignore-missing-imports \
+            --no-error-summary \
+            --pretty \
+            || echo "⚠️  mypy found type issues — review above (non-blocking)"
