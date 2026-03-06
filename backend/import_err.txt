@@ -1,0 +1,57 @@
+﻿python : Traceback 
+(most recent call 
+last):
+At line:1 char:1
++ python -c "import 
+app.main" 2>&1 | 
+Out-File -FilePath 
+import_err.txt  ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Traceback (mo   
+ st recent call las    
+t)::String) [], Re    
+moteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+  File "<string>", 
+line 1, in <module>
+  File "C:\Users\ahmty\
+fin-eye\backend\app\mai
+n.py", line 20, in 
+<module>
+    from 
+app.api.v1.data import 
+router as data_router
+  File "C:\Users\ahmty\
+fin-eye\backend\app\api
+\v1\data.py", line 20, 
+in <module>
+    from 
+app.services.news_data 
+import NewsFetcher
+  File "C:\Users\ahmty\
+fin-eye\backend\app\ser
+vices\news_data.py", 
+line 12, in <module>
+    class NewsFetcher:
+  File "C:\Users\ahmty\
+fin-eye\backend\app\ser
+vices\news_data.py", 
+line 91, in NewsFetcher
+    async def 
+fetch_and_store(self, 
+db: Session, symbols: 
+Optional[List[str]] = 
+None, lookback_days: 
+int = 7) -> dict:
+                       
+                 
+^^^^^^^
+NameError: name 
+'Session' is not 
+defined

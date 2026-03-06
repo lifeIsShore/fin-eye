@@ -12,6 +12,8 @@ alembic>=1.13.1
 # Security
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+pyotp>=2.9.0
+qrcode>=7.4.2
 
 # Config
 pydantic>=2.6.3
