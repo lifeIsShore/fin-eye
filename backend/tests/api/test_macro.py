@@ -3,6 +3,9 @@ from httpx import AsyncClient
 from unittest.mock import patch, MagicMock
 from datetime import date
 
+# Import all models so Base.metadata is fully populated before
+# conftest.py creates the SQLite in-memory schema.
+import app.models  # noqa: F401 — side-effect import
 from app.models.macro import MacroIndicator
 
 # Mock data for our database
