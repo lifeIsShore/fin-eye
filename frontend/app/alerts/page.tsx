@@ -42,6 +42,7 @@ export default function AlertsPage() {
   const [symbol, setSymbol] = useState("AAPL");
   const [alertType, setAlertType] = useState<AlertType>("price_above");
   const [threshold, setThreshold] = useState("");
+  const [deliveryChannel, setDeliveryChannel] = useState<"in_app" | "email">("in_app");
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -84,7 +85,7 @@ export default function AlertsPage() {
         symbol: symbol.trim().toUpperCase(),
         alert_type: alertType,
         threshold: val,
-        delivery_channel: "in_app",
+        delivery_channel: deliveryChannel,
       };
       const created = await createAlert(payload);
       setAlerts((prev) => [created, ...prev]);
@@ -162,6 +163,32 @@ export default function AlertsPage() {
         {/* Create form */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
           <h2 className="text-lg font-semibold text-white">Create New Alert</h2>
+          {/* Delivery channel */}
+          <div className="flex items-center gap-4 mb-1">
+            <p className="text-xs text-gray-400">Notify via:</p>
+            <div className="flex gap-2">
+              {(["in_app", "email"] as const).map((ch) => (
+                <button
+                  key={ch}
+                  type="button"
+                  onClick={() => setDeliveryChannel(ch)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                    deliveryChannel === ch
+                      ? "bg-sky-700 border-sky-600 text-white"
+                      : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
+                  }`}
+                >
+                  {ch === "in_app" ? "🔔 In-app" : "✉️ Email"}
+                </button>
+              ))}
+            </div>
+            {deliveryChannel === "email" && (
+              <p className="text-[10px] text-sky-400">
+                An email will be sent to your account address when this alert fires.
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Ticker</label>
@@ -258,6 +285,9 @@ export default function AlertsPage() {
                         {ALERT_TYPE_LABELS[alert.alert_type as AlertType] ?? alert.alert_type}
                       </span>
                       <span className="ml-2 text-white font-mono text-sm">{alert.threshold}</span>
+                      <span className="ml-2 text-[10px] text-gray-600">
+                        {alert.delivery_channel === "email" ? "✉️ email" : "🔔 in-app"}
+                      </span>
                     </div>
                   </div>
 
@@ -284,7 +314,8 @@ export default function AlertsPage() {
 
         {/* Footer note */}
         <p className="text-xs text-gray-600 text-center">
-          Alerts are evaluated approximately every 5 minutes. Email delivery coming soon.
+          Alerts are evaluated every 5 minutes during US market hours (9am–5pm ET).
+          Email alerts are sent via Resend and arrive within minutes of the threshold being breached.
         </p>
       </div>
     </div>

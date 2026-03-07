@@ -195,6 +195,47 @@ async def job_weekly_digest() -> None:
         )
 
 
+async def job_alert_email_notifications() -> None:
+    """
+    Evaluate all active email-channel alerts and dispatch emails for any
+    that have breached their threshold.
+
+    Runs every 5 minutes on weekdays during US market hours (13:00–21:00 UTC).
+    Also runs once at 13:00 on weekdays (market open) to catch any alerts
+    that fired overnight based on pre-market data.
+
+    Safe to run outside market hours — evaluate_all_email_alerts is a no-op
+    if there are no active email alerts, so there's no cost to wider scheduling.
+    """
+    from app.services.alert_service import evaluate_all_email_alerts  # noqa: PLC0415
+
+    logger.info("Starting alert email notification job")
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            summary = await evaluate_all_email_alerts(session)
+            await session.commit()
+        detail = (
+            f"checked={summary['checked']} fired={summary['fired']} "
+            f"emailed={summary['emailed']} errors={summary['errors']}"
+        )
+        logger.info("Alert email job complete: %s", detail)
+        get_metrics().record_pipeline_run(
+            "alert_email_notifications", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Alert email notification job failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "alert_email_notifications", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        # Don't re-raise — a failed notification job must not crash the scheduler
+
+
 async def job_gas_precompute() -> None:
     """
     Pre-compute GAS scores for all default symbols and write results to
@@ -362,6 +403,16 @@ def setup_scheduler() -> AsyncIOScheduler:
         name="Weekly Email Digest",
         replace_existing=True,
         misfire_grace_time=3600,
+    )
+
+    # Alert email notifications — weekdays every 5 min during US market hours
+    scheduler.add_job(
+        job_alert_email_notifications,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="13-21", minute="0,5,10,15,20,25,30,35,40,45,50,55"),
+        id="alert_email_notifications",
+        name="Alert Email Notifications",
+        replace_existing=True,
+        misfire_grace_time=60,   # tight grace — price alerts need to be timely
     )
 
     # GAS pre-compute — weekdays every 15 min during US market hours (13:00–21:00 UTC)

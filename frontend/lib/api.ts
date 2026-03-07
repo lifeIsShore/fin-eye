@@ -2690,3 +2690,123 @@ export async function fetchFedDotPlot(): Promise<DotPlotProjectionDto[]> {
   if (!res.ok) throw new Error("Dot plot data unavailable");
   return res.json();
 }
+
+// ─── Custom Indicators (P3-ANALYTICS-01) ──────────────────────────────────
+
+export type FormulaNode = Record<string, unknown>;
+
+export interface IndicatorSummary {
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+  current: number | null;
+}
+
+export interface EvaluateResponseDto {
+  dates:   string[];
+  values:  (number | null)[];
+  type:    "continuous" | "signal";
+  summary: IndicatorSummary;
+}
+
+export interface ValidateResponseDto {
+  valid:  boolean;
+  errors: string[];
+}
+
+export interface CustomIndicatorDto {
+  id:          number;
+  name:        string;
+  description: string | null;
+  formula:     FormulaNode;
+  created_at:  string;
+  updated_at:  string;
+}
+
+export interface CatalogParam {
+  name:    string;
+  default: number;
+  min:     number;
+  max:     number;
+  type:    "int" | "float";
+}
+
+export interface CatalogEntry {
+  fn:          string;
+  label:       string;
+  category:    string;
+  params:      CatalogParam[];
+  outputs:     string[];
+  description: string;
+  example:     FormulaNode;
+}
+
+export async function fetchIndicatorCatalog(): Promise<CatalogEntry[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/indicators/catalog`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Catalog unavailable");
+  return res.json();
+}
+
+export async function evaluateIndicator(payload: {
+  formula: FormulaNode;
+  symbol: string;
+  timeframe: string;
+  periods: number;
+}): Promise<EvaluateResponseDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/indicators/evaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.detail ?? "Evaluation failed");
+  }
+  return res.json();
+}
+
+export async function validateIndicatorFormula(formula: FormulaNode): Promise<ValidateResponseDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/indicators/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ formula }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Validation request failed");
+  return res.json();
+}
+
+export async function fetchSavedIndicators(): Promise<CustomIndicatorDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/indicators`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load indicators");
+  return res.json();
+}
+
+export async function saveIndicator(payload: {
+  name: string; description?: string; formula: FormulaNode;
+}): Promise<CustomIndicatorDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/indicators`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Save failed");
+  return res.json();
+}
+
+export async function deleteIndicator(id: number): Promise<void> {
+  await fetch(`${API_BASE_URL}/api/v1/indicators/${id}`, { method: "DELETE", cache: "no-store" });
+}
+
+export async function evaluateSavedIndicator(
+  id: number, symbol: string, timeframe: string, periods: number
+): Promise<EvaluateResponseDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/indicators/${id}/evaluate?symbol=${symbol}&timeframe=${timeframe}&periods=${periods}`,
+    { cache: "no-store" }
+  );
+  if (!res.ok) throw new Error("Evaluation failed");
+  return res.json();
+}

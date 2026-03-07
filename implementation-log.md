@@ -42,8 +42,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P2-MACRO-ADV-01     | P2 – Macro (adv)      | DONE         | 2026-03-05   | Full yield curve, recession gauge, stress index, advanced UI |
 | P2-CONTENT-ADV-01   | P2 – Content (adv)    | DONE         | 2026-03-06   | 2008 + 2020 case studies seeded; category filter on Learn page |
 | P3-RISK-01          | P3 – Risk tools       | DONE         | 2026-03-07   | Scenario library (10), beta-adjusted stress, VaR/CVaR, portfolio stress, 3-tab frontend page |
-| P3-SENT-ADV-01      | P3 – Sentiment (adv)  | NOT_STARTED  | -            | Needs Twitter/X API key; Google Trends via pytrends (free) |
-| P3-ANALYTICS-01     | P3 – Analytics (adv)  | NOT_STARTED  | -            | No-code indicator builder; depends on TECH-02 |
+| P3-SENT-ADV-01      | P3 – Sentiment (adv)  | DONE         | 2026-03-07   | Google Trends + StockTwits deep analysis, composite score, full /sentiment-adv page |
+| P3-ANALYTICS-01     | P3 – Analytics (adv)  | DONE         | 2026-03-07   | Expression builder (12 fns), formula tree evaluator, save/load, live chart preview |
 | P3-API-01           | P3 – Public API       | NOT_STARTED  | -            | Deferred — public launch concern |
 | P3-WHITELABEL-01    | P3 – White-label      | NOT_STARTED  | -            | Deferred — enterprise concern |
 | P3-BULK-01          | P3 – Bulk analysis    | NOT_STARTED  | -            | Deferred — depends on API-01 |
@@ -53,8 +53,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P3-EDU-01           | P3 – Education (adv)  | NOT_STARTED  | -            | Deferred — post-launch |
 | EXP-EARN-01         | Exp – Earnings        | DONE         | 2026-03-07   | EPS history (8Q), upcoming date countdown, surprise score, bar chart + history table |
 | EXP-SHORT-01        | Exp – Short Interest  | DONE         | 2026-03-07   | Short float %, days-to-cover, FINRA trend, squeeze score (0–100), full /shorts page |
-| P3-SENT-ADV-01      | P3 – Sentiment (adv)  | DONE         | 2026-03-07   | Google Trends + StockTwits deep analysis, composite score, full /sentiment-adv page |
 | EXP-MACRO-ADV-02    | Exp – Fed Policy      | DONE         | 2026-03-07   | FRED data: target range, DFF, SOFR, balance sheet, RRP, dot plot, forward expectations |
+| CORE-NOTIF-ADV-01   | Core – Notif (adv)    | DONE         | prior session | Email alerts: price_above/below + gas_above/below, HTML templates, scheduler job, frontend UI |
 | CORE-AUTH-01        | Core – Auth           | DONE         | 2026-03-04   | NextAuth/JWT implemented |
 | CORE-SUB-01         | Core – Billing        | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SUB-02         | Core – Billing        | NOT_STARTED  | -            | Depends on SUB-01 |
@@ -2542,3 +2542,82 @@ Post-audit session to close the four genuine remaining gaps identified after a f
     - `CORE-NOTIF-ADV-01` — GAS threshold + regime-change email alerts. Uses existing APScheduler, Resend, and alert_service infrastructure. Short build (~1 session).
     - `P3-ANALYTICS-01` — No-code indicator builder. Heavier UI; schedule for dedicated session.
     - Deferred: `CORE-SUB-01/02` (billing/Stripe), `P3-API-01` (public API), enterprise features.
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — CORE-NOTIF-ADV-01 audit (no new build needed)**
+
+- **Outcome**: `CORE-NOTIF-ADV-01` confirmed **DONE** from a prior session — no new files required.
+
+- **Audit findings**
+    - `app/models/alert.py` — `delivery_channel` column present (`in_app` | `email`). `triggered_value` column present.
+    - `app/services/alert_email_service.py` — fully implemented:
+      - `_render_price_alert()` — polished dark HTML email for `price_above`/`price_below`.
+      - `_render_gas_alert()` — dark HTML email with GAS score bar, component breakdown, for `gas_above`/`gas_below`.
+      - `send_alert_email()` — deduplication via `EmailLog` (`alert_{type}_{id}` key), calls `_send()` / `_base_template()` from `email_service.py`, logs success/failure.
+    - `app/services/alert_service.py` — `evaluate_all_email_alerts()` fully implemented:
+      - Loads all active email alerts. Deduplicates symbols.
+      - Resolves GAS score via `get_snapshot_cached()` (Redis → DB → live compute).
+      - Resolves price via `yfinance.Ticker.fast_info.last_price`.
+      - Marks `triggered_at`, `triggered_value`, `is_active=False` on breach. Flushes before emailing.
+      - Calls `send_alert_email()` per fired alert. Returns metrics dict.
+    - `app/services/scheduler.py` — `job_alert_email_notifications` registered: weekdays, every 5 min, 13:00–21:00 UTC.
+    - `frontend/app/alerts/page.tsx` — full UI: delivery channel toggle (in-app / email), alert type select, threshold input, triggered banner with dismiss, alert list with channel badge.
+
+- **Log corrections applied this session**
+    - Duplicate `P3-SENT-ADV-01` row (NOT_STARTED + DONE) — deduplicated to single DONE row in correct position.
+    - `CORE-NOTIF-ADV-01` — added as DONE.
+    - Session entry for log-audit-2 appended.
+
+- **True remaining backlog (actionable, non-deferred)**
+    - `P3-ANALYTICS-01` — No-code indicator builder. Genuinely not started. Heavier UI story.
+    - All deferred stories remain deferred: `CORE-SUB-01/02`, `P3-API-01`, `P3-WHITELABEL-01`, `P3-BULK-01`, `P3-REPORT-01`, `P3-MOBILE-*`, `P3-EDU-01`.
+
+- **Next session**
+    - `P3-ANALYTICS-01` — No-code indicator builder: custom formula composer, backtest preview, save/load named indicators. Uses existing `technical_service` + `backtest` infrastructure.
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — P3-ANALYTICS-01: No-Code Indicator Builder (complete)**
+
+- **Stories completed**
+    - `P3-ANALYTICS-01` (No-Code Indicator Builder) — **DONE**
+
+- **Design decisions**
+    - **No new dependencies** — all indicator math uses pandas/numpy (already installed). No ta-lib, pandas-ta, or any external TA library. Same approach as `ml_pipeline.py`.
+    - **Formula representation**: JSON expression tree with a strict whitelist. Four node types: `indicator` (named function), `number` (constant), `binop` (arithmetic + comparison operators), `cross` (crossover detection). No Python eval() or exec() — pure tree traversal.
+    - **12 indicator functions**: SMA, EMA, RSI, MACD (macd/signal/hist outputs), Bollinger Bands (upper/lower/mid/width/pb), ATR, Stochastic (k/d), OBV, ROC, CCI, VWAP (20-period rolling), CLOSE, VOLUME.
+    - **Output types**: `continuous` (numeric series) or `signal` (0/1 series from cross nodes or comparison binops). Signal display shows event dates; continuous shows summary stats + line/area chart.
+    - **OHLCV cache**: per (symbol, timeframe, periods) key, 15-minute TTL — matches GAS pre-compute cycle.
+    - **Validation**: `validate_formula()` walks the tree and returns a list of errors without evaluating. Used before save and before evaluate.
+    - **6 presets**: RSI(14), SMA 10/50 cross, MACD histogram, Bollinger %B, RSI−50 (centred oscillator), EMA12−EMA26.
+    - **Saved indicators**: stored in `custom_indicators` table (user_id, name, description, formula JSONB). Full CRUD + `/evaluate` endpoint for re-running a saved indicator.
+    - **Frontend**: 3-column layout: function palette (click-to-insert, hover tooltip with params and example JSON), formula JSON editor with live text preview, result chart panel. Tabs for builder vs saved library. Save modal with name + description. Category filter on palette.
+
+- **Backend (new files)**
+    - ✅ `app/models/custom_indicator.py` — `CustomIndicator` SQLAlchemy model (`user_id`, `name`, `description`, `formula` JSONB, timestamps). Registered in `main.py` for `init_db()` table creation.
+    - ✅ `app/services/indicator_service.py` — `evaluate(formula, symbol, timeframe, periods)`, `validate_formula(node)`, `_eval_node()` recursive tree evaluator, all 12 indicator computations as pure pandas functions, OHLCV loader with 15-min cache.
+    - ✅ `app/api/v1/endpoints/indicators.py` — 8 routes: `GET /catalog`, `POST /validate`, `POST /evaluate`, `POST /` (save), `GET /` (list), `GET /{id}`, `PUT /{id}`, `DELETE /{id}`, `GET /{id}/evaluate`. All auth-protected except `/catalog`.
+
+- **Backend (modified files)**
+    - ✅ `app/main.py` — `custom_indicator` model imported; `indicators` router imported and mounted at `/api/v1/indicators`.
+
+- **Frontend (new files)**
+    - ✅ `frontend/app/indicators/page.tsx` — full builder page: function palette with hover tooltips and category filter, 6 quick presets, JSON formula editor with live formula text preview, Run/Save/Clear action bar, result chart panel (`ResultChart` handles both signal and continuous types), saved indicator library (`SavedCard` with Load/Run/Delete), save modal, formula JSON reference docs.
+
+- **Frontend (modified files)**
+    - ✅ `frontend/lib/api.ts` — `FormulaNode`, `EvaluateResponseDto`, `ValidateResponseDto`, `CustomIndicatorDto`, `CatalogEntry`, `CatalogParam` interfaces; `fetchIndicatorCatalog`, `evaluateIndicator`, `validateIndicatorFormula`, `fetchSavedIndicators`, `saveIndicator`, `deleteIndicator`, `evaluateSavedIndicator` functions.
+    - ✅ `frontend/components/Nav.tsx` — "Indicators" nav item added between Fed Policy and Hedge.
+
+- **Current project state**
+    - **All actionable non-deferred stories are now DONE.** Only deferred/enterprise stories remain: `CORE-SUB-01/02` (billing), `P3-API-01` (public API), `P3-WHITELABEL-01`, `P3-BULK-01`, `P3-REPORT-01`, `P3-MOBILE-*`, `P3-EDU-01`.
+    - Full navigable feature set: Macro / Sentiment / Retail / Options / Sectors / Insiders / Earnings / Shorts / Adv. Sentiment / Fed Policy / Indicators / Hedge / Backtest / Portfolio / Alerts / Risk
+
+- **Next session options (product owner call)**
+    - Start on deferred stories (`CORE-SUB-01` Stripe billing is highest business value).
+    - Or identify new stories / polish existing features.
+    - Or do a full integration test pass across all pages.

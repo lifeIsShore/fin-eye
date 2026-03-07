@@ -149,3 +149,163 @@ def build_trigger_message(alert: Alert) -> str:
         f"{alert.symbol} {metric} {verb} your threshold of {alert.threshold:.2f} "
         f"(current: {alert.triggered_value:.2f})"
     )
+
+
+# ── Email alert batch evaluation (CORE-NOTIF-ADV-01) ─────────────────────────
+
+async def evaluate_all_email_alerts(db: AsyncSession) -> dict:
+    """
+    Called by the APScheduler job every 5 minutes during market hours.
+
+    Strategy:
+      1. Load all active, un-triggered alerts with delivery_channel='email'.
+      2. Deduplicate symbols — fetch GAS snapshot once per unique symbol.
+      3. For each alert, check the threshold against live GAS or cached price.
+      4. On breach: mark triggered in DB, send email via alert_email_service.
+
+    Price data for price_above/price_below alerts:
+      We use the GAS snapshot's last known price from yfinance ticker.info
+      (fast_info.last_price). If unavailable we fall back to yfinance directly.
+      This avoids a separate price API — the GAS pre-compute job already
+      fetches yfinance data every 15 minutes.
+
+    Returns a summary dict suitable for scheduler metrics logging.
+    """
+    from sqlalchemy import select as _select  # local import to avoid circular
+    import time
+
+    started = time.perf_counter()
+    total_checked = 0
+    total_fired   = 0
+    total_emailed = 0
+    errors: list[str] = []
+
+    # ── 1. Load all active email alerts ───────────────────────────────────
+    result = await db.execute(
+        _select(Alert).where(
+            Alert.is_active == True,        # noqa: E712
+            Alert.triggered_at == None,     # noqa: E711
+            Alert.delivery_channel == "email",
+        )
+    )
+    email_alerts: list[Alert] = list(result.scalars().all())
+    total_checked = len(email_alerts)
+
+    if not total_checked:
+        logger.info("evaluate_all_email_alerts: no active email alerts — skipping")
+        return {"checked": 0, "fired": 0, "emailed": 0, "errors": 0, "elapsed_ms": 0}
+
+    logger.info("evaluate_all_email_alerts: evaluating %d email alerts", total_checked)
+
+    # ── 2. Resolve current values per unique symbol ────────────────────────
+    unique_symbols = list({a.symbol for a in email_alerts})
+    symbol_gas: dict[str, float | None]   = {}
+    symbol_price: dict[str, float | None] = {}
+
+    for symbol in unique_symbols:
+        # Try GAS snapshot (Redis → DB)
+        try:
+            from app.services.gas_precompute import get_snapshot_cached  # noqa: PLC0415
+            snap = await get_snapshot_cached(symbol, db)
+            symbol_gas[symbol] = snap["gas_score"] if snap else None
+        except Exception as exc:
+            logger.warning("GAS lookup failed for %s: %s", symbol, exc)
+            symbol_gas[symbol] = None
+
+        # Price lookup via yfinance fast_info (already available)
+        try:
+            import asyncio as _asyncio  # noqa: PLC0415
+            import yfinance as _yf       # noqa: PLC0415
+
+            def _get_price(sym: str) -> float | None:
+                try:
+                    t = _yf.Ticker(sym)
+                    p = t.fast_info.get("last_price") or t.fast_info.get("lastPrice")
+                    return float(p) if p else None
+                except Exception:
+                    return None
+
+            loop = _asyncio.get_running_loop()
+            price = await loop.run_in_executor(None, _get_price, symbol)
+            symbol_price[symbol] = price
+        except Exception as exc:
+            logger.warning("Price lookup failed for %s: %s", symbol, exc)
+            symbol_price[symbol] = None
+
+    # ── 3. Evaluate each alert ─────────────────────────────────────────────
+    fired_alerts: list[Alert] = []
+
+    from datetime import datetime as _dt  # noqa: PLC0415
+    for alert in email_alerts:
+        sym   = alert.symbol
+        gas   = symbol_gas.get(sym)
+        price = symbol_price.get(sym)
+
+        triggered_value: float | None = None
+
+        if alert.alert_type == "price_above" and price is not None and price > alert.threshold:
+            triggered_value = price
+        elif alert.alert_type == "price_below" and price is not None and price < alert.threshold:
+            triggered_value = price
+        elif alert.alert_type == "gas_above" and gas is not None and gas > alert.threshold:
+            triggered_value = gas
+        elif alert.alert_type == "gas_below" and gas is not None and gas < alert.threshold:
+            triggered_value = gas
+
+        if triggered_value is not None:
+            alert.triggered_at    = _dt.utcnow()
+            alert.triggered_value = triggered_value
+            alert.is_active       = False   # deactivate after email alert fires
+            fired_alerts.append(alert)
+            total_fired += 1
+            logger.info(
+                "Email alert %d FIRED — %s %s threshold=%.2f actual=%.2f",
+                alert.id, sym, alert.alert_type, alert.threshold, triggered_value,
+            )
+
+    if fired_alerts:
+        await db.flush()   # persist triggered_at + is_active=False before emailing
+
+    # ── 4. Send emails for fired alerts ───────────────────────────────────
+    if fired_alerts:
+        from app.services.alert_email_service import send_alert_email  # noqa: PLC0415
+        from sqlalchemy import select as _sel  # noqa: PLC0415
+        from app.models.email_preference import EmailPreference  # noqa: PLC0415
+
+        for alert in fired_alerts:
+            try:
+                # Load user
+                user_result = await db.execute(
+                    _select(User).where(User.id == alert.user_id)
+                )
+                user: User | None = user_result.scalar_one_or_none()
+                if not user or not user.is_active:
+                    logger.warning("Alert %d: user %s not found or inactive", alert.id, alert.user_id)
+                    continue
+
+                # Load unsubscribe token
+                pref_result = await db.execute(
+                    _select(EmailPreference).where(EmailPreference.user_id == user.id)
+                )
+                pref: EmailPreference | None = pref_result.scalar_one_or_none()
+                unsubscribe_token = pref.unsubscribe_token if pref else "no-token"
+
+                sent = await send_alert_email(db, alert, user, unsubscribe_token)
+                if sent:
+                    total_emailed += 1
+
+            except Exception as exc:
+                err_msg = f"alert_id={alert.id}: {exc}"
+                logger.error("Email send failed — %s", err_msg)
+                errors.append(err_msg)
+
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    summary = {
+        "checked":    total_checked,
+        "fired":      total_fired,
+        "emailed":    total_emailed,
+        "errors":     len(errors),
+        "elapsed_ms": elapsed_ms,
+    }
+    logger.info("evaluate_all_email_alerts complete: %s", summary)
+    return summary
