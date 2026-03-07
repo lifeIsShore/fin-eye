@@ -2621,3 +2621,54 @@ Post-audit session to close the four genuine remaining gaps identified after a f
     - Start on deferred stories (`CORE-SUB-01` Stripe billing is highest business value).
     - Or identify new stories / polish existing features.
     - Or do a full integration test pass across all pages.
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — Comprehensive Audit, Security Review, Pre-Launch Strategy**
+
+- **Deliverables produced this session**
+
+    - ✅ `docs/PRE-LAUNCH-STRATEGY.md` — Full product owner document: security audit (10 critical + 8 high + 7 medium issues), product objectives gap analysis, advanced indicators roadmap (Tier 1: 12 new indicators, Tier 2: 10 advanced, 5 composite/unique), ML expansion plan (crypto/commodities/forex/bonds), digital nomad & tax/legal content module, tax-haven & legal structure reference tables, digital product showroom strategy (6 products seeded), investment strategy planning module spec, pre-launch checklist (40+ items), deployment architecture, cost model.
+    - ✅ `backend/.env` — Comprehensive env file with every API key, webhook, and integration slot (Stripe, LemonSqueezy, Paddle, OAuth, S3/R2, Sentry, Slack, Telegram, PostHog, Binance, FRED, Polygon, NewsAPI, OpenAI, etc.)
+    - ✅ `backend/.env.example` — Safe placeholder version for version control.
+    - ✅ `backend/scripts/seed_all_data.py` — Full idempotent data seeder: DB init, 3 demo users (admin/demo/pro), OHLCV, news, macro (FRED), GAS pre-compute, watchlist, portfolio positions, custom indicators, blog posts (incl. digital nomad + tax articles), showcase products (6 digital products), alerts, strategies, legal consents, Redis cache warm. Supports `--fast`, `--skip-ml`, `--demo-only`, `--reset` flags.
+    - ✅ `docs/README.md` — Updated documentation index with quick-start guide and security warning.
+    - ✅ `docs/archive/` — Created archive folder. Moved 6 superseded root-level documents there.
+
+- **Critical security issues found (action required before ANY public deployment)**
+    - C1: Real FINNHUB + FRED API keys committed to git — ROTATE IMMEDIATELY
+    - C2: Real JWT_SECRET committed — ROTATE IMMEDIATELY
+    - C3: Real TOTP Fernet key committed — ROTATE IMMEDIATELY (all existing TOTP secrets compromised)
+    - C4: REQUIRE_AUTH=False by default — set True in production
+    - C5: ALLOWED_ORIGINS=["*"] default — lock to specific domain
+    - C6: DEBUG=True in .env — set False in production
+    - C7: No rate limiting on /auth/* — brute force possible
+    - C8: Email verification exists but not enforced
+
+- **Seeder usage**
+    ```bash
+    cd backend
+    # Full seed (all data, ML compute):
+    python scripts/seed_all_data.py
+    # Fast seed (no ML, no intraday, no news):
+    python scripts/seed_all_data.py --fast
+    # Skip ML entirely (neutral 50.0 scores):
+    python scripts/seed_all_data.py --skip-ml
+    # Reset and re-seed:
+    python scripts/seed_all_data.py --reset
+    # Login after seed:
+    # admin@fin-eye.com / AdminFinEye2024!
+    # demo@fin-eye.com  / DemoFinEye2024!
+    ```
+
+- **Recommended next sessions (priority order)**
+    1. **Security hardening** — Rate limiting, refresh token rotation, email verification enforcement, password complexity, security headers. ~1 session.
+    2. **CORE-SUB-01/02** — Stripe billing integration. ~2 sessions.
+    3. **Feature gating** — Lock features behind subscription_tier. ~0.5 session.
+    4. **Crypto/Commodities layer** — Phase A (BTC/ETH) + Phase B (Gold/Oil). ~1 session.
+    5. **Mobile responsiveness pass** — Audit all pages at 375px. ~1 session.
+    6. **Showroom product creation** — Actually create the Excel/Google Sheets templates. ~2 sessions.
+    7. **Digital Nomad content** — Write + seed articles. ~1 session.
+    8. **LLM explanations** — OpenAI GPT-4o-mini narrating GAS changes. ~1 session.
