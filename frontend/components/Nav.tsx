@@ -14,6 +14,7 @@ const NAV_ITEMS = [
     { href: "/options", label: "Options" },
     { href: "/sectors", label: "Sectors" },
     { href: "/insiders", label: "Insiders" },
+    { href: "/earnings", label: "Earnings" },
     { href: "/hedge", label: "Hedge" },
     { href: "/backtesting", label: "Backtest" },
     { href: "/portfolios", label: "Portfolio" },

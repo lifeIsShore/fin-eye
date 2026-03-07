@@ -41,16 +41,17 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P2-STRAT-01         | P2 – Strategy library | DONE         | 2026-03-05   | Save/load/share, community leaderboard by Sharpe |
 | P2-MACRO-ADV-01     | P2 – Macro (adv)      | DONE         | 2026-03-05   | Full yield curve, recession gauge, stress index, advanced UI |
 | P2-CONTENT-ADV-01   | P2 – Content (adv)    | DONE         | 2026-03-06   | 2008 + 2020 case studies seeded; category filter on Learn page |
-| P3-SENT-ADV-01      | P3 – Sentiment (adv)  | NOT_STARTED  | -            | Depends on SENT-02 |
-| P3-ANALYTICS-01     | P3 – Analytics (adv)  | NOT_STARTED  | -            | Depends on TECH-02 |
-| P3-API-01           | P3 – Public API       | NOT_STARTED  | -            | Depends on AUTH-01 |
-| P3-WHITELABEL-01    | P3 – White-label      | NOT_STARTED  | -            | Depends on API-01 |
-| P3-RISK-01          | P3 – Risk tools       | NOT_STARTED  | -            | Depends on TECH-02 |
-| P3-BULK-01          | P3 – Bulk analysis    | NOT_STARTED  | -            | Depends on TECH-02 |
-| P3-REPORT-01        | P3 – Reporting        | NOT_STARTED  | -            | Depends on BULK-01 |
-| P3-MOBILE-01        | P3 – Mobile           | NOT_STARTED  | -            | Depends on DASH-01 |
-| P3-MOBILE-02        | P3 – Mobile           | NOT_STARTED  | -            | Depends on MOBILE-01 |
-| P3-EDU-01           | P3 – Education (adv)  | NOT_STARTED  | -            | Depends on LEARN-01 |
+| P3-RISK-01          | P3 – Risk tools       | DONE         | 2026-03-07   | Scenario library (10), beta-adjusted stress, VaR/CVaR, portfolio stress, 3-tab frontend page |
+| P3-SENT-ADV-01      | P3 – Sentiment (adv)  | NOT_STARTED  | -            | Needs Twitter/X API key; Google Trends via pytrends (free) |
+| P3-ANALYTICS-01     | P3 – Analytics (adv)  | NOT_STARTED  | -            | No-code indicator builder; depends on TECH-02 |
+| P3-API-01           | P3 – Public API       | NOT_STARTED  | -            | Deferred — public launch concern |
+| P3-WHITELABEL-01    | P3 – White-label      | NOT_STARTED  | -            | Deferred — enterprise concern |
+| P3-BULK-01          | P3 – Bulk analysis    | NOT_STARTED  | -            | Deferred — depends on API-01 |
+| P3-REPORT-01        | P3 – Reporting        | NOT_STARTED  | -            | Deferred — depends on BULK-01 |
+| P3-MOBILE-01        | P3 – Mobile           | NOT_STARTED  | -            | Deferred — post-launch |
+| P3-MOBILE-02        | P3 – Mobile           | NOT_STARTED  | -            | Deferred — post-launch |
+| P3-EDU-01           | P3 – Education (adv)  | NOT_STARTED  | -            | Deferred — post-launch |
+| EXP-EARN-01         | Exp – Earnings        | DONE         | 2026-03-07   | EPS history (8Q), upcoming date countdown, surprise score, bar chart + history table |
 | CORE-AUTH-01        | Core – Auth           | DONE         | 2026-03-04   | NextAuth/JWT implemented |
 | CORE-SUB-01         | Core – Billing        | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SUB-02         | Core – Billing        | NOT_STARTED  | -            | Depends on SUB-01 |
@@ -2401,3 +2402,48 @@ Post-audit session to close the four genuine remaining gaps identified after a f
     - `CORE-OPS-01` + `CORE-SEC-02` — Monitoring & observability + automated backups. Both are infra, both short. Get these in before daily use.
     - `CORE-ANALYTICS-01` — Self-hosted product analytics (Plausible-style). Tells you which pages load, which calls fail, what's slow.
     - `P3-RISK-01` — Scenario & Stress Tests. Monte Carlo + historical shock scenarios against portfolio.
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — EXP-EARN-01: Earnings Calendar & Surprise Tracker (complete)**
+
+- **Stories completed**
+    - `EXP-EARN-01` (Earnings Calendar & Surprise Tracker — EPS history, upcoming date, surprise score) — **DONE**
+    - `P3-RISK-01` table row corrected to **DONE** (was already fully built in a prior session)
+
+- **Log audit**
+    - `P3-RISK-01` marked DONE — `risk_service.py` and full 3-tab `/risk` frontend page were already complete.
+    - Deferred stories (`P3-API-01`, `P3-WHITELABEL-01`, `P3-BULK-01`, `P3-REPORT-01`, `P3-MOBILE-*`, `P3-EDU-01`) annotated as deferred with reason.
+
+- **Design decisions**
+    - **No API key required** — all data from Yahoo Finance via yfinance (already installed).
+    - **EPS surprise history**: up to 8 quarters from `ticker.earnings_history`. Columns: period label, report date, EPS estimate, EPS actual, surprise $, surprise %, beat/miss flag. Revenue actuals enriched from `ticker.quarterly_income_stmt` where available (best-effort ±45-day date match).
+    - **Upcoming earnings**: from `ticker.calendar`. Handles both dict and DataFrame return shapes (yfinance has version-dependent API). Days-until countdown with urgency colour (amber ≤3 days, blue ≤14 days).
+    - **Surprise score (0–100)**: weighted average of last 4 quarters (4×/3×/2×/1× newest-first). Beat magnitude scales up, miss magnitude scales down. Normalised via `tanh(raw/15) × 50 + 50`. Labels: Strong Beater / Consistent Beater / Mixed / Miss Tendency / Consistent Misser. Beat = surprise >+2%, Miss = <−2%, Inline = ±2%.
+    - **Consecutive beat streak** highlighted when >0.
+    - **6-hour cache** (`_CACHE` dict) — earnings dates and estimates rarely change intraday.
+    - **CPU-bound yfinance in thread pool** — all async endpoints use `loop.run_in_executor(None, analyse_earnings, symbol)`.
+    - **Three backend routes**: `GET /{symbol}` (full), `GET /{symbol}/upcoming` (next date card), `POST /calendar` (watchlist multi-symbol, max 30, max 90 days ahead).
+    - **Frontend**: SVG arc gauge (same inline pattern), upcoming date countdown ring with urgency colouring, EPS surprise bar chart (recharts `BarChart` with colour-coded cells — emerald/teal/orange/rose), quarterly history table with beat/miss badge and colour-coded left border, methodology card.
+    - `keepPreviousData: true` + `refreshInterval: 21_600_000` (6h) on SWR hook — matches cache TTL.
+
+- **Backend (new files)**
+    - ✅ `app/services/earnings_service.py` — `analyse_earnings()`, `_compute_surprise_score()`, `get_upcoming_calendar()`, `_quarter_label()`, `_safe_float()`, `_surprise_pct()`. 6-hour in-process cache.
+    - ✅ `app/api/v1/endpoints/earnings.py` — 3 routes, Pydantic schemas (`EarningsAnalysisDto`, `EarningsRecordDto`, `SurpriseScoreDto`, `UpcomingEarningsDto`).
+
+- **Backend (modified files)**
+    - ✅ `app/main.py` — `earnings` router imported and mounted at `/api/v1/earnings`.
+
+- **Frontend (new files)**
+    - ✅ `frontend/app/earnings/page.tsx` — full page: SVG arc gauge, beat/miss/inline stat grid, consecutive streak badge, upcoming date countdown card with eps/rev estimates, EPS surprise bar chart (recharts, colour-coded cells with inline labels), quarterly history table (beat/miss badge, colour-coded left border), methodology card, disclaimer.
+
+- **Frontend (modified files)**
+    - ✅ `frontend/lib/api.ts` — `EarningsRecordDto`, `SurpriseScoreDto`, `UpcomingEarningsDto`, `EarningsAnalysisDto` interfaces; `fetchEarningsAnalysis()`, `fetchUpcomingEarnings()`, `fetchEarningsCalendar()` functions.
+    - ✅ `frontend/components/Nav.tsx` — "Earnings" nav item added after "Insiders".
+
+- **Next steps**
+    - `EXP-SHORT-01` — Short Interest & Borrow Rate via FINRA (free, no key, pairs perfectly with Insiders + Earnings).
+    - `P3-SENT-ADV-01` — Google Trends via `pytrends` (free) + earnings transcript sentiment if a free source is found.
+    - `CORE-NOTIF-ADV-01` — GAS threshold breach alerts via email (builds on existing alerts + email infrastructure).

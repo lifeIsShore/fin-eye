@@ -2412,3 +2412,80 @@ export async function fetchRecentInsiderTransactions(
   if (!res.ok) throw new Error(`Recent insider transactions unavailable for ${symbol}`);
   return res.json();
 }
+
+// ─── Earnings Calendar (EXP-EARN-01) ───────────────────────────────────
+
+export interface EarningsRecordDto {
+  period_label: string;
+  earnings_date: string;
+  eps_estimate: number | null;
+  eps_actual: number | null;
+  eps_surprise: number | null;
+  eps_surprise_pct: number | null;
+  revenue_estimate: number | null;
+  revenue_actual: number | null;
+  revenue_surprise_pct: number | null;
+  beat_eps: boolean | null;
+}
+
+export interface SurpriseScoreDto {
+  score: number;
+  label: string;
+  quarters_beat: number;
+  quarters_missed: number;
+  quarters_inline: number;
+  avg_eps_surprise_pct: number | null;
+  consecutive_beats: number;
+}
+
+export interface UpcomingEarningsDto {
+  symbol: string;
+  company_name: string;
+  earnings_date: string;
+  days_until: number;
+  eps_estimate: number | null;
+  revenue_estimate: number | null;
+  time_of_day: string;
+}
+
+export interface EarningsAnalysisDto {
+  symbol: string;
+  company_name: string;
+  history: EarningsRecordDto[];
+  upcoming: UpcomingEarningsDto | null;
+  surprise_score: SurpriseScoreDto;
+  disclaimer: string;
+}
+
+export async function fetchEarningsAnalysis(symbol: string): Promise<EarningsAnalysisDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/earnings/${symbol.toUpperCase()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? `Earnings data unavailable for ${symbol}`);
+  }
+  return res.json();
+}
+
+export async function fetchUpcomingEarnings(symbol: string): Promise<UpcomingEarningsDto | null> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/earnings/${symbol.toUpperCase()}/upcoming`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchEarningsCalendar(
+  symbols: string[],
+  daysAhead = 30,
+): Promise<UpcomingEarningsDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/earnings/calendar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbols, days_ahead: daysAhead }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch earnings calendar");
+  return res.json();
+}
