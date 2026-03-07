@@ -12,6 +12,7 @@ const NAV_ITEMS = [
     { href: "/news-sentiment", label: "Sentiment" },
     { href: "/sentiment", label: "Retail" },
     { href: "/options", label: "Options" },
+    { href: "/sectors", label: "Sectors" },
     { href: "/hedge", label: "Hedge" },
     { href: "/backtesting", label: "Backtest" },
     { href: "/portfolios", label: "Portfolio" },

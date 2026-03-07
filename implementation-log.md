@@ -2306,7 +2306,53 @@ Post-audit session to close the four genuine remaining gaps identified after a f
     - ✅ `frontend/lib/api.ts` — `OptionsExpiryBreakdownDto`, `OptionsAnalysisDto`, `OptionsSummaryDto` interfaces; `fetchOptionsAnalysis()`, `fetchOptionsSummary()`, `fetchOptionsExpiries()` functions.
     - ✅ `frontend/components/Nav.tsx` — "Options" added after "Retail".
 
+- **Next steps (updated)**
+    - `EXP-EXPLAIN-ADV-01` — Interactive Explanation Mode (~1 day).
+    - `EXP-INSID-01` — Insider Trading via SEC EDGAR (free, no key, ~1.5 days).
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — EXP-SECT-01: Sector Rotation Heatmap (complete)**
+
+- **Stories completed**
+    - `EXP-SECT-01` (Sector Rotation Heatmap — 11 SPDR ETFs, heatmap, RRG, cycle phase) — **DONE**
+
+- **Design decisions**
+    - **No new API key** — all 11 SPDR Sector ETFs + SPY fetched via yfinance (already installed).
+    - **Three derived signals per sector**:
+      1. Absolute return for 1W (5 trading days) / 1M (21 days) / 3M (63 days).
+      2. Relative Strength vs SPY: `(1 + sector_ret/100) / (1 + spy_ret/100)`. Values above 1.0 mean outperformance.
+      3. Momentum: difference between short-term (4-week) and long-term (8-week) average weekly RS rate of change. Positive = RS is accelerating.
+    - **RRG Quadrant** derived from RS and Momentum: Leading (RS>1 & mom>0), Weakening (RS>1 & mom<0), Lagging (RS<1 & mom<0), Improving (RS<1 & mom>0). Classic clockwise rotation logic.
+    - **RS Score (0–100)** normalised across the full 11-sector universe per refresh. 50 = SPY parity. Used for heatmap colour.
+    - **Cycle Phase scoring**: average RS score of sectors in each phase (Early/Mid/Late/Recession). Dominant phase = max average score. Plain-English description generated per phase.
+    - **15-min in-process cache** (`_CACHE` dict) — same pattern as options_service. No Redis needed; on-demand not batched.
+    - **CPU-bound in thread pool** — yfinance download is synchronous. All endpoints use `loop.run_in_executor(None, fetch_sector_rotation)`.
+    - **Three backend routes**: `/rotation` (full), `/heatmap` (lightweight grid), `/rrg` (scatter data). No auth required.
+    - **Three frontend views**: Heatmap (colour grid sorted by selected period), Table (full data with RS deviation %), RRG (ScatterChart with 4 quadrant zones).
+    - **Period selector** (1W / 1M / 3M) only affects heatmap sort and display; RRG always uses 1M RS.
+    - **SPY benchmark strip** always visible above the view as a reference.
+    - **Cycle Phase Panel** always rendered right of the main view on desktop. Shows phase scores as progress bars with active phase highlighted.
+    - **Heatmap colour** uses CSS background colour derived from RS score (not Tailwind classes, to enable fine-grained gradients).
+    - **RRG legend** below the chart: 4 quadrant cards with descriptions.
+    - `keepPreviousData: true` + `refreshInterval: 900_000` on SWR hook.
+
+- **Backend (new files)**
+    - ✅ `app/services/sector_service.py` — `fetch_sector_rotation()`, `_pct_return()`, `_relative_strength()`, `_rs_to_score()`, `_rrg_quadrant()`, `_momentum()`, `_cycle_description()`. 15-min cache.
+    - ✅ `app/api/v1/endpoints/sectors.py` — 3 routes with Pydantic schemas (`SectorRotationDto`, `HeatmapCellDto`, `RRGPointDto`).
+
+- **Backend (modified files)**
+    - ✅ `app/main.py` — `sectors` router imported and mounted at `/api/v1/sectors`.
+
+- **Frontend (new files)**
+    - ✅ `frontend/app/sectors/page.tsx` — full page: HeatmapGrid, SectorTable, RRGChart (ScatterChart), CyclePhasePanel, SPY benchmark strip, period + view toggles.
+
+- **Frontend (modified files)**
+    - ✅ `frontend/lib/api.ts` — `SectorDto`, `SectorRotationDto`, `HeatmapCellDto`, `RRGPointDto` interfaces; `fetchSectorRotation()`, `fetchSectorHeatmap()`, `fetchSectorRRG()` functions.
+    - ✅ `frontend/components/Nav.tsx` — “Sectors” nav item added after “Options”.
+
 - **Next steps**
-    - `EXP-SECT-01` — Sector Rotation Heatmap (yfinance, visually high-impact, ~1.5 days).
     - `EXP-EXPLAIN-ADV-01` — Interactive Explanation Mode (~1 day).
     - `EXP-INSID-01` — Insider Trading via SEC EDGAR (free, no key, ~1.5 days).

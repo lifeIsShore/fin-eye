@@ -1888,6 +1888,75 @@ export async function deleteAccount(): Promise<{ message: string; anonymised_at:
   return res.json();
 }
 
+// ─── Sector Rotation (EXP-SECT-01) ─────────────────────────────────────────
+
+export interface SectorDto {
+  ticker: string;
+  name: string;
+  cycle_phase: "Early Cycle" | "Mid Cycle" | "Late Cycle" | "Recession" | string;
+  return_1w: number | null;
+  return_1m: number | null;
+  return_3m: number | null;
+  rs_1w: number | null;
+  rs_1m: number | null;
+  rs_3m: number | null;
+  rs_score: number;      // 0–100; 50 = SPY parity
+  momentum: number | null;
+  rrg_quadrant: "Leading" | "Weakening" | "Lagging" | "Improving" | string;
+  last_price: number | null;
+}
+
+export interface SectorRotationDto {
+  sectors: SectorDto[];
+  spy_return_1w: number | null;
+  spy_return_1m: number | null;
+  spy_return_3m: number | null;
+  dominant_cycle_phase: string;
+  dominant_cycle_description: string;
+  cycle_phase_scores: Record<string, number>;
+  disclaimer: string;
+}
+
+export interface HeatmapCellDto {
+  ticker: string;
+  name: string;
+  cycle_phase: string;
+  return_1w: number | null;
+  return_1m: number | null;
+  return_3m: number | null;
+  rs_score: number;
+  rrg_quadrant: string;
+}
+
+export interface RRGPointDto {
+  ticker: string;
+  name: string;
+  cycle_phase: string;
+  rs_1m: number | null;
+  momentum: number | null;
+  rrg_quadrant: string;
+  return_1m: number | null;
+  rs_score: number;
+}
+
+export async function fetchSectorRotation(): Promise<SectorRotationDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/sectors/rotation`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load sector rotation data: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchSectorHeatmap(): Promise<HeatmapCellDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/sectors/heatmap`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load sector heatmap: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchSectorRRG(): Promise<RRGPointDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/sectors/rrg`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load RRG data: ${res.status}`);
+  return res.json();
+}
+
 // ─── Options Fear & Greed (EXP-OPT-01) ─────────────────────────────────────────────
 
 export interface OptionsExpiryBreakdownDto {
