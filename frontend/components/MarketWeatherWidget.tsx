@@ -1,11 +1,15 @@
 "use client";
 
+import { InfoButton } from "./ScoreExplainPanel";
+
 interface MarketWeatherWidgetProps {
     gasScore: number;
+    onExplain?: () => void;
 }
 
 export default function MarketWeatherWidget({
     gasScore,
+    onExplain,
 }: MarketWeatherWidgetProps) {
     let weatherLabel = "Unknown";
     let weatherColor = "text-slate-400";
@@ -46,6 +50,9 @@ export default function MarketWeatherWidget({
                     {gasScore.toFixed(0)}
                 </span>
                 <span className="text-xl font-bold text-slate-500">GAS</span>
+                {onExplain && (
+                    <InfoButton onClick={onExplain} label="GAS Score" />
+                )}
             </div>
 
             <div className="space-y-1">

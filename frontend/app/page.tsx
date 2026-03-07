@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import {
@@ -17,6 +17,10 @@ import WhyMovingPanel from "../components/WhyMovingPanel";
 import ConflictDetector from "../components/ConflictDetector";
 import { GuidedTour } from "../components/onboarding/GuidedTour";
 import { WatchlistWidget } from "../components/WatchlistWidget";
+import ScoreExplainPanel, {
+  type ExplainPayload,
+  type SubComponent,
+} from "../components/ScoreExplainPanel";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -25,7 +29,6 @@ const DISCLAIMER =
   "Fin-Eye surfaces data-driven signals to inform your thinking — " +
   "always conduct your own research before making any financial decisions.";
 
-// Snapshot age beyond which we show a "stale" warning (30 min)
 const STALE_THRESHOLD_MS = 30 * 60 * 1000;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -36,7 +39,6 @@ function directionLabel(score: number): string {
   return "Neutral";
 }
 
-/** Returns how many minutes ago the snapshot was computed, or null if unknown. */
 function snapshotAgeMinutes(computedAt: string | undefined): number | null {
   if (!computedAt) return null;
   const ageMs = Date.now() - new Date(computedAt).getTime();
@@ -51,7 +53,6 @@ function buildWhyBullets(
   macroLabel: string,
 ): string[] {
   const bullets: string[] = [];
-
   const bullishTfs = signals.filter((s) => s.direction === "Bullish").length;
   const bearishTfs = signals.filter((s) => s.direction === "Bearish").length;
   const total      = signals.length;
@@ -65,22 +66,16 @@ function buildWhyBullets(
     );
   } else {
     bullets.push(
-      "📈 Technical models have not been trained for this symbol yet; " +
-      "technical signals are unavailable.",
+      "📈 Technical models have not been trained for this symbol yet; technical signals are unavailable.",
     );
   }
 
   if (sent30d !== null) {
     const sentLabel =
-      sent30d > 0.3
-        ? "strongly positive"
-        : sent30d > 0.05
-          ? "mildly positive"
-          : sent30d > -0.05
-            ? "neutral"
-            : sent30d > -0.3
-              ? "mildly negative"
-              : "strongly negative";
+      sent30d > 0.3  ? "strongly positive" :
+      sent30d > 0.05 ? "mildly positive"   :
+      sent30d > -0.05 ? "neutral"           :
+      sent30d > -0.3  ? "mildly negative"   : "strongly negative";
     bullets.push(
       `📰 News sentiment over the past 30 days is ${sentLabel} ` +
       `(score: ${sent30d >= 0 ? "+" : ""}${sent30d.toFixed(2)} on a −1 to +1 scale).`,
@@ -90,11 +85,9 @@ function buildWhyBullets(
   }
 
   const macroComment =
-    macroScore >= 60
-      ? "This provides a supportive backdrop for equities."
-      : macroScore < 40
-        ? "Macro conditions add headwinds to risk assets."
-        : "Macro conditions are broadly neutral.";
+    macroScore >= 60 ? "This provides a supportive backdrop for equities." :
+    macroScore < 40  ? "Macro conditions add headwinds to risk assets."     :
+                       "Macro conditions are broadly neutral.";
   bullets.push(
     `🌐 Macro backdrop is '${macroLabel}' (score: ${macroScore.toFixed(0)}/100). ${macroComment}`,
   );
@@ -115,28 +108,16 @@ function detectConflicts(
   signals: { direction: string }[],
 ): { hasConflict: boolean; conflicts: ConflictItem[]; summary: string } {
   const conflicts: ConflictItem[] = [];
-
-  const scores: Record<string, number> = {
-    Technical: techScore,
-    Sentiment: sentScore0100,
-    Macro:     macroScore,
-  };
-  const pairs: [string, string][] = [
-    ["Technical", "Sentiment"],
-    ["Technical", "Macro"],
-    ["Sentiment", "Macro"],
-  ];
+  const scores: Record<string, number> = { Technical: techScore, Sentiment: sentScore0100, Macro: macroScore };
+  const pairs: [string, string][] = [["Technical", "Sentiment"], ["Technical", "Macro"], ["Sentiment", "Macro"]];
 
   for (const [a, b] of pairs) {
-    const sa = scores[a];
-    const sb = scores[b];
+    const sa = scores[a]; const sb = scores[b];
     if ((sa > 65 && sb < 35) || (sb > 65 && sa < 35)) {
       conflicts.push({
         layers:    `${a} vs ${b}`,
         magnitude: `${Math.abs(sa - sb).toFixed(0)} points apart (${sa.toFixed(0)} vs ${sb.toFixed(0)})`,
-        message:
-          `${a} is ${directionLabel(sa).toLowerCase()} while ${b} is ${directionLabel(sb).toLowerCase()}. ` +
-          `This divergence suggests elevated uncertainty — exercise extra caution.`,
+        message:   `${a} is ${directionLabel(sa).toLowerCase()} while ${b} is ${directionLabel(sb).toLowerCase()}. This divergence suggests elevated uncertainty — exercise extra caution.`,
       });
     }
   }
@@ -150,53 +131,245 @@ function detectConflicts(
       conflicts.push({
         layers:    "Timeframe Agreement",
         magnitude: `${(agreement * 100).toFixed(0)}% agreement across ${signals.length} timeframes`,
-        message:
-          `Only ${dominant} of ${signals.length} timeframes agree on direction. ` +
-          `Low cross-timeframe consensus increases signal uncertainty.`,
+        message:   `Only ${dominant} of ${signals.length} timeframes agree on direction. Low cross-timeframe consensus increases signal uncertainty.`,
       });
     }
   }
 
   const hasConflict = conflicts.length > 0;
-  const summary     = hasConflict
-    ? `${conflicts.length} conflict(s) detected. Review the signals below carefully.`
-    : "No major conflicts detected — layers are broadly aligned.";
+  return {
+    hasConflict,
+    conflicts,
+    summary: hasConflict
+      ? `${conflicts.length} conflict(s) detected. Review the signals below carefully.`
+      : "No major conflicts detected — layers are broadly aligned.",
+  };
+}
 
-  return { hasConflict, conflicts, summary };
+// ─── Explain payload builders ─────────────────────────────────────────────────
+
+function buildGasPayload(
+  gasScore: number,
+  techScore: number,
+  sent30d: number | null,
+  macroScore: number,
+  macroLabel: string,
+): ExplainPayload {
+  const sentScore0100 = ((sent30d ?? 0) + 1) / 2 * 100;
+  const sentRaw = sent30d !== null ? `${sent30d >= 0 ? "+" : ""}${sent30d.toFixed(2)}` : "N/A";
+
+  const scoreColor = (s: number): SubComponent["color"] =>
+    s >= 65 ? "emerald" : s >= 55 ? "teal" : s >= 45 ? "amber" : s >= 35 ? "orange" : "rose";
+
+  return {
+    target: "gas",
+    title: "Global Alignment Score (GAS)",
+    score: gasScore,
+    scoreLabel: "/ 100",
+    summary: `The GAS is a composite signal that blends three independent layers — Technical momentum (40%), News Sentiment (30%), and Macro conditions (30%). A score above 60 indicates bullish alignment; below 40 signals bearish pressure.`,
+    subComponents: [
+      {
+        label:       "Technical Score",
+        value:       techScore,
+        rawLabel:    `${techScore.toFixed(0)} / 100`,
+        color:       scoreColor(techScore),
+        description: `ML-driven consensus across multiple timeframes. Contributes 40% to GAS. Score reflects how many timeframes and signals align in the same direction.`,
+      },
+      {
+        label:       "Sentiment Score",
+        value:       sentScore0100,
+        rawLabel:    sentRaw,
+        color:       scoreColor(sentScore0100),
+        description: `Aggregated news sentiment from the past 30 days. Normalised from a −1/+1 raw score to 0–100 for GAS weighting. Contributes 30% to GAS.`,
+      },
+      {
+        label:       "Macro Score",
+        value:       macroScore,
+        rawLabel:    `${macroScore.toFixed(0)} / 100 (${macroLabel})`,
+        color:       scoreColor(macroScore),
+        description: `Composite of FRED macro indicators: yield curve, unemployment, CPI, PMI, and VIX. Contributes 30% to GAS.`,
+      },
+    ],
+    methodology: `GAS = (Technical × 0.40) + (Sentiment × 0.30) + (Macro × 0.30). All three components are independently computed and normalised to 0–100. The GAS is pre-computed every 15 minutes during US market hours and cached for sub-200ms response times.`,
+  };
+}
+
+function buildTechnicalPayload(
+  techScore: number,
+  signals: { direction: string; timeframe: string }[],
+): ExplainPayload {
+  const bullish = signals.filter((s) => s.direction === "Bullish").length;
+  const bearish = signals.filter((s) => s.direction === "Bearish").length;
+  const neutral = signals.length - bullish - bearish;
+
+  const tfSubs: SubComponent[] = signals.map((s) => ({
+    label:       s.timeframe,
+    value:       s.direction === "Bullish" ? 75 : s.direction === "Bearish" ? 25 : 50,
+    rawLabel:    s.direction,
+    color:       (s.direction === "Bullish" ? "emerald" : s.direction === "Bearish" ? "rose" : "amber") as SubComponent["color"],
+    description: `${s.timeframe} timeframe ML model output. Each timeframe is trained independently on OHLCV features.`,
+  }));
+
+  return {
+    target: "technical",
+    title: "Technical Confidence Score",
+    score: techScore,
+    scoreLabel: "/ 100",
+    weight: "40% of GAS",
+    summary: `${bullish} of ${signals.length} timeframes are bullish, ${bearish} bearish, ${neutral} neutral. The score reflects the weighted agreement of ML models across multiple timeframes.`,
+    subComponents: tfSubs.length > 0 ? tfSubs : [
+      {
+        label: "No signals", value: 50, rawLabel: "N/A", color: "slate",
+        description: "Models have not yet been trained for this symbol. A neutral 50 is used as a fallback.",
+      },
+    ],
+    methodology: `Each timeframe uses a trained scikit-learn classifier on rolling OHLCV features (RSI, MACD, Bollinger Bands, volume ratios, etc.). Outputs are aggregated into a 0–100 confidence score using weighted voting. Models are retrained periodically from the JSONL artifact registry.`,
+  };
+}
+
+function buildSentimentPayload(
+  sent30d: number | null,
+  sent7d: number | null,
+  sent1d: number | null,
+): ExplainPayload {
+  const toScore = (v: number | null) => v !== null ? ((v + 1) / 2) * 100 : 50;
+  const toLabel = (v: number | null) => v !== null ? `${v >= 0 ? "+" : ""}${v.toFixed(3)}` : "N/A";
+  const scoreColor = (s: number): SubComponent["color"] =>
+    s >= 65 ? "emerald" : s >= 55 ? "teal" : s >= 45 ? "amber" : s >= 35 ? "orange" : "rose";
+
+  const score30 = toScore(sent30d);
+
+  return {
+    target: "sentiment",
+    title: "News Sentiment",
+    score: score30,
+    scoreLabel: "/ 100 (30d)",
+    weight: "30% of GAS",
+    summary: `Sentiment is derived from news articles about this symbol using VADER NLP. Scores run from −1 (very negative) to +1 (very positive). The 30-day rolling average is used for GAS weighting.`,
+    subComponents: [
+      {
+        label: "30-Day Sentiment", value: score30, rawLabel: toLabel(sent30d),
+        color: scoreColor(score30),
+        description: "Average VADER compound score across all articles in the past 30 days. Primary input into GAS (30% weight).",
+      },
+      {
+        label: "7-Day Sentiment", value: toScore(sent7d), rawLabel: toLabel(sent7d),
+        color: scoreColor(toScore(sent7d)),
+        description: "Shorter-term sentiment window — useful for detecting recent narrative shifts vs the 30d baseline.",
+      },
+      {
+        label: "1-Day Sentiment", value: toScore(sent1d), rawLabel: toLabel(sent1d),
+        color: scoreColor(toScore(sent1d)),
+        description: "Most recent 24h sentiment. High variance due to small sample size — treat as directional signal only.",
+      },
+    ],
+    methodology: `Articles are fetched from Finnhub News and scored using the VADER (Valence Aware Dictionary and sEntiment Reasoner) NLP model. Each article's compound score (−1 to +1) is averaged over the window. Source breakdown is available on the full Sentiment page.`,
+  };
+}
+
+function buildMacroPayload(
+  macroScore: number,
+  macroLabel: string,
+  macroData: any,
+  vixLevel: number | null,
+): ExplainPayload {
+  const scoreColor = (s: number): SubComponent["color"] =>
+    s >= 65 ? "emerald" : s >= 55 ? "teal" : s >= 45 ? "amber" : s >= 35 ? "orange" : "rose";
+
+  const vixScore = vixLevel !== null
+    ? vixLevel < 15 ? 75 : vixLevel <= 25 ? 50 : 25
+    : 50;
+
+  const subs: SubComponent[] = [
+    {
+      label: "Macro Composite",
+      value: macroScore,
+      rawLabel: `${macroScore.toFixed(0)} / 100 (${macroLabel})`,
+      color: scoreColor(macroScore),
+      description: "Weighted composite of all FRED macro indicators. Contributes 30% to GAS.",
+    },
+    {
+      label: "VIX (Volatility Index)",
+      value: vixScore,
+      rawLabel: vixLevel !== null ? vixLevel.toFixed(2) : "N/A",
+      color: (vixLevel === null ? "slate" : vixLevel < 15 ? "sky" : vixLevel <= 25 ? "amber" : "rose") as SubComponent["color"],
+      description: "CBOE Volatility Index. Below 15 = calm markets (bullish bias). Above 25 = elevated fear (bearish bias).",
+    },
+  ];
+
+  // Add yield curve if available
+  const yc = macroData?.data?.yield_curve;
+  if (yc) {
+    const ycScore = yc.shape === "Normal" ? 65 : yc.shape === "Inverted" ? 30 : 50;
+    subs.push({
+      label: "Yield Curve",
+      value: ycScore,
+      rawLabel: yc.shape ?? "Unknown",
+      color: scoreColor(ycScore),
+      description: `Current yield curve shape: ${yc.shape ?? "Unknown"}. An inverted curve historically precedes recessions. Fin-Eye uses the 2Y–10Y spread as the primary signal.`,
+    });
+  }
+
+  return {
+    target: "macro",
+    title: "Macro Score",
+    score: macroScore,
+    scoreLabel: `/ 100 (${macroLabel})`,
+    weight: "30% of GAS",
+    summary: `Macro conditions are currently '${macroLabel}'. This layer aggregates economic health indicators from the FRED API to assess whether the broad environment supports or opposes equity risk-taking.`,
+    subComponents: subs,
+    methodology: `Five FRED indicators are fetched and scored individually: Yield Curve (2Y/10Y spread), VIX, Unemployment Rate, CPI YoY, and ISM PMI. Each is normalised to 0–100 based on historical ranges and averaged into the macro composite score. Data refreshes every 5 minutes.`,
+  };
+}
+
+function buildVolatilityPayload(vixLevel: number | null): ExplainPayload {
+  const vixScore = vixLevel !== null
+    ? vixLevel < 15 ? 80 : vixLevel <= 25 ? 50 : 20
+    : 50;
+
+  return {
+    target: "macro",
+    title: "Volatility Regime",
+    score: vixScore,
+    scoreLabel: vixLevel !== null ? `VIX ${vixLevel.toFixed(1)}` : "VIX N/A",
+    summary: `The Volatility Regime is derived solely from the CBOE VIX level. It provides a quick read on market fear and option pricing pressure, independent of directional signals.`,
+    subComponents: [
+      {
+        label: "VIX Level",
+        value: vixScore,
+        rawLabel: vixLevel !== null ? vixLevel.toFixed(2) : "N/A",
+        color: vixLevel === null ? "slate" : vixLevel < 15 ? "sky" : vixLevel <= 25 ? "amber" : "rose",
+        description:
+          vixLevel === null
+            ? "VIX data unavailable."
+            : vixLevel < 15
+              ? "VIX below 15 — markets are calm. Options are cheap, implied volatility is low."
+              : vixLevel <= 25
+                ? "VIX 15–25 — moderate uncertainty. Normal trading conditions."
+                : "VIX above 25 — elevated fear. Options are expensive; markets pricing in sharp moves.",
+      },
+    ],
+    methodology: `The VIX (CBOE Volatility Index) measures 30-day implied volatility on S&P 500 options. Thresholds: <15 = Low Volatility, 15–25 = Medium Volatility, >25 = High Volatility. VIX data is sourced from FRED (VIXCLS series).`,
+  };
 }
 
 // ─── Staleness badge ─────────────────────────────────────────────────────────
 
-function SnapshotMeta({
-  snapshot,
-}: {
-  snapshot: GasSnapshotDto | undefined;
-}) {
+function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
   if (!snapshot) return null;
-
   const ageMin = snapshotAgeMinutes(snapshot.computed_at);
   const isStale = ageMin !== null && ageMin * 60_000 > STALE_THRESHOLD_MS;
-  const ageLabel = ageMin === null
-    ? "age unknown"
-    : ageMin < 1
-      ? "just now"
-      : `${ageMin}m ago`;
-
+  const ageLabel = ageMin === null ? "age unknown" : ageMin < 1 ? "just now" : `${ageMin}m ago`;
   const sourceColor =
-    snapshot.source === "cache"
-      ? "text-emerald-400"
-      : snapshot.source === "db_snapshot"
-        ? "text-sky-400"
-        : "text-amber-400";
+    snapshot.source === "cache" ? "text-emerald-400" :
+    snapshot.source === "db_snapshot" ? "text-sky-400" : "text-amber-400";
 
   return (
     <div className="flex items-center gap-2 text-xs text-slate-500">
       <span className={sourceColor}>●</span>
       <span>
         GAS computed {ageLabel}
-        {isStale && (
-          <span className="ml-1 text-amber-400 font-medium">(stale — refreshing)</span>
-        )}
+        {isStale && <span className="ml-1 text-amber-400 font-medium">(stale — refreshing)</span>}
       </span>
       {snapshot.component_scores && (
         <span className="hidden sm:inline text-slate-600">
@@ -212,31 +385,21 @@ function SnapshotMeta({
 // ─── Page Component ──────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [tickerInput,   setTickerInput]   = useState("AAPL");
-  const [activeSymbol, setActiveSymbol]   = useState("AAPL");
+  const [tickerInput,  setTickerInput]  = useState("AAPL");
+  const [activeSymbol, setActiveSymbol] = useState("AAPL");
 
-  // ── Fast path: pre-computed GAS snapshot (15 min cache, <200ms) ────────
-  // Refreshes every 60 s client-side so the UI stays live within the
-  // scheduler cadence without hammering the backend.
-  const {
-    data: gasSnapshot,
-    error: gasError,
-    isLoading: gasLoading,
-  } = useSWR(
+  // ── Explain panel state ─────────────────────────────────────────────────
+  const [explainPayload, setExplainPayload] = useState<ExplainPayload | null>(null);
+  const closeExplain = useCallback(() => setExplainPayload(null), []);
+
+  // ── SWR data fetching ───────────────────────────────────────────────────
+  const { data: gasSnapshot, error: gasError, isLoading: gasLoading } = useSWR(
     `gas-snapshot-${activeSymbol}`,
     () => fetchGasSnapshot(activeSymbol),
-    {
-      refreshInterval:    60_000,
-      shouldRetryOnError: false,
-      // Keep showing previous data while refreshing (no flash of loading)
-      keepPreviousData:   true,
-    },
+    { refreshInterval: 60_000, shouldRetryOnError: false, keepPreviousData: true },
   );
 
-  // ── Detail panels: technical, sentiment, macro ──────────────────────────
-  // These are slower but still needed for the breakdown panels.
-  // They use a longer refresh interval since the snapshot already gives the headline.
-  const { data: techData,  error: techError  } = useSWR(
+  const { data: techData, error: techError } = useSWR(
     `tech-${activeSymbol}`,
     () => fetchTechnicalLatest(activeSymbol),
     { refreshInterval: 120_000, shouldRetryOnError: false, keepPreviousData: true },
@@ -261,9 +424,6 @@ export default function DashboardPage() {
   };
 
   // ── Score resolution ────────────────────────────────────────────────────
-  // Prefer the server-side pre-computed snapshot for the GAS headline score
-  // and regime — these are the values the server computed with the correct
-  // weights.  Fall back to a client-side estimate while the snapshot loads.
   const gasScore: number = gasSnapshot?.gas_score
     ?? (() => {
       const ts = techData?.technical_confidence_score ?? 50;
@@ -272,19 +432,16 @@ export default function DashboardPage() {
       return ts * 0.4 + sm * 0.3 + ms * 0.3;
     })();
 
-  const regimeFromSnapshot: string | undefined = gasSnapshot?.regime;
-
-  const techScore  = gasSnapshot?.component_scores?.technical
-    ?? techData?.technical_confidence_score ?? 50;
+  const regimeFromSnapshot = gasSnapshot?.regime;
+  const techScore  = gasSnapshot?.component_scores?.technical ?? techData?.technical_confidence_score ?? 50;
   const sent30d    = sentData?.sentiment_30d ?? null;
-  const macroScore = gasSnapshot?.component_scores?.macro
-    ?? macroData?.macro_score?.score ?? 50;
+  const sent7d     = sentData?.sentiment_7d ?? null;
+  const sent1d     = sentData?.sentiment_1d ?? null;
+  const macroScore = gasSnapshot?.component_scores?.macro ?? macroData?.macro_score?.score ?? 50;
   const macroLabel = macroData?.macro_score?.label ?? "Neutral";
   const vixLevel   = macroData?.data?.vix?.value ?? null;
   const signals    = techData?.signals ?? [];
-
-  // Only show loading on true cold start (no data at all yet)
-  const isLoading = gasLoading && !gasSnapshot && !gasError;
+  const isLoading  = gasLoading && !gasSnapshot && !gasError;
 
   // ── Explanation bullets ─────────────────────────────────────────────────
   const whyBullets = useMemo(
@@ -293,15 +450,36 @@ export default function DashboardPage() {
   );
 
   // ── Conflict detection ──────────────────────────────────────────────────
-  const sentScore0100  = ((sent30d ?? 0) + 1) / 2 * 100;
-  const conflictData   = useMemo(
+  const sentScore0100 = ((sent30d ?? 0) + 1) / 2 * 100;
+  const conflictData  = useMemo(
     () => detectConflicts(techScore, sentScore0100, macroScore, signals),
     [techScore, sentScore0100, macroScore, signals],
+  );
+
+  // ── Explain panel handlers ──────────────────────────────────────────────
+  const openGasExplain = useCallback(() =>
+    setExplainPayload(buildGasPayload(gasScore, techScore, sent30d, macroScore, macroLabel)),
+    [gasScore, techScore, sent30d, macroScore, macroLabel],
+  );
+  const openTechnicalExplain = useCallback(() =>
+    setExplainPayload(buildTechnicalPayload(techScore, signals)),
+    [techScore, signals],
+  );
+  const openMacroExplain = useCallback(() =>
+    setExplainPayload(buildMacroPayload(macroScore, macroLabel, macroData, vixLevel)),
+    [macroScore, macroLabel, macroData, vixLevel],
+  );
+  const openVolatilityExplain = useCallback(() =>
+    setExplainPayload(buildVolatilityPayload(vixLevel)),
+    [vixLevel],
   );
 
   return (
     <div className="space-y-6">
       <GuidedTour />
+
+      {/* ── Score Explain Panel (slide-over) ─────────────────────────── */}
+      <ScoreExplainPanel payload={explainPayload} onClose={closeExplain} />
 
       {/* Watchlist sidebar + main content */}
       <div className="flex gap-6">
@@ -322,7 +500,6 @@ export default function DashboardPage() {
               <p className="mt-1 text-sm text-slate-400">
                 Real-time GAS, Regime, and Multi-Timeframe layers.
               </p>
-              {/* Snapshot meta: source + age + component breakdown */}
               <div className="mt-1">
                 <SnapshotMeta snapshot={gasSnapshot} />
               </div>
@@ -373,21 +550,20 @@ export default function DashboardPage() {
               {/* Row 1 – GAS + Regime + Timeframe Grid ───────────────────── */}
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="tour-gas-score">
-                  <MarketWeatherWidget gasScore={gasScore} />
+                  <MarketWeatherWidget
+                    gasScore={gasScore}
+                    onExplain={openGasExplain}
+                  />
                 </div>
 
                 <div className="flex flex-col space-y-4">
                   <div className="tour-regime">
-                    {/*
-                      Pass the snapshot regime when available so the badge
-                      matches the server-computed value exactly.
-                      RegimeWidget derives regime from technicalScore when no
-                      override is supplied — backwards-compatible.
-                    */}
                     <RegimeWidget
                       technicalScore={techScore}
                       vixLevel={vixLevel}
                       regimeOverride={regimeFromSnapshot}
+                      onExplainTechnical={openTechnicalExplain}
+                      onExplainVolatility={openVolatilityExplain}
                     />
                   </div>
 
@@ -396,16 +572,17 @@ export default function DashboardPage() {
                       <h3 className="text-sm font-semibold text-slate-100">
                         Technical Consensus
                       </h3>
-                      <span className="text-sky-400 font-bold text-sm">
-                        {techScore.toFixed(1)} / 100
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sky-400 font-bold text-sm">
+                          {techScore.toFixed(1)} / 100
+                        </span>
+                      </div>
                     </div>
                     {signals.length > 0 ? (
                       <TimeframeGrid signals={signals} />
                     ) : (
                       <p className="text-xs text-rose-400 mt-4 px-3 py-2 bg-rose-950/20 rounded border border-rose-900">
-                        {techError?.message ||
-                          "Technical models are not trained for this symbol."}
+                        {techError?.message || "Technical models are not trained for this symbol."}
                       </p>
                     )}
                   </div>
