@@ -2489,3 +2489,77 @@ export async function fetchEarningsCalendar(
   if (!res.ok) throw new Error("Failed to fetch earnings calendar");
   return res.json();
 }
+
+// ─── Short Interest & Squeeze Risk (EXP-SHORT-01) ─────────────────────
+
+export interface ShortVolumeDayDto {
+  date: string;
+  short_volume: number;
+  total_volume: number;
+  short_volume_ratio: number;
+}
+
+export interface SqueezeScoreDto {
+  score: number;
+  label: string;
+  drivers: string[];
+}
+
+export interface ShortAnalysisDto {
+  symbol: string;
+  company_name: string;
+  shares_short: number | null;
+  short_float_pct: number | null;
+  short_ratio: number | null;
+  float_shares: number | null;
+  shares_outstanding: number | null;
+  borrow_fee_rate: number | null;
+  current_price: number | null;
+  price_52w_high: number | null;
+  price_52w_low: number | null;
+  pct_from_52w_high: number | null;
+  avg_volume_10d: number | null;
+  short_volume_trend: ShortVolumeDayDto[];
+  trend_direction: string;
+  squeeze_score: SqueezeScoreDto;
+  disclaimer: string;
+}
+
+export interface ShortSummaryDto {
+  symbol: string;
+  company_name: string;
+  squeeze_score: number;
+  squeeze_label: string;
+  short_float_pct: number | null;
+  short_ratio: number | null;
+  borrow_fee_rate: number | null;
+  trend_direction: string;
+  disclaimer: string;
+}
+
+export async function fetchShortAnalysis(symbol: string): Promise<ShortAnalysisDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/shorts/${symbol.toUpperCase()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? `Short interest data unavailable for ${symbol}`);
+  }
+  return res.json();
+}
+
+export async function fetchShortSummary(symbol: string): Promise<ShortSummaryDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/shorts/${symbol.toUpperCase()}/summary`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Short summary unavailable for ${symbol}`);
+  return res.json();
+}
+
+export async function fetchShortTrend(symbol: string): Promise<ShortVolumeDayDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/shorts/${symbol.toUpperCase()}/trend`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Short trend unavailable for ${symbol}`);
+  return res.json();
+}

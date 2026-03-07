@@ -52,6 +52,7 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P3-MOBILE-02        | P3 – Mobile           | NOT_STARTED  | -            | Deferred — post-launch |
 | P3-EDU-01           | P3 – Education (adv)  | NOT_STARTED  | -            | Deferred — post-launch |
 | EXP-EARN-01         | Exp – Earnings        | DONE         | 2026-03-07   | EPS history (8Q), upcoming date countdown, surprise score, bar chart + history table |
+| EXP-SHORT-01        | Exp – Short Interest  | DONE         | 2026-03-07   | Short float %, days-to-cover, FINRA trend, squeeze score (0–100), full /shorts page |
 | CORE-AUTH-01        | Core – Auth           | DONE         | 2026-03-04   | NextAuth/JWT implemented |
 | CORE-SUB-01         | Core – Billing        | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SUB-02         | Core – Billing        | NOT_STARTED  | -            | Depends on SUB-01 |
@@ -2447,3 +2448,50 @@ Post-audit session to close the four genuine remaining gaps identified after a f
     - `EXP-SHORT-01` — Short Interest & Borrow Rate via FINRA (free, no key, pairs perfectly with Insiders + Earnings).
     - `P3-SENT-ADV-01` — Google Trends via `pytrends` (free) + earnings transcript sentiment if a free source is found.
     - `CORE-NOTIF-ADV-01` — GAS threshold breach alerts via email (builds on existing alerts + email infrastructure).
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — EXP-SHORT-01: Short Interest & Squeeze Risk (complete)**
+
+- **Stories completed**
+    - `EXP-SHORT-01` (Short Interest & Squeeze Risk — FINRA REGSHO + yfinance, squeeze score, full page) — **DONE**
+
+- **Decision rationale (product owner call)**
+    - Chose `EXP-SHORT-01` over `P3-SENT-ADV-01` (needs API keys for quality sources) and `CORE-NOTIF-ADV-01` (good but lower daily signal value than short data).
+    - Short interest completes the "smart money signals" cluster: **Insiders → Earnings → Shorts**. Together these three pages give a complete picture of positioning vs fundamentals.
+    - Both data sources (FINRA REGSHO + yfinance) are free with no API key required. Zero new dependencies.
+
+- **Design decisions**
+    - **Two data sources**:
+      1. `yfinance ticker.info` — `sharesShort`, `shortPercentOfFloat` (normalised from decimal if needed), `shortRatio` (days-to-cover), `floatShares`, `fiftyTwoWeekHigh/Low`, `averageVolume10days`, `borrowCost` (annualised fee, when available).
+      2. FINRA REGSHO daily settlement files (`cdn.finra.org/equity/regsho/daily/CNMSshvol{YYYYMMDD}.txt`) — pipe-delimited, parsed with stdlib `re` + string split. Date list fetched from FINRA index page via regex on `CNMSshvol{date}.txt` filenames. Last 5 available trading days fetched per symbol.
+    - **Squeeze score (0–100)**: 5-component weighted composite. Short float % is primary (45pts — >30% = extreme). Days-to-cover secondary (25pts). Distance from 52w high (15pts — deeply depressed stocks have more upside potential in a squeeze). FINRA trend direction (10pts — rising short volume adds pressure). Borrow fee (5pts). Score normalised with simple linear scaling, clamped [5, 95]. Labels: Extreme Squeeze Risk / High / Moderate / Low / Minimal.
+    - **Squeeze drivers** list: only drivers that actually pushed the score up are listed (not boilerplate — each one is conditionally populated).
+    - **4-hour cache** — FINRA files update once per trading day; yfinance short data updates ~twice monthly (FINRA settlement cycle). Individual FINRA day+symbol lookups cached for 24h.
+    - **FINRA date list** cached for 1 hour (index page rarely changes intraday).
+    - **CPU-bound httpx + yfinance in thread pool** — same pattern as insiders and earnings.
+    - **Three backend routes**: `GET /{symbol}` (full), `GET /{symbol}/summary` (headline card), `GET /{symbol}/trend` (FINRA daily only).
+    - **Frontend**: SVG arc gauge (same inline pattern, rose→orange→amber→teal→emerald gradient direction reversed vs earnings — high score = high risk here), 6-card stats grid (short float %, days-to-cover, shares short, float shares, avg volume, borrow fee), 52w price range bar with gradient fill and current price marker, FINRA short volume area chart (AreaChart, rose gradient), FINRA trend table (date / short volume / total volume / short %), methodology card, disclaimer.
+    - Default ticker is GME — best demo of the page (high historical short interest).
+    - `keepPreviousData: true` + `refreshInterval: 14_400_000` (4h) on SWR hook — matches cache TTL.
+
+- **Backend (new files)**
+    - ✅ `app/services/short_service.py` — `analyse_short_interest()`, `_fetch_finra_date_list()`, `_fetch_finra_day()`, `_get_short_volume_trend()`, `_trend_direction()`, `_compute_squeeze_score()`. 4-hour symbol cache, 24h per-day FINRA cache, 1h date-list cache.
+    - ✅ `app/api/v1/endpoints/shorts.py` — 3 routes, Pydantic schemas (`ShortAnalysisDto`, `ShortSummaryDto`, `ShortVolumeDayDto`, `SqueezeScoreDto`).
+
+- **Backend (modified files)**
+    - ✅ `app/main.py` — `shorts` router imported and mounted at `/api/v1/shorts`.
+
+- **Frontend (new files)**
+    - ✅ `frontend/app/shorts/page.tsx` — full page: SVG arc gauge with drivers list, 6-card stats grid with colour-coded highlights, 52w price range gradient bar with current price marker, FINRA short volume area chart + data table, methodology card, disclaimer.
+
+- **Frontend (modified files)**
+    - ✅ `frontend/lib/api.ts` — `ShortVolumeDayDto`, `SqueezeScoreDto`, `ShortAnalysisDto`, `ShortSummaryDto` interfaces; `fetchShortAnalysis()`, `fetchShortSummary()`, `fetchShortTrend()` functions.
+    - ✅ `frontend/components/Nav.tsx` — "Shorts" nav item added after "Earnings".
+
+- **Next steps**
+    - `P3-SENT-ADV-01` — Google Trends via `pytrends` (free, no key). Drop Twitter/X source — API too expensive. Use Google Trends + StockTwits (already have `stocktwits_service.py`) for a complete advanced sentiment picture.
+    - `CORE-NOTIF-ADV-01` — GAS/regime change email alerts using existing APScheduler + Resend infrastructure.
+    - `EXP-MACRO-ADV-02` — Fed dot plot visualiser + rate expectations curve (free from FRED).
