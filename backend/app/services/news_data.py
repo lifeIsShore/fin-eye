@@ -55,7 +55,7 @@ class NewsFetcher:
             async with httpx.AsyncClient() as client:
                 response = await client.get(self.BASE_URL, params=params, timeout=10.0)
                 response.raise_for_status()
-                data = response.json()
+                data = await response.json()
                 
             results = []
             # data is a list of news items

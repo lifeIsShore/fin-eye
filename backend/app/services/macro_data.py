@@ -70,7 +70,7 @@ class MacroFetcher:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.get(FRED_BASE_URL, params=params)
                 resp.raise_for_status()
-                payload = resp.json()
+                payload = await resp.json()
         except httpx.HTTPStatusError as exc:
             logger.error("HTTP %s for %s: %s", exc.response.status_code, series_id, exc)
             return []
