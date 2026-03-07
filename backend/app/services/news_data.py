@@ -17,8 +17,11 @@ class NewsFetcher:
     
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.finnhub_api_key
-        if not self.api_key or self.api_key == "your_key_here":
-            logger.warning("Finnhub API key not configured or set to default.")
+        if not settings.has_finnhub and not api_key:
+            logger.warning(
+                "Finnhub API key not configured. "
+                "Set FINNHUB_API_KEY in backend/.env — get a free key at https://finnhub.io"
+            )
             
     async def fetch_recent_news(self, symbol: str, days_back: int = 7) -> List[NewsData]:
         """
@@ -31,8 +34,11 @@ class NewsFetcher:
         Returns:
             List[NewsData]: Validated news records
         """
-        if not self.api_key or self.api_key == "your_key_here":
-            logger.error("Cannot fetch Finnhub data without a valid API key.")
+        if not self.api_key or self.api_key in ("", "your_key_here"):
+            logger.error(
+                "Cannot fetch Finnhub data — FINNHUB_API_KEY is empty or placeholder. "
+                "Add a real key to backend/.env"
+            )
             return []
             
         end_date = datetime.now()
@@ -55,7 +61,7 @@ class NewsFetcher:
             async with httpx.AsyncClient() as client:
                 response = await client.get(self.BASE_URL, params=params, timeout=10.0)
                 response.raise_for_status()
-                data = await response.json()
+                data = response.json()
                 
             results = []
             # data is a list of news items

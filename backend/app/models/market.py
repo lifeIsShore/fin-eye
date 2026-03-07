@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Date, UniqueConstraint
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Date, UniqueConstraint
 from app.db.database import Base
 
 class StockOHLCV(Base):
@@ -30,7 +30,7 @@ class OHLCVDaily(Base):
     low = Column(Float, nullable=False)
     close = Column(Float, nullable=False)
     adj_close = Column(Float, nullable=False)
-    volume = Column(Integer, nullable=False)
+    volume = Column(BigInteger, nullable=False)
     data_source = Column(String, nullable=False, server_default="yahoo_finance")
 
     __table_args__ = (
@@ -49,7 +49,7 @@ class OHLCVIntraday(Base):
     high = Column(Float, nullable=False)
     low = Column(Float, nullable=False)
     close = Column(Float, nullable=False)
-    volume = Column(Integer, nullable=False)
+    volume = Column(BigInteger, nullable=False)
     data_source = Column(String, nullable=False, server_default="yahoo_finance")
 
     __table_args__ = (

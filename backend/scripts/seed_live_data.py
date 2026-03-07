@@ -126,6 +126,23 @@ async def step_sentiment(session) -> None:
     logger.info("✅  Sentiment done in %.1fs", time.perf_counter() - t0)
 
 
+def _print_api_key_status() -> None:
+    """Print a quick health-check of which API keys are loaded."""
+    from app.config import settings
+    checks = [
+        ("FINNHUB_API_KEY",  settings.has_finnhub,  "news + earnings"),
+        ("FRED_API_KEY",     settings.has_fred,     "macro indicators"),
+        ("OPENAI_API_KEY",   settings.has_openai,   "AI narration (optional)"),
+        ("STRIPE_SECRET_KEY",settings.has_stripe,   "billing (optional)"),
+    ]
+    logger.info("  API key status:")
+    for name, ok, purpose in checks:
+        icon = "✅" if ok else "❌"
+        note = "" if ok else f"  ← add to backend/.env  ({purpose})"
+        logger.info("    %s  %-30s %s", icon, name, note)
+    logger.info("")
+
+
 async def main() -> None:
     from app.db.database import AsyncSessionLocal
     from app.db.redis_client import init_redis, close_redis
@@ -134,6 +151,7 @@ async def main() -> None:
     logger.info("║         Fin-Eye  —  Live Data Seed Script                ║")
     logger.info("╚══════════════════════════════════════════════════════════╝")
     logger.info("")
+    _print_api_key_status()
     logger.info("This will populate your database with real data.")
     logger.info("Estimated time: 2-5 minutes depending on network speed.")
     logger.info("")
