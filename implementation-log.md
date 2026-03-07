@@ -53,6 +53,8 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | P3-EDU-01           | P3 – Education (adv)  | NOT_STARTED  | -            | Deferred — post-launch |
 | EXP-EARN-01         | Exp – Earnings        | DONE         | 2026-03-07   | EPS history (8Q), upcoming date countdown, surprise score, bar chart + history table |
 | EXP-SHORT-01        | Exp – Short Interest  | DONE         | 2026-03-07   | Short float %, days-to-cover, FINRA trend, squeeze score (0–100), full /shorts page |
+| P3-SENT-ADV-01      | P3 – Sentiment (adv)  | DONE         | 2026-03-07   | Google Trends + StockTwits deep analysis, composite score, full /sentiment-adv page |
+| EXP-MACRO-ADV-02    | Exp – Fed Policy      | DONE         | 2026-03-07   | FRED data: target range, DFF, SOFR, balance sheet, RRP, dot plot, forward expectations |
 | CORE-AUTH-01        | Core – Auth           | DONE         | 2026-03-04   | NextAuth/JWT implemented |
 | CORE-SUB-01         | Core – Billing        | NOT_STARTED  | -            | Depends on AUTH-01 |
 | CORE-SUB-02         | Core – Billing        | NOT_STARTED  | -            | Depends on SUB-01 |
@@ -2495,3 +2497,48 @@ Post-audit session to close the four genuine remaining gaps identified after a f
     - `P3-SENT-ADV-01` — Google Trends via `pytrends` (free, no key). Drop Twitter/X source — API too expensive. Use Google Trends + StockTwits (already have `stocktwits_service.py`) for a complete advanced sentiment picture.
     - `CORE-NOTIF-ADV-01` — GAS/regime change email alerts using existing APScheduler + Resend infrastructure.
     - `EXP-MACRO-ADV-02` — Fed dot plot visualiser + rate expectations curve (free from FRED).
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — Log audit + P3-SENT-ADV-01 + EXP-MACRO-ADV-02 (complete)**
+
+- **Stories completed**
+    - `P3-SENT-ADV-01` (Advanced Sentiment: Google Trends + StockTwits) — **DONE** (was already fully built; frontend page + api.ts types were present; only Nav wiring was missing)
+    - `EXP-MACRO-ADV-02` (Fed Policy Visualiser) — **DONE** (service + endpoint were built; `/fed-policy/page.tsx` created this session; Nav wired)
+
+- **Root cause of log drift**
+    - `adv_sentiment_service.py`, `adv_sentiment.py` endpoint, `sentiment-adv/page.tsx`, and all `api.ts` types were fully implemented in a prior session that predated the compacted transcript. The implementation log was not updated at the time.
+    - `fed_policy_service.py` and `fed_policy.py` endpoint were similarly built but `fed-policy/page.tsx` was missing entirely.
+    - Neither `/sentiment-adv` nor `/fed-policy` were present in `Nav.tsx`.
+
+- **What was done this session**
+    - **Log audit**: Verified actual file system state. Corrected `P3-SENT-ADV-01` to DONE. Added `EXP-MACRO-ADV-02` as DONE.
+    - **`/fed-policy/page.tsx`** (new): Full Fed Policy visualiser page.
+      - Rate hero: target range (lower–upper), DFF effective rate, balance sheet total, trend badge + YTD bps delta.
+      - Rate history chart (LineChart): target lower/upper/midpoint + DFF overlay, 3 years, step-after rendering for accurate rate steps.
+      - FOMC Dot Plot panel: median projections for 2025/2026/2027/longer-run vs current midpoint. Delta shown as bps implied moves (25bp increments). Visual bar with current-rate marker.
+      - Forward expectations table: 3M T-Bill / 1Y Treasury / 2Y Treasury as rate proxies, delta vs current.
+      - Balance sheet AreaChart (WALCL, billions, converted to trillions for display).
+      - SOFR vs DFF LineChart: spread visualisation.
+      - Reverse repo AreaChart (RRPONTSYD) with contextual annotation.
+      - `refreshInterval: 10_800_000` (3h) matching service cache TTL.
+    - **`Nav.tsx`**: Added "Adv. Sentiment" (`/sentiment-adv`) and "Fed Policy" (`/fed-policy`) between Shorts and Hedge.
+
+- **No backend changes needed** — `main.py` already had both routers mounted (`/api/v1/adv-sentiment`, `/api/v1/fed-policy`). `api.ts` already had all types and fetch functions.
+
+- **Files modified**
+    - ✅ `frontend/app/fed-policy/page.tsx` — created (was missing).
+    - ✅ `frontend/components/Nav.tsx` — "Adv. Sentiment" and "Fed Policy" nav items added.
+    - ✅ `implementation-log.md` — table updated; this session entry appended.
+
+- **Current state summary**
+    - All high-value, free-data signal pages are now complete and navigable:
+      Macro / Sentiment / Retail / Options / Sectors / Insiders / Earnings / Shorts / Adv. Sentiment / Fed Policy / Hedge / Backtest / Portfolio / Alerts / Risk
+    - Remaining genuinely unbuilt actionable stories: `CORE-NOTIF-ADV-01` (GAS email alerts) and `P3-ANALYTICS-01` (no-code indicator builder).
+
+- **Next steps**
+    - `CORE-NOTIF-ADV-01` — GAS threshold + regime-change email alerts. Uses existing APScheduler, Resend, and alert_service infrastructure. Short build (~1 session).
+    - `P3-ANALYTICS-01` — No-code indicator builder. Heavier UI; schedule for dedicated session.
+    - Deferred: `CORE-SUB-01/02` (billing/Stripe), `P3-API-01` (public API), enterprise features.

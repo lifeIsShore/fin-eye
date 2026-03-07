@@ -2563,3 +2563,130 @@ export async function fetchShortTrend(symbol: string): Promise<ShortVolumeDayDto
   if (!res.ok) throw new Error(`Short trend unavailable for ${symbol}`);
   return res.json();
 }
+
+// ─── Advanced Sentiment (P3-SENT-ADV-01) ────────────────────────────
+
+export interface TrendPointDto {
+  date: string;
+  interest: number;
+}
+
+export interface RelatedQueryDto {
+  query: string;
+  value: string;
+}
+
+export interface GoogleTrendsDto {
+  keyword: string;
+  timeframe: string;
+  interest_over_time: TrendPointDto[];
+  rising_queries: RelatedQueryDto[];
+  avg_interest: number;
+  peak_interest: number;
+  recent_vs_avg: number;
+  trend_direction: string;
+}
+
+export interface StockTwitsMessageDto {
+  username: string;
+  body: string;
+  sentiment: string;
+  likes: number;
+  created_at: string;
+}
+
+export interface StockTwitsSnapshotDto {
+  symbol: string;
+  total_messages: number;
+  bullish_count: number;
+  bearish_count: number;
+  neutral_count: number;
+  bullish_pct: number;
+  bearish_pct: number;
+  bull_bear_ratio: number | null;
+  sentiment_label: string;
+  top_bullish: StockTwitsMessageDto[];
+  top_bearish: StockTwitsMessageDto[];
+  recent_messages: StockTwitsMessageDto[];
+}
+
+export interface AdvancedSentimentDto {
+  symbol: string;
+  google_trends: GoogleTrendsDto | null;
+  stocktwits: StockTwitsSnapshotDto | null;
+  composite_score: number;
+  composite_label: string;
+  disclaimer: string;
+}
+
+export async function fetchAdvancedSentiment(symbol: string): Promise<AdvancedSentimentDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/adv-sentiment/${symbol.toUpperCase()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? `Advanced sentiment unavailable for ${symbol}`);
+  }
+  return res.json();
+}
+
+// ─── Fed Policy (EXP-MACRO-ADV-02) ──────────────────────────────────
+
+export interface RatePointDto {
+  date: string;
+  value: number;
+}
+
+export interface RateRangeDto {
+  date: string;
+  lower: number;
+  upper: number;
+  midpoint: number;
+}
+
+export interface DotPlotProjectionDto {
+  year: string;
+  median_rate: number;
+  as_of_label: string;
+}
+
+export interface ForwardExpectationDto {
+  label: string;
+  implied_rate: number;
+  source: string;
+}
+
+export interface FedPolicyDto {
+  current_target_lower: number;
+  current_target_upper: number;
+  current_midpoint: number;
+  current_effective_rate: number | null;
+  target_range_history: RateRangeDto[];
+  effective_rate_history: RatePointDto[];
+  balance_sheet_history: RatePointDto[];
+  current_balance_sheet_b: number | null;
+  reverse_repo_history: RatePointDto[];
+  current_reverse_repo_b: number | null;
+  sofr_history: RatePointDto[];
+  forward_expectations: ForwardExpectationDto[];
+  dot_plot: DotPlotProjectionDto[];
+  hike_or_cut_trend: string;
+  total_moves_ytd: number;
+  disclaimer: string;
+}
+
+export async function fetchFedPolicy(): Promise<FedPolicyDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/fed-policy`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Fed policy data unavailable");
+  return res.json();
+}
+
+export async function fetchFedDotPlot(): Promise<DotPlotProjectionDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/fed-policy/dot-plot`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Dot plot data unavailable");
+  return res.json();
+}

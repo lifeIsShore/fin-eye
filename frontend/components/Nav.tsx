@@ -16,6 +16,8 @@ const NAV_ITEMS = [
     { href: "/insiders", label: "Insiders" },
     { href: "/earnings", label: "Earnings" },
     { href: "/shorts", label: "Shorts" },
+    { href: "/sentiment-adv", label: "Adv. Sentiment" },
+    { href: "/fed-policy", label: "Fed Policy" },
     { href: "/hedge", label: "Hedge" },
     { href: "/backtesting", label: "Backtest" },
     { href: "/portfolios", label: "Portfolio" },
