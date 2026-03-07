@@ -14,7 +14,7 @@ from app.services.scheduler import setup_scheduler
 from app.middleware.metrics_middleware import MetricsMiddleware
 
 # Register models so init_db() creates all tables
-from app.models import blog, showcase, analytics, experiment, email_preference, api_key  # noqa: F401 — side-effect import
+from app.models import blog, showcase, analytics, experiment, email_preference, api_key, gas_snapshot  # noqa: F401 — side-effect import
 
 from app.api.v1.health import router as health_router
 from app.api.v1.data import router as data_router
@@ -24,7 +24,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.endpoints import (
     macro, sentiment, technical, explanation, hedging,
     portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts, strategies,
-    showcase, ops, analytics, experiments, email, api_keys, risk
+    showcase, ops, analytics, experiments, email, api_keys, risk, admin_gas
 )
 from app.api.public.v1 import router as public_v1_router
 
@@ -53,7 +53,25 @@ async def lifespan(app: FastAPI):
     scheduler = setup_scheduler()
     scheduler.start()
     logger.info("📅 APScheduler started with %d jobs.", len(scheduler.get_jobs()))
-    
+
+    # 5. Warm the GAS snapshot cache on startup so the first user sees data
+    #    immediately without waiting for the 15-min scheduler tick.
+    try:
+        from app.services.gas_precompute import run_gas_precompute_batch  # noqa: PLC0415
+        from app.db.database import AsyncSessionLocal  # noqa: PLC0415
+        logger.info("🔥 Warming GAS snapshot cache on startup...")
+        async with AsyncSessionLocal() as session:
+            summary = await run_gas_precompute_batch(session)
+        logger.info(
+            "✅ GAS cache warmed — %d/%d symbols succeeded in %.0fms",
+            summary["symbols_succeeded"],
+            summary["symbols_attempted"],
+            summary["elapsed_ms"],
+        )
+    except Exception as exc:
+        # Never crash startup — the scheduler will retry at the next tick
+        logger.warning("⚠️  GAS cache warm failed (non-fatal): %s", exc)
+
     yield
     
     # Shutdown
@@ -116,6 +134,7 @@ app.include_router(experiments.router, prefix="/api/v1/experiments", tags=["A/B 
 app.include_router(email.router, prefix="/api/v1/email", tags=["Email Preferences"])
 app.include_router(api_keys.router, prefix="/api/v1/api-keys", tags=["API Key Management"])
 app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk & Stress Testing"])
+app.include_router(admin_gas.router, prefix="/api/v1/admin/gas", tags=["Admin — GAS Pre-Compute"])
 
 # Public external API (API-key authenticated)
 app.include_router(public_v1_router.router, prefix="/public/v1", tags=["Public API"])

@@ -3,20 +3,29 @@
 interface RegimeWidgetProps {
     technicalScore: number;
     vixLevel: number | null;
+    /**
+     * When provided, overrides the client-derived regime label with the
+     * server-computed value from the GAS snapshot (EXP-PERF-01).
+     */
+    regimeOverride?: string;
 }
 
 export default function RegimeWidget({
     technicalScore,
     vixLevel,
+    regimeOverride,
 }: RegimeWidgetProps) {
-    let technicalRegime = "Range-Bound";
-    let techColor = "text-amber-400 bg-amber-950/40 border-amber-900/50";
+    // Derive regime locally as fallback; prefer the server value when present.
+    let derivedRegime = "Range-Bound";
+    if (technicalScore >= 60)      derivedRegime = "Risk-On";
+    else if (technicalScore <= 40) derivedRegime = "Risk-Off";
 
-    if (technicalScore >= 60) {
-        technicalRegime = "Risk-On";
+    const technicalRegime = regimeOverride ?? derivedRegime;
+
+    let techColor = "text-amber-400 bg-amber-950/40 border-amber-900/50";
+    if (technicalRegime === "Risk-On") {
         techColor = "text-emerald-400 bg-emerald-950/40 border-emerald-900/50";
-    } else if (technicalScore <= 40) {
-        technicalRegime = "Risk-Off";
+    } else if (technicalRegime === "Risk-Off") {
         techColor = "text-rose-400 bg-rose-950/40 border-rose-900/50";
     }
 

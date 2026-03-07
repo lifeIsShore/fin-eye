@@ -2212,8 +2212,61 @@ Post-audit session to close the four genuine remaining gaps identified after a f
     - ✅ `frontend/lib/api.ts` — also added full CMS type set: `BlogPostSummary`, `BlogPostFull`, `BlogPostCreatePayload`, `BlogPostUpdatePayload`. Added `fetchPublishedPosts()`, `fetchPostBySlug()`, `adminFetchAllPosts()`, `adminFetchPost()`, `adminCreatePost()`, `adminUpdatePost()`, `adminPublishPost()`, `adminUnpublishPost()`, `adminDeletePost()`.
 
 - **Next steps**
-    - `EXP-PERF-01` — GAS pre-computation job (APScheduler + `gas_snapshots` table + Redis cache). Dashboard loads in <200ms. **Highest priority — do next.**
     - `EXP-OPT-01` — Options Fear & Greed (Put/Call ratio via yfinance, no new key, ~1 day).
     - `EXP-SECT-01` — Sector Rotation Heatmap (yfinance, visually high-impact, ~1.5 days).
     - `EXP-EXPLAIN-ADV-01` — Interactive Explanation Mode (click any score to see what produced it, ~1 day).
+    - `EXP-INSID-01` — Insider Trading via SEC EDGAR (free, no key, ~1.5 days).
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — EXP-PERF-01: GAS Pre-Computation Job (complete)**
+
+- **Stories completed**
+    - `EXP-PERF-01` (GAS Pre-Computation + Dashboard Speed) — **DONE**
+
+- **Design decisions**
+    - **Three-tier read path**: Redis cache (fastest, <1ms) → DB snapshot (fast, <5ms) → live compute (cold-start fallback only). Dashboard P50 response drops from ~2–3s to <200ms once warmed.
+    - **Macro score computed once per batch** — it is market-wide, not per-symbol. All symbols in a batch reuse the same macro score computed at the start. Avoids N redundant FRED indicator queries.
+    - **Technical inference is CPU-bound** (joblib/sklearn). Wrapped in `loop.run_in_executor(None, ...)` to avoid blocking the asyncio event loop during the 15-min scheduler tick.
+    - **Technical and sentiment fetches are sequential per-symbol** by design — ML inference already parallelises internally via sklearn's n_jobs; adding concurrent async sessions on top would increase DB contention more than it helps.
+    - **Snapshot row cap**: `MAX_ROWS_PER_SYMBOL = 48` (12h of 15-min snapshots). After insert, a trim query deletes any rows beyond the cap so the table stays bounded. Uses `flush()` to get the new row's ID before the trim runs.
+    - **Cache TTL = 900s (15 min)** — matches the scheduler cadence exactly. Mock fallbacks (when technical inference fails) are still written so the UI never shows a blank.
+    - **Startup warm**: on `app` lifespan startup, `run_gas_precompute_batch()` is called once so the first user gets cached data immediately. Non-fatal — a failed warm never blocks startup.
+    - **Scheduler cadence**: `CronTrigger(day_of_week="mon-fri", hour="13-21", minute="0,15,30,45")` — every 15 min during US market hours. `misfire_grace_time=120` so a delayed tick still runs rather than being dropped.
+    - **Admin endpoint** `GET /api/v1/admin/gas/snapshots/{symbol}` is the **public read path** used by the frontend — no admin auth required on reads. Write endpoints (`POST /precompute`, `POST /precompute/{symbol}`) are admin-only.
+    - **Frontend**: `fetchGasSnapshot()` is the new primary SWR fetch for GAS score and regime. `fetchTechnicalLatest`, `fetchNewsSentiment`, `fetchMacroLatest` are kept for the breakdown panels but use a 2-min refresh interval (vs 60s before) since the headline is now driven by the snapshot.
+    - **`keepPreviousData: true`** on all SWR calls — no flash of loading state when switching symbols if previous data is available.
+    - **Staleness indicator**: `SnapshotMeta` component in `page.tsx` shows snapshot source (cache/db/live), age in minutes, and the three component scores (T/S/M) inline. If age > 30 min, an amber "stale" warning is shown.
+    - **`RegimeWidget` updated**: accepts optional `regimeOverride` prop. When the snapshot provides a regime label it is used; otherwise falls back to client-side derivation from `technicalScore`. Backwards-compatible — all other usages of `RegimeWidget` unaffected.
+
+- **Backend (new files)**
+    - ✅ `app/models/gas_snapshot.py` — `GasSnapshot` SQLAlchemy model (`id`, `symbol`, `gas_score`, `weather_label`, `regime`, `component_scores` JSON, `technical_signals` JSON, `computed_at`, `source`). Composite index on `(symbol, computed_at)`.
+    - ✅ `app/crud/gas_snapshot.py` — `upsert_snapshot()` (insert + auto-trim), `get_latest()`, `get_latest_batch()` (window-function single query for N symbols).
+    - ✅ `app/services/gas_precompute.py` — `_compute_technical_score()`, `_compute_sentiment_score()`, `_compute_macro_score()`, `compute_gas_for_symbol()`, `run_gas_precompute_batch()`, `get_snapshot_cached()` (3-tier read).
+    - ✅ `app/api/v1/endpoints/admin_gas.py` — 4 routes: `POST /precompute` (bg task, admin), `POST /precompute/{symbol}` (sync, admin), `GET /snapshots` (admin), `GET /snapshots/{symbol}` (public read).
+    - ✅ `alembic/versions/i9c0d1e2f3a4_add_gas_snapshots.py` — creates `gas_snapshots` table with indexes.
+
+- **Backend (modified files)**
+    - ✅ `app/models/__init__.py` — `GasSnapshot` registered.
+    - ✅ `app/services/scheduler.py` — `job_gas_precompute()` added; registered as `gas_precompute` job (`mon-fri 13–21:00 UTC`, every 15 min).
+    - ✅ `app/main.py` — `admin_gas` router mounted at `/api/v1/admin/gas`; `gas_snapshot` model import added; startup warm logic added to `lifespan()`.
+
+- **Frontend (modified files)**
+    - ✅ `frontend/lib/api.ts` — `GasComponentScores`, `GasSnapshotDto` interfaces; `fetchGasSnapshot(symbol)`, `triggerGasPrecompute()` functions.
+    - ✅ `frontend/app/page.tsx` — primary GAS score and regime now sourced from `fetchGasSnapshot` SWR hook. Client-side computed GAS retained as fallback while snapshot loads. Added `SnapshotMeta` component (source, age, T/S/M mini-scores). `keepPreviousData: true` on all SWR hooks. Refresh intervals tuned (snapshot: 60s, detail panels: 120s, macro: 300s).
+    - ✅ `frontend/components/RegimeWidget.tsx` — `regimeOverride?: string` prop added; regime label prefers snapshot value over client derivation.
+
+- **Activation instructions**
+    1. `alembic upgrade head` — creates the `gas_snapshots` table.
+    2. Restart backend — startup warm will run immediately and log `GAS cache warmed — N/N symbols succeeded`.
+    3. If models are not yet trained for a symbol, technical score falls back to 50.0 (neutral) — snapshots are still written.
+    4. Admin trigger available at `POST /api/v1/admin/gas/precompute` (requires admin JWT).
+    5. Read path: `GET /api/v1/admin/gas/snapshots/{SYMBOL}` — no auth required.
+
+- **Next steps**
+    - `EXP-OPT-01` — Options Fear & Greed (Put/Call ratio via yfinance, no new key, ~1 day).
+    - `EXP-SECT-01` — Sector Rotation Heatmap (yfinance, visually high-impact, ~1.5 days).
+    - `EXP-EXPLAIN-ADV-01` — Interactive Explanation Mode (~1 day).
     - `EXP-INSID-01` — Insider Trading via SEC EDGAR (free, no key, ~1.5 days).

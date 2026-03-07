@@ -1888,6 +1888,50 @@ export async function deleteAccount(): Promise<{ message: string; anonymised_at:
   return res.json();
 }
 
+// ─── GAS Pre-Computation (EXP-PERF-01) ────────────────────────────────────────────────
+
+export interface GasComponentScores {
+  technical: number;
+  sentiment: number;
+  macro: number;
+}
+
+export interface GasSnapshotDto {
+  symbol: string;
+  gas_score: number;
+  weather_label: "Mild Support" | "Mixed Signals" | "Headwind" | "High Instability" | string;
+  regime: "Risk-On" | "Transitional" | "Risk-Off" | string;
+  component_scores: GasComponentScores;
+  technical_signals: unknown[];
+  computed_at: string;
+  source: "live" | "cache" | "db_snapshot" | string;
+}
+
+/**
+ * Fetch the latest pre-computed GAS snapshot for a symbol.
+ * Falls back to live compute (slow) if no snapshot is cached yet.
+ */
+export async function fetchGasSnapshot(symbol: string): Promise<GasSnapshotDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/admin/gas/snapshots/${symbol.toUpperCase()}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`No GAS snapshot for ${symbol}`);
+  return res.json();
+}
+
+/**
+ * Admin: trigger a full GAS pre-compute batch (fire-and-forget).
+ */
+export async function triggerGasPrecompute(): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/admin/gas/precompute`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to trigger GAS precompute");
+  return res.json();
+}
+
 // ─── Ops / Admin Observability (CORE-OPS-01) ────────────────────────────────
 
 export interface OpsHealthDto {

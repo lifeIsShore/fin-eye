@@ -13,3 +13,4 @@ from app.models.analytics import AnalyticsEvent
 from app.models.experiment import Experiment, ExperimentAssignment
 from app.models.email_preference import EmailPreference, EmailLog
 from app.models.api_key import ApiKey, ApiKeyUsageLog
+from app.models.gas_snapshot import GasSnapshot

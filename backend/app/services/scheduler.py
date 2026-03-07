@@ -195,6 +195,42 @@ async def job_weekly_digest() -> None:
         )
 
 
+async def job_gas_precompute() -> None:
+    """
+    Pre-compute GAS scores for all default symbols and write results to
+    DB + Redis.  Runs every 15 minutes on weekdays during US market hours
+    (13:00–21:00 UTC).  Also runs once at 13:00 on weekdays to warm the
+    cache before market open.
+    """
+    from app.services.gas_precompute import run_gas_precompute_batch  # noqa: PLC0415
+
+    logger.info("Starting GAS pre-compute batch job")
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            summary = await run_gas_precompute_batch(session)
+        detail = (
+            f"ok={summary['symbols_succeeded']}/"
+            f"{summary['symbols_attempted']} "
+            f"elapsed={summary['elapsed_ms']:.0f}ms"
+        )
+        logger.info("GAS pre-compute complete: %s", detail)
+        get_metrics().record_pipeline_run(
+            "gas_precompute", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("GAS pre-compute job failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "gas_precompute", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        # Don't re-raise — a failed pre-compute must not crash the scheduler
+
+
 async def job_backup_db() -> None:
     """Run a full PostgreSQL backup and rotate old local copies."""
     import sys, os  # noqa: PLC0415
@@ -326,6 +362,16 @@ def setup_scheduler() -> AsyncIOScheduler:
         name="Weekly Email Digest",
         replace_existing=True,
         misfire_grace_time=3600,
+    )
+
+    # GAS pre-compute — weekdays every 15 min during US market hours (13:00–21:00 UTC)
+    scheduler.add_job(
+        job_gas_precompute,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="13-21", minute="0,15,30,45"),
+        id="gas_precompute",
+        name="GAS Pre-Computation",
+        replace_existing=True,
+        misfire_grace_time=120,   # short grace — stale GAS is better than no GAS
     )
 
     # DB backup — daily at 02:00 UTC (low traffic, before market open)
