@@ -11,6 +11,7 @@ const NAV_ITEMS = [
     { href: "/macro", label: "Macro" },
     { href: "/news-sentiment", label: "Sentiment" },
     { href: "/sentiment", label: "Retail" },
+    { href: "/options", label: "Options" },
     { href: "/hedge", label: "Hedge" },
     { href: "/backtesting", label: "Backtest" },
     { href: "/portfolios", label: "Portfolio" },

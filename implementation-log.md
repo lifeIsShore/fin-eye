@@ -2265,8 +2265,48 @@ Post-audit session to close the four genuine remaining gaps identified after a f
     4. Admin trigger available at `POST /api/v1/admin/gas/precompute` (requires admin JWT).
     5. Read path: `GET /api/v1/admin/gas/snapshots/{SYMBOL}` — no auth required.
 
+- **Next steps (updated)**
+    - `EXP-SECT-01` — Sector Rotation Heatmap (yfinance, visually high-impact, ~1.5 days).
+    - `EXP-EXPLAIN-ADV-01` — Interactive Explanation Mode (~1 day).
+    - `EXP-INSID-01` — Insider Trading via SEC EDGAR (free, no key, ~1.5 days).
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — EXP-OPT-01: Options Fear & Greed (complete)**
+
+- **Stories completed**
+    - `EXP-OPT-01` (Options Fear & Greed — Put/Call Ratio, IV Skew, Max Pain) — **DONE**
+
+- **Design decisions**
+    - **No new API key** — uses `yfinance` which was already installed. yfinance options chains are 15-min delayed; this is surfaced to users prominently via a disclaimer.
+    - **Three signals computed**: (1) Aggregate PCR across all available expiries — not just near-term, so it is a broad positioning proxy. (2) IV Skew: 10%-OTM put IV minus 10%-OTM call IV from the nearest expiry. Positive = put-skewed (bearish lean). (3) Max Pain: min-pain strike from the nearest expiry via the classic buyer-vs-seller intrinsic cost algorithm.
+    - **Fear & Greed composite** (0–100): PCR contributes 70%, IV skew contributes 30% when available. When yfinance IV data is missing (common for thinly-traded tickers), the score falls back to PCR alone.
+    - **CPU-bound work in thread pool**: `analyse_options()` is synchronous (yfinance). All async endpoint handlers call it via `loop.run_in_executor(None, ...)` to avoid blocking the event loop.
+    - **15-min module-level cache** (`_CACHE` dict in `options_service.py`) — matches the scheduler cadence and is appropriate for 15-min delayed data. No Redis needed — options analysis is per-symbol on-demand, not batched.
+    - **Three routes**: `GET /{symbol}` (full analysis), `GET /{symbol}/summary` (lightweight dashboard card), `GET /{symbol}/expiries` (per-expiry table). No auth required.
+    - **Frontend**: full dedicated page at `/options`. SWR refreshes every 15 min (`refreshInterval: 900_000`). `keepPreviousData: true` to avoid blank flash on symbol change.
+    - **SVG half-gauge** needle chart rendered inline in React with no external chart library — eliminates a dependency and keeps the bundle lean.
+    - **PCR bar**: gradient strip from emerald → amber → rose with a moving white needle dot. Neutral band at PCR ≈ 0.7 marked with a hairline.
+    - **Per-expiry table**: colour-coded PCR column (rose = fear, emerald = greed) with OI values formatted as `K`/`M`.
+    - **Max Pain explainer section**: shows distance from spot as a percentage with directional colour, plus a clear caveat about empirical support.
+
+- **Backend (new files)**
+    - ✅ `app/services/options_service.py` — `analyse_options(symbol)`, `_classify_pcr()`, `_classify_skew()`, `_compute_fg_score()`, `_compute_max_pain()`, `_compute_iv_skew()`. 15-min in-process cache.
+    - ✅ `app/api/v1/endpoints/options.py` — 3 routes, Pydantic response schemas (`OptionsAnalysisDto`, `OptionsSummaryDto`, `ExpiryBreakdownDto`).
+
+- **Backend (modified files)**
+    - ✅ `app/main.py` — `options` router imported and mounted at `/api/v1/options`.
+
+- **Frontend (new files)**
+    - ✅ `frontend/app/options/page.tsx` — full page: Fear & Greed gauge, key stats grid, PCR bar + interpretation, per-expiry table, Max Pain explainer, disclaimer.
+
+- **Frontend (modified files)**
+    - ✅ `frontend/lib/api.ts` — `OptionsExpiryBreakdownDto`, `OptionsAnalysisDto`, `OptionsSummaryDto` interfaces; `fetchOptionsAnalysis()`, `fetchOptionsSummary()`, `fetchOptionsExpiries()` functions.
+    - ✅ `frontend/components/Nav.tsx` — "Options" added after "Retail".
+
 - **Next steps**
-    - `EXP-OPT-01` — Options Fear & Greed (Put/Call ratio via yfinance, no new key, ~1 day).
     - `EXP-SECT-01` — Sector Rotation Heatmap (yfinance, visually high-impact, ~1.5 days).
     - `EXP-EXPLAIN-ADV-01` — Interactive Explanation Mode (~1 day).
     - `EXP-INSID-01` — Insider Trading via SEC EDGAR (free, no key, ~1.5 days).

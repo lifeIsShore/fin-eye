@@ -1888,6 +1888,90 @@ export async function deleteAccount(): Promise<{ message: string; anonymised_at:
   return res.json();
 }
 
+// ─── Options Fear & Greed (EXP-OPT-01) ─────────────────────────────────────────────
+
+export interface OptionsExpiryBreakdownDto {
+  expiry: string;
+  calls_oi: number;
+  puts_oi: number;
+  pcr: number;
+  total_call_volume: number;
+  total_put_volume: number;
+  max_pain_strike: number | null;
+}
+
+export interface OptionsAnalysisDto {
+  symbol: string;
+  spot_price: number;
+  // Aggregate PCR
+  total_calls_oi: number;
+  total_puts_oi: number;
+  aggregate_pcr: number;
+  pcr_label: "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed" | string;
+  pcr_interpretation: string;
+  // IV skew
+  iv_skew: number | null;
+  iv_skew_label: string;
+  near_put_iv: number | null;
+  near_call_iv: number | null;
+  // Max pain
+  max_pain_strike: number | null;
+  max_pain_distance_pct: number | null;
+  // Composite
+  fear_greed_score: number;   // 0–100
+  fear_greed_label: "Fear" | "Mild Fear" | "Neutral" | "Mild Greed" | "Greed" | string;
+  // Detail
+  expiry_breakdown: OptionsExpiryBreakdownDto[];
+  disclaimer: string;
+}
+
+export interface OptionsSummaryDto {
+  symbol: string;
+  spot_price: number;
+  fear_greed_score: number;
+  fear_greed_label: string;
+  aggregate_pcr: number;
+  pcr_label: string;
+  max_pain_strike: number | null;
+  max_pain_distance_pct: number | null;
+  disclaimer: string;
+}
+
+export async function fetchOptionsAnalysis(symbol: string): Promise<OptionsAnalysisDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/options/${encodeURIComponent(symbol.toUpperCase())}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? `No options data for ${symbol}`);
+  }
+  return res.json();
+}
+
+export async function fetchOptionsSummary(symbol: string): Promise<OptionsSummaryDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/options/${encodeURIComponent(symbol.toUpperCase())}/summary`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? `No options summary for ${symbol}`);
+  }
+  return res.json();
+}
+
+export async function fetchOptionsExpiries(
+  symbol: string,
+): Promise<OptionsExpiryBreakdownDto[]> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/options/${encodeURIComponent(symbol.toUpperCase())}/expiries`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch options expiries for ${symbol}`);
+  return res.json();
+}
+
 // ─── GAS Pre-Computation (EXP-PERF-01) ────────────────────────────────────────────────
 
 export interface GasComponentScores {
