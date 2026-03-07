@@ -2134,3 +2134,86 @@ This log tracks implementation progress for each user story in `user-stories.md`
     - `P3-ANALYTICS-01` (No-Code Indicator Builder)
     - `P3-BULK-01` (Bulk Analysis)
     - `CORE-SUB-01` (Stripe billing) — last, when credentials are provided.
+
+---
+
+### 2026-03-07
+
+**Session — Gap Closure Audit: P2-EVENT-01 + MVP-LEARN-01 + CORE-CMS-02 + CORE-OPS-01 (complete)**
+
+Post-audit session to close the four genuine remaining gaps identified after a full file-level review of the codebase. All "PARTIAL" stories from the prior audit were confirmed as actually done except the four below.
+
+- **Stories completed**
+    - `P2-EVENT-01` (Economic Calendar — live API) — **DONE**
+    - `MVP-LEARN-01` (Learn section seed content) — **DONE**
+    - `CORE-CMS-02` (CMS Admin Markdown Editor) — **DONE** (was already scaffolded; wired API types and upgraded editor)
+    - `CORE-OPS-01` (Admin Ops Dashboard) — **CONFIRMED DONE** (frontend already existed; missing API types added to `lib/api.ts`)
+
+#### P2-EVENT-01 — Economic Calendar (Live Finnhub)
+
+- **Design decisions**
+    - Rewritten `event_service.py` from scratch. Old version used `datetime.now() + timedelta(days=N)` hardcoded mock — same 10 events every restart.
+    - Wired directly to `https://finnhub.io/api/v1/calendar/economic` using existing `FINNHUB_API_KEY` from `.env`.
+    - 14-day lookahead window (`from=today`, `to=today+14`).
+    - Finnhub wraps the list under `economicCalendar` key — handled both dict and bare list shapes.
+    - Impact strings normalised: Finnhub returns `"high"`/`"medium"`/`"low"` (lowercase) → mapped to `"High"`/`"Medium"`/`"Low"` to match existing schema.
+    - Country codes normalised: `GB` → `UK` for UI consistency.
+    - Time format: Finnhub returns `"08:30:00"` — seconds stripped to `"08:30"` for display.
+    - Unit suffix (`%`, `K`, etc.) appended to actual/estimate/previous values.
+    - **In-process cache**: 1-hour TTL. Cache only populated from real Finnhub data — mock fallback is never cached.
+    - **Graceful fallback**: if key missing, timeout, or HTTP error → deterministic 10-event mock set returned. UI never breaks.
+    - `_is_mock` attribute tagging removed (Pydantic model is frozen) — instead, `is_real` bool returned from `_fetch_from_finnhub()` to control cache write.
+
+- **Backend**
+    - ✅ `app/services/event_service.py` — fully rewritten. `EventService._fetch_from_finnhub()`, `_parse_finnhub_response()`, `_generate_mock_events()`. In-process cache with `_cache_is_real` guard.
+
+#### MVP-LEARN-01 — Blog Seed Content
+
+- **Design decisions**
+    - Learn page (`/learn/page.tsx`) was fully wired to `/api/v1/cms/posts/published` but DB had zero rows — page showed "No articles yet."
+    - Chose to seed 4 foundational educational articles matching the product's core explanatory pillars.
+    - Followed exact same pattern as `scripts/seed_case_studies.py` (idempotent slug check, direct ORM insert, status=`published`).
+    - Article categories chosen to populate the existing category filter tabs: `"How It Works"` and `"Macro Fundamentals"`.
+
+- **Backend**
+    - ✅ `scripts/seed_learn_articles.py` — new seed script, 4 articles, idempotent.
+      1. *What Is the Global Alignment Score (GAS)?* — 3-layer breakdown, weather metaphor, what GAS is NOT (7 min read)
+      2. *How to Read the Yield Curve* — inversion explained, recession track record table, how Fin-Eye uses it, common misunderstandings (8 min read)
+      3. *Understanding Market Regimes: Risk-On vs Risk-Off* — regime classification, cascade patterns, VIX regime table, practical strategy implications (6 min read)
+      4. *How to Use the Fin-Eye Stress Index* — 5 components, gauge ranges, historical reference points, limitations (5 min read)
+
+- **Activation**
+    - `cd backend && python scripts/seed_learn_articles.py`
+    - Idempotent — safe to re-run. Skips slugs that already exist.
+
+#### CORE-CMS-02 — CMS Admin Markdown Editor
+
+- **Design decisions**
+    - `PostEditor.tsx` already existed as a plain textarea — functionally correct but editing long articles blind was painful.
+    - Upgraded to a **3-mode split editor**: Write / Split / Preview, toggled via a pill control in the top bar.
+    - Split mode (default) shows editor left, rendered preview right — uses `react-markdown` + `remark-gfm` already in `package.json`.
+    - Preview applies `prose-invert` Tailwind Typography classes (already in `package.json` as `@tailwindcss/typography`) for clean dark-mode rendering including tables, blockquotes, code blocks, task lists.
+    - Added word/char counter below sidebar for editorial awareness.
+    - Metadata sidebar refactored into a reusable `Field` component — cleaner, DRY.
+    - `handleSave` wrapped in `useCallback` to prevent unnecessary re-renders.
+
+- **Frontend**
+    - ✅ `frontend/components/admin/PostEditor.tsx` — upgraded with split-pane live Markdown preview, 3-mode toggle (Write/Split/Preview), word counter, `useCallback` save handler.
+
+#### CORE-OPS-01 — Admin Ops Dashboard (API type gap closed)
+
+- **Design decisions**
+    - `app/admin/ops/page.tsx` was fully implemented (health, metrics, alerts, jobs, backup panels, 30s auto-refresh) but all its imports from `lib/api.ts` were missing — the file referenced `fetchOpsHealth`, `fetchOpsMetrics`, `fetchOpsAlerts`, `fetchOpsJobs`, `OpsHealthDto`, `OpsMetricsDto`, etc. which didn't exist in `api.ts`. This would cause a TypeScript compile error.
+    - Added all missing types and fetch functions to `lib/api.ts` in a clearly labelled `CORE-OPS-01` section.
+    - Same pattern as all other API sections: typed DTOs matching backend response shapes, `authHeaders()` on every admin call, `cache: "no-store"` on all ops endpoints.
+
+- **Frontend**
+    - ✅ `frontend/lib/api.ts` — added `OpsHealthDto`, `OpsPipelineRow`, `OpsRouteStats`, `OpsMetricsDto`, `OpsAlertBreach`, `OpsAlertsDto`, `OpsJobDto`. Added `fetchOpsHealth()`, `fetchOpsMetrics()`, `fetchOpsAlerts()`, `fetchOpsJobs()`.
+    - ✅ `frontend/lib/api.ts` — also added full CMS type set: `BlogPostSummary`, `BlogPostFull`, `BlogPostCreatePayload`, `BlogPostUpdatePayload`. Added `fetchPublishedPosts()`, `fetchPostBySlug()`, `adminFetchAllPosts()`, `adminFetchPost()`, `adminCreatePost()`, `adminUpdatePost()`, `adminPublishPost()`, `adminUnpublishPost()`, `adminDeletePost()`.
+
+- **Next steps**
+    - `EXP-PERF-01` — GAS pre-computation job (APScheduler + `gas_snapshots` table + Redis cache). Dashboard loads in <200ms. **Highest priority — do next.**
+    - `EXP-OPT-01` — Options Fear & Greed (Put/Call ratio via yfinance, no new key, ~1 day).
+    - `EXP-SECT-01` — Sector Rotation Heatmap (yfinance, visually high-impact, ~1.5 days).
+    - `EXP-EXPLAIN-ADV-01` — Interactive Explanation Mode (click any score to see what produced it, ~1 day).
+    - `EXP-INSID-01` — Insider Trading via SEC EDGAR (free, no key, ~1.5 days).

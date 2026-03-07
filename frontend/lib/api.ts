@@ -1887,3 +1887,241 @@ export async function deleteAccount(): Promise<{ message: string; anonymised_at:
   }
   return res.json();
 }
+
+// ─── Ops / Admin Observability (CORE-OPS-01) ────────────────────────────────
+
+export interface OpsHealthDto {
+  status: "ok" | "degraded";
+  checked_at: string;
+  components: {
+    database: string;
+    redis: string;
+    pipelines: string;
+  };
+  pipeline_issues: string[];
+}
+
+export interface OpsPipelineRow {
+  job_id: string;
+  last_run_at: string | null;
+  last_success: boolean;
+  last_duration_ms: number | null;
+  last_detail: string | null;
+  total_runs_recorded: number;
+  success_rate_pct: number;
+}
+
+export interface OpsRouteStats {
+  route: string;
+  total_requests: number;
+  error_rate_pct: number;
+  latency_ms: {
+    p50: number | null;
+    p95: number | null;
+    p99: number | null;
+  };
+}
+
+export interface OpsMetricsDto {
+  snapshot_at: string;
+  server_started_at: string;
+  api: {
+    total_routes_tracked: number;
+    routes: OpsRouteStats[];
+  };
+  pipelines: OpsPipelineRow[];
+  inference: {
+    count: number;
+    avg_ms: number | null;
+    p95_ms: number | null;
+  };
+}
+
+export interface OpsAlertBreach {
+  type: string;
+  severity: "warning" | "error";
+  message: string;
+  value: number;
+  threshold: number;
+}
+
+export interface OpsAlertsDto {
+  evaluated_at: string;
+  all_clear: boolean;
+  breach_count: number;
+  thresholds: Record<string, number>;
+  breaches: OpsAlertBreach[];
+}
+
+export interface OpsJobDto {
+  id: string;
+  name: string;
+  trigger: string;
+  next_run_at: string | null;
+}
+
+export async function fetchOpsHealth(): Promise<OpsHealthDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ops/health`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch ops health");
+  return res.json();
+}
+
+export async function fetchOpsMetrics(): Promise<OpsMetricsDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ops/metrics`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch ops metrics");
+  return res.json();
+}
+
+export async function fetchOpsAlerts(): Promise<OpsAlertsDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ops/alerts`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch ops alerts");
+  return res.json();
+}
+
+export async function fetchOpsJobs(): Promise<OpsJobDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ops/jobs`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch ops jobs");
+  return res.json();
+}
+
+// ─── CMS / Blog (CORE-CMS-02) ────────────────────────────────────────────────
+
+export interface BlogPostSummary {
+  id: number;
+  title: string;
+  slug: string;
+  summary: string;
+  category: string;
+  read_time: string;
+  author: string;
+  status: string;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BlogPostFull extends BlogPostSummary {
+  content_md: string;
+}
+
+export interface BlogPostCreatePayload {
+  title: string;
+  summary: string;
+  content_md: string;
+  category?: string;
+  read_time?: string;
+  author?: string;
+  slug?: string;
+}
+
+export interface BlogPostUpdatePayload extends Partial<BlogPostCreatePayload> {}
+
+/** Public — list all published posts (no auth required). */
+export async function fetchPublishedPosts(): Promise<BlogPostSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/published`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load articles");
+  return res.json();
+}
+
+/** Public — fetch a single published post by slug. */
+export async function fetchPostBySlug(slug: string): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/by-slug/${slug}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Post not found");
+  return res.json();
+}
+
+/** Admin — list ALL posts (draft + published). */
+export async function adminFetchAllPosts(): Promise<BlogPostSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load posts");
+  return res.json();
+}
+
+/** Admin — fetch a single post by ID (includes drafts). */
+export async function adminFetchPost(id: number): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load post");
+  return res.json();
+}
+
+/** Admin — create a new draft post. */
+export async function adminCreatePost(payload: BlogPostCreatePayload): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to create post");
+  }
+  return res.json();
+}
+
+/** Admin — update any field on an existing post. */
+export async function adminUpdatePost(
+  id: number,
+  payload: BlogPostUpdatePayload,
+): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to update post");
+  }
+  return res.json();
+}
+
+/** Admin — publish a draft post. */
+export async function adminPublishPost(id: number): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}/publish`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to publish post");
+  return res.json();
+}
+
+/** Admin — revert a published post back to draft. */
+export async function adminUnpublishPost(id: number): Promise<BlogPostFull> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}/unpublish`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to unpublish post");
+  return res.json();
+}
+
+/** Admin — permanently delete a post. */
+export async function adminDeletePost(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/cms/posts/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to delete post");
+}
