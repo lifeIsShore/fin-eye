@@ -24,7 +24,8 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.endpoints import (
     macro, sentiment, technical, explanation, hedging,
     portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts, strategies,
-    showcase, ops, analytics, experiments, email, api_keys, risk, admin_gas, options, sectors
+    showcase, ops, analytics, experiments, email, api_keys, risk, admin_gas, options, sectors,
+    insiders
 )
 from app.api.public.v1 import router as public_v1_router
 
@@ -137,6 +138,7 @@ app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk & Stress Test
 app.include_router(admin_gas.router, prefix="/api/v1/admin/gas", tags=["Admin — GAS Pre-Compute"])
 app.include_router(options.router, prefix="/api/v1/options", tags=["Options Fear & Greed"])
 app.include_router(sectors.router, prefix="/api/v1/sectors", tags=["Sector Rotation"])
+app.include_router(insiders.router, prefix="/api/v1/insiders", tags=["Insider Trading"])
 
 # Public external API (API-key authenticated)
 app.include_router(public_v1_router.router, prefix="/public/v1", tags=["Public API"])

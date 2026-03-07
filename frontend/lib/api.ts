@@ -2322,3 +2322,93 @@ export async function adminDeletePost(id: number): Promise<void> {
   });
   if (!res.ok) throw new Error("Failed to delete post");
 }
+
+// ─── Insider Trading (EXP-INSID-01) ─────────────────────────────────────────
+
+export interface InsiderSentimentDto {
+  score: number;
+  label: string;
+  buy_transactions: number;
+  sell_transactions: number;
+  buy_shares: number;
+  sell_shares: number;
+  buy_value: number | null;
+  sell_value: number | null;
+  net_shares: number;
+  net_value: number | null;
+  lookback_days: number;
+}
+
+export interface InsiderTransactionDto {
+  filing_date: string;
+  transaction_date: string;
+  insider_name: string;
+  insider_title: string;
+  transaction_type: string;
+  transaction_type_label: string;
+  shares: number;
+  price_per_share: number | null;
+  total_value: number | null;
+  shares_after: number | null;
+  ownership_type: string;
+  is_buy: boolean;
+  is_sell: boolean;
+  accession_number: string;
+}
+
+export interface InsiderAnalysisDto {
+  symbol: string;
+  company_name: string;
+  cik: string;
+  sentiment: InsiderSentimentDto;
+  transactions: InsiderTransactionDto[];
+  total_filings_found: number;
+  disclaimer: string;
+}
+
+export interface InsiderSummaryDto {
+  symbol: string;
+  company_name: string;
+  sentiment_score: number;
+  sentiment_label: string;
+  buy_transactions: number;
+  sell_transactions: number;
+  net_shares: number;
+  net_value: number | null;
+  lookback_days: number;
+  disclaimer: string;
+}
+
+export async function fetchInsiderAnalysis(symbol: string): Promise<InsiderAnalysisDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/insiders/${symbol.toUpperCase()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? `Insider data unavailable for ${symbol}`);
+  }
+  return res.json();
+}
+
+export async function fetchInsiderSummary(symbol: string): Promise<InsiderSummaryDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/insiders/${symbol.toUpperCase()}/summary`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? `Insider summary unavailable for ${symbol}`);
+  }
+  return res.json();
+}
+
+export async function fetchRecentInsiderTransactions(
+  symbol: string,
+  limit = 20,
+): Promise<InsiderTransactionDto[]> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/insiders/${symbol.toUpperCase()}/recent?limit=${limit}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Recent insider transactions unavailable for ${symbol}`);
+  return res.json();
+}

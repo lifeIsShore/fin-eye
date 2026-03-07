@@ -71,6 +71,11 @@ This log tracks implementation progress for each user story in `user-stories.md`
 | CORE-EXPERIMENT-01  | Core – Experiments    | DONE         | 2026-03-06   | Deterministic SHA-256 assignment, Postgres-backed, results from analytics_events |
 | CORE-EMAIL-01       | Core – Email          | DONE         | 2026-03-06   | Resend integration, 3-email onboarding, opt-out, deduplication |
 | CORE-EMAIL-02       | Core – Email          | DONE         | 2026-03-06   | Weekly digest, digest opt-in toggle, biweekly support, GDPR unsubscribe |
+| EXP-PERF-01         | Exp – Performance     | DONE         | 2026-03-07   | GAS pre-computation job, 3-tier cache, SnapshotMeta UI |
+| EXP-OPT-01          | Exp – Options         | DONE         | 2026-03-07   | Put/Call ratio, IV skew, Max Pain, Fear & Greed gauge + page |
+| EXP-SECT-01         | Exp – Sectors         | DONE         | 2026-03-07   | Sector Rotation Heatmap, RRG scatter, Cycle Phase panel + page |
+| EXP-EXPLAIN-ADV-01  | Exp – Explain         | DONE         | 2026-03-07   | ScoreExplainPanel slide-over, InfoButton on GAS/Regime/Volatility tiles |
+| EXP-INSID-01        | Exp – Insider Trading | DONE         | 2026-03-07   | SEC EDGAR Form 4 service, 3 endpoints, full /insiders page + Nav |
 
 ---
 
@@ -2356,3 +2361,43 @@ Post-audit session to close the four genuine remaining gaps identified after a f
 - **Next steps**
     - `EXP-EXPLAIN-ADV-01` — Interactive Explanation Mode (~1 day).
     - `EXP-INSID-01` — Insider Trading via SEC EDGAR (free, no key, ~1.5 days).
+
+---
+
+### 2026-03-07 (continued)
+
+**Session — EXP-INSID-01: Insider Trading Intelligence (complete)**
+
+- **Stories completed**
+    - `EXP-INSID-01` (Insider Trading via SEC EDGAR — Form 4, sentiment score, transaction history) — **DONE**
+
+- **Design decisions**
+    - **No API key required** — uses SEC EDGAR's free public JSON API (`data.sec.gov`). Only requirement is a `User-Agent` header (`Fin-Eye/1.0 contact@fin-eye.com`), which is set globally in `insider_service.py`.
+    - **Data source**: Form 4 (Statement of Changes in Beneficial Ownership) — must be filed within 2 business days of any transaction by directors, officers, and >10% shareholders.
+    - **Two-step resolution**: ticker → CIK via SEC's `company_tickers.json` (cached 24h); CIK → submissions JSON → Form 4 XML per filing. XMLs parsed with `xml.etree.ElementTree` (stdlib, no new dep).
+    - **25 most recent Form 4 filings** fetched per symbol (with per-XML timeout of 8s). This balances coverage vs latency — most stocks have ~6–15 filings in a 180-day window.
+    - **Sentiment score (0–100)**: only open-market purchases (P) and sales (S) count — awards, option exercises, and tax withholding are excluded as non-discretionary. Weighted by dollar value when available, share count otherwise. Score = 100 × buy_weight / (buy_weight + sell_weight), clamped to [5, 95]. Labels: Bullish / Mildly Bullish / Neutral / Mildly Bearish / Bearish.
+    - **1-hour module-level cache** (`_CACHE` dict) — Form 4s are filed within 2 business days so sub-hour freshness is unnecessary. No Redis required.
+    - **CPU-bound httpx fetching in thread pool** — all async endpoints use `loop.run_in_executor(None, analyse_insiders, symbol)` to avoid blocking the asyncio event loop.
+    - **Three backend routes**: `GET /{symbol}` (full analysis), `GET /{symbol}/summary` (headline card), `GET /{symbol}/recent?limit=N` (transaction feed). No auth required.
+    - **Frontend**: full page at `/insiders`. SVG arc gauge (same inline approach as options page — no external chart dep). Buy/sell stacked bar. Buy/sell balance cards with value and share counts. Transaction table with All/Buys/Sells filter, border-left colour coding, badge labels, formatted shares/value/price columns. Methodology card explains what counts and how score is calculated. EDGAR link in company strip opens Form 4 search for the resolved CIK.
+    - `keepPreviousData: true` + `refreshInterval: 3_600_000` (1 hour) on SWR hook — matches cache TTL.
+
+- **Backend (new files)**
+    - ✅ `app/services/insider_service.py` — `analyse_insiders()`, `_ticker_to_cik()`, `_get_company_tickers()`, `_fetch_submissions()`, `_parse_form4_xml()`, `_extract_transactions_from_submissions()`, `_compute_sentiment()`, `_parse_transaction_type()`, `_is_buy()`, `_is_sell()`. 1-hour in-process cache. `httpx` used for all SEC calls (already installed).
+    - ✅ `app/api/v1/endpoints/insiders.py` — 3 routes, Pydantic schemas (`InsiderAnalysisDto`, `InsiderSummaryDto`, `InsiderTransactionDto`, `InsiderSentimentDto`).
+
+- **Backend (modified files)**
+    - ✅ `app/main.py` — `insiders` router imported and mounted at `/api/v1/insiders`.
+
+- **Frontend (new files)**
+    - ✅ `frontend/app/insiders/page.tsx` — full page: SVG arc gauge, gradient needle bar, buy/sell balance stacked bar, purchase/sale cards with share + value totals, net activity tile, filterable transaction table (All/Buys/Sells with count badges), methodology explainer, EDGAR deep link, disclaimer.
+
+- **Frontend (modified files)**
+    - ✅ `frontend/lib/api.ts` — `InsiderSentimentDto`, `InsiderTransactionDto`, `InsiderAnalysisDto`, `InsiderSummaryDto` interfaces; `fetchInsiderAnalysis()`, `fetchInsiderSummary()`, `fetchRecentInsiderTransactions()` functions.
+    - ✅ `frontend/components/Nav.tsx` — "Insiders" nav item added after "Sectors".
+
+- **Next steps**
+    - `CORE-OPS-01` + `CORE-SEC-02` — Monitoring & observability + automated backups. Both are infra, both short. Get these in before daily use.
+    - `CORE-ANALYTICS-01` — Self-hosted product analytics (Plausible-style). Tells you which pages load, which calls fail, what's slow.
+    - `P3-RISK-01` — Scenario & Stress Tests. Monte Carlo + historical shock scenarios against portfolio.
