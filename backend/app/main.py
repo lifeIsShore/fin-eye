@@ -13,8 +13,8 @@ from app.services.scheduler import setup_scheduler
 # Observability middleware
 from app.middleware.metrics_middleware import MetricsMiddleware
 
-# Register models so init_db() creates all tables
-from app.models import blog, showcase, analytics, experiment, email_preference, api_key, gas_snapshot, custom_indicator  # noqa: F401 — side-effect import
+# Register models so init_db() creates all tables — imports everything via __init__.py
+import app.models  # noqa: F401 — side-effect import
 
 from app.api.v1.health import router as health_router
 from app.api.v1.data import router as data_router
