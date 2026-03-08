@@ -9,7 +9,7 @@ docker compose up -d db redis
 
 echo [2/3] Launching Backend Server...
 :: Opens in a new command window
-start "Fin-Eye Backend" cmd /k "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+start "Fin-Eye Backend" cmd /k "cd backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
 
 echo [3/3] Launching Frontend Application...
 :: Opens in a new command window
