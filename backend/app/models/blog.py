@@ -1,6 +1,11 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime
-from datetime import datetime
+from datetime import datetime, timezone
 from app.db.database import Base
+
+
+def _utcnow() -> datetime:
+    """Return current UTC time as a timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 
 
 class BlogPost(Base):
@@ -21,7 +26,8 @@ class BlogPost(Base):
 
     # Publishing state: "draft" | "published"
     status = Column(String(20), nullable=False, default="draft")
-    published_at = Column(DateTime, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    # Use timezone=True so asyncpg can compare these without offset mismatch
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
