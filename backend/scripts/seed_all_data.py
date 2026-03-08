@@ -394,49 +394,55 @@ async def step_seed_blog(db) -> None:
             "slug": "what-is-the-gas-score",
             "title": "What is the Global Alignment Score (GAS)?",
             "category": "Education",
-            "excerpt": "A deep-dive into the GAS formula: how technical ML signals, macro data, and sentiment combine into a single 0–100 score.",
-            "body": "## What is the GAS Score?\n\nThe **Global Alignment Score (GAS)** is Fin-Eye's core composite metric...\n\n[Full article content goes here]",
-            "published": True,
+            "summary": "A deep-dive into the GAS formula: how technical ML signals, macro data, and sentiment combine into a single 0–100 score.",
+            "content_md": "## What is the GAS Score?\n\nThe **Global Alignment Score (GAS)** is Fin-Eye's core composite metric...\n\n[Full article content goes here]",
+            "status": "published",
+            "published_at": datetime.now(timezone.utc),
         },
         {
             "slug": "reading-the-yield-curve",
             "title": "Reading the Yield Curve: What Inverted Means for Markets",
             "category": "Macro",
-            "excerpt": "The 10Y-2Y spread has predicted every US recession since 1980. Here's how to read it on Fin-Eye.",
-            "body": "## The Yield Curve Explained\n\nWhen short-term rates exceed long-term rates...",
-            "published": True,
+            "summary": "The 10Y-2Y spread has predicted every US recession since 1980. Here's how to read it on Fin-Eye.",
+            "content_md": "## The Yield Curve Explained\n\nWhen short-term rates exceed long-term rates...",
+            "status": "published",
+            "published_at": datetime.now(timezone.utc),
         },
         {
             "slug": "rsi-divergence-guide",
             "title": "RSI Divergence: Spotting Trend Exhaustion Early",
             "category": "Technical",
-            "excerpt": "Bullish and bearish RSI divergence explained with real chart examples. One of the most reliable signals in technical analysis.",
-            "body": "## RSI Divergence\n\nDivergence occurs when price moves in the opposite direction of the RSI indicator...",
-            "published": True,
+            "summary": "Bullish and bearish RSI divergence explained with real chart examples. One of the most reliable signals in technical analysis.",
+            "content_md": "## RSI Divergence\n\nDivergence occurs when price moves in the opposite direction of the RSI indicator...",
+            "status": "published",
+            "published_at": datetime.now(timezone.utc),
         },
         {
             "slug": "digital-nomad-financial-guide",
             "title": "The Digital Nomad's Financial Playbook",
             "category": "Lifestyle",
-            "excerpt": "Tax residency, banking, investment structures, and managing currency risk as a location-independent professional.",
-            "body": "## Financial Planning for Digital Nomads\n\nMoving between countries creates unique financial challenges...",
-            "published": True,
+            "summary": "Tax residency, banking, investment structures, and managing currency risk as a location-independent professional.",
+            "content_md": "## Financial Planning for Digital Nomads\n\nMoving between countries creates unique financial challenges...",
+            "status": "published",
+            "published_at": datetime.now(timezone.utc),
         },
         {
             "slug": "tax-efficient-investing-structures",
             "title": "Tax-Efficient Investment Structures: LLC, Cyprus, UAE & Beyond",
             "category": "Tax & Legal",
-            "excerpt": "An overview of legal structures used by international investors — from US LLCs to Cyprus holding companies and UAE freezone entities.",
-            "body": "## Legal Investment Structures\n\nThis article is for informational purposes only and does not constitute legal or tax advice...",
-            "published": True,
+            "summary": "An overview of legal structures used by international investors — from US LLCs to Cyprus holding companies and UAE freezone entities.",
+            "content_md": "## Legal Investment Structures\n\nThis article is for informational purposes only and does not constitute legal or tax advice...",
+            "status": "published",
+            "published_at": datetime.now(timezone.utc),
         },
         {
             "slug": "2008-financial-crisis-case-study",
             "title": "Case Study: The 2008 Financial Crisis Through the GAS Lens",
             "category": "Case Studies",
-            "excerpt": "What would the GAS score have looked like in 2007-2008? A retrospective analysis using macro, sentiment, and technical signals.",
-            "body": "## 2008: A Retrospective\n\nThe Global Financial Crisis was preceded by months of macro deterioration...",
-            "published": True,
+            "summary": "What would the GAS score have looked like in 2007-2008? A retrospective analysis using macro, sentiment, and technical signals.",
+            "content_md": "## 2008: A Retrospective\n\nThe Global Financial Crisis was preceded by months of macro deterioration...",
+            "status": "published",
+            "published_at": datetime.now(timezone.utc),
         },
     ]
 
@@ -459,81 +465,75 @@ async def step_seed_showcase(db) -> None:
 
     products = [
         {
-            "name": "Investment Portfolio Tracker (Excel)",
-            "slug": "investment-tracker-excel",
-            "category": "Excel Templates",
+            "title": "Investment Portfolio Tracker (Excel)",
+            "tagline": "Track stocks, ETFs & crypto in one workbook",
             "description": "A comprehensive Excel workbook for tracking stocks, ETFs, and crypto. Includes live data connections, P&L tracking, dividend calendar, and portfolio heat map.",
-            "price_eur": 12.99,
-            "currency": "EUR",
-            "tags": "excel,investing,portfolio,tracker",
-            "affiliate_url": "https://app.lemonsqueezy.com/checkout/buy/investment-tracker",
+            "features": ["P&L tracking", "Dividend calendar", "Portfolio heat map", "Live data connections"],
+            "category": "Excel Templates",
+            "price_label": "€12.99",
+            "external_url": "https://app.lemonsqueezy.com/checkout/buy/investment-tracker",
             "is_active": True,
-            "is_featured": True,
+            "sort_order": 10,
         },
         {
-            "name": "Retirement Planning Calculator (Excel)",
-            "slug": "retirement-planner-excel",
-            "category": "Excel Templates",
+            "title": "Retirement Planning Calculator (Excel)",
+            "tagline": "Monte Carlo retirement projections in Excel",
             "description": "Model your retirement with Monte Carlo simulation, safe withdrawal rate analysis, Social Security/pension integration, and 30-year projection charts.",
-            "price_eur": 14.99,
-            "currency": "EUR",
-            "tags": "excel,retirement,planning,fire,financial-independence",
-            "affiliate_url": "https://app.lemonsqueezy.com/checkout/buy/retirement-planner",
-            "is_active": True,
-            "is_featured": True,
-        },
-        {
-            "name": "Household Budget & Expense Tracker (Excel)",
-            "slug": "household-budget-excel",
+            "features": ["Monte Carlo simulation", "Safe withdrawal rate", "30-year projections", "Pension integration"],
             "category": "Excel Templates",
-            "description": "Beautiful monthly budget tracker with category pie charts, savings rate tracking, bill due-date reminders, and year-over-year comparison. Perfect gift for families.",
-            "price_eur": 7.99,
-            "currency": "EUR",
-            "tags": "excel,budget,household,expenses,personal-finance",
-            "affiliate_url": "https://app.lemonsqueezy.com/checkout/buy/household-budget",
+            "price_label": "€14.99",
+            "external_url": "https://app.lemonsqueezy.com/checkout/buy/retirement-planner",
             "is_active": True,
-            "is_featured": False,
+            "sort_order": 20,
         },
         {
-            "name": "Teen Financial Planner (Google Sheets / Mobile-Friendly)",
-            "slug": "teen-financial-planner",
+            "title": "Household Budget & Expense Tracker (Excel)",
+            "tagline": "Beautiful monthly budget with charts",
+            "description": "Beautiful monthly budget tracker with category pie charts, savings rate tracking, bill due-date reminders, and year-over-year comparison.",
+            "features": ["Category pie charts", "Savings rate tracking", "Bill reminders", "Year-over-year comparison"],
+            "category": "Excel Templates",
+            "price_label": "€7.99",
+            "external_url": "https://app.lemonsqueezy.com/checkout/buy/household-budget",
+            "is_active": True,
+            "sort_order": 30,
+        },
+        {
+            "title": "Teen Financial Planner (Google Sheets)",
+            "tagline": "Fun financial tracker for teenagers",
+            "description": "A fun, emoji-friendly financial tracker designed for teenagers. Track allowance, savings goals, spending categories, and learn about compound interest.",
+            "features": ["Allowance tracking", "Savings goals", "Compound interest calculator", "Mobile-friendly"],
             "category": "Google Sheets",
-            "description": "A fun, emoji-friendly financial tracker designed for teenagers. Track allowance, savings goals, spending categories, and learn about compound interest. Great gift idea.",
-            "price_eur": 4.99,
-            "currency": "EUR",
-            "tags": "google-sheets,teens,financial-literacy,gift,allowance,savings",
-            "affiliate_url": "https://app.lemonsqueezy.com/checkout/buy/teen-planner",
+            "price_label": "€4.99",
+            "external_url": "https://app.lemonsqueezy.com/checkout/buy/teen-planner",
             "is_active": True,
-            "is_featured": True,
+            "sort_order": 40,
         },
         {
-            "name": "Dividend Income Tracker (Excel)",
-            "slug": "dividend-tracker-excel",
-            "category": "Excel Templates",
+            "title": "Dividend Income Tracker (Excel)",
+            "tagline": "Track dividends, ex-dates & projected income",
             "description": "Track dividend payments, ex-dates, yield-on-cost, and projected annual income. Includes dividend calendar heatmap and DRIP calculator.",
-            "price_eur": 9.99,
-            "currency": "EUR",
-            "tags": "excel,dividends,income,investing,passive-income",
-            "affiliate_url": "https://app.lemonsqueezy.com/checkout/buy/dividend-tracker",
+            "features": ["Dividend calendar heatmap", "Yield-on-cost tracking", "DRIP calculator", "Projected annual income"],
+            "category": "Excel Templates",
+            "price_label": "€9.99",
+            "external_url": "https://app.lemonsqueezy.com/checkout/buy/dividend-tracker",
             "is_active": True,
-            "is_featured": False,
+            "sort_order": 50,
         },
         {
-            "name": "Options P&L Tracker (Excel)",
-            "slug": "options-pnl-tracker-excel",
-            "category": "Excel Templates",
+            "title": "Options P&L Tracker (Excel)",
+            "tagline": "Full options trade log with Greeks & P&L",
             "description": "Track your options trades with automatic P&L, Greeks tracking, win rate analysis, and max loss/profit scenarios. Includes covered calls and cash-secured puts workflow.",
-            "price_eur": 19.99,
-            "currency": "EUR",
-            "tags": "excel,options,trading,pnl,covered-calls",
-            "affiliate_url": "https://app.lemonsqueezy.com/checkout/buy/options-tracker",
+            "features": ["Auto P&L calculation", "Greeks tracking", "Win rate analysis", "Covered calls workflow"],
+            "category": "Excel Templates",
+            "price_label": "€19.99",
+            "external_url": "https://app.lemonsqueezy.com/checkout/buy/options-tracker",
             "is_active": True,
-            "is_featured": True,
+            "sort_order": 60,
         },
     ]
 
     for p in products:
-        exists = await db.execute(select(ShowcaseProduct).where(ShowcaseProduct.slug == p["slug"]))
+        exists = await db.execute(select(ShowcaseProduct).where(ShowcaseProduct.title == p["title"]))
         if not exists.scalar_one_or_none():
             db.add(ShowcaseProduct(**p))
     await db.commit()
@@ -586,9 +586,8 @@ async def step_seed_strategies(db, users: dict) -> None:
         return
 
     try:
-        # Check if strategies table exists and seed
-        from app.models.strategy import Strategy
-        exists = await db.execute(select(Strategy).where(Strategy.user_id == demo_user.id))
+        from app.models.strategy import SavedStrategy
+        exists = await db.execute(select(SavedStrategy).where(SavedStrategy.user_id == demo_user.id))
         if exists.scalars().all():
             logger.info("  ↩ Strategies already exist")
             return
@@ -597,26 +596,30 @@ async def step_seed_strategies(db, users: dict) -> None:
             {
                 "name": "RSI Momentum",
                 "description": "Buy when RSI crosses above 50, sell below 40. Medium-term momentum strategy.",
-                "symbol": "AAPL",
-                "strategy_type": "momentum",
-                "params": {"rsi_period": 14, "entry_threshold": 50, "exit_threshold": 40, "lookback": "1y"},
+                "request_snapshot": {"symbol": "AAPL", "strategy": "rsi_momentum", "params": {"rsi_period": 14, "entry_threshold": 50, "exit_threshold": 40}, "lookback": "1y", "capital": 10000},
                 "is_public": True,
                 "sharpe_ratio": 1.42,
-                "total_return": 0.23,
+                "total_return_pct": 23.0,
+                "annualized_return_pct": 18.5,
+                "max_drawdown_pct": -12.3,
+                "win_rate_pct": 58.0,
+                "total_trades": 24,
             },
             {
                 "name": "Golden Cross SPY",
                 "description": "Classic SMA50/200 crossover on SPY. Long-only, fully invested or cash.",
-                "symbol": "SPY",
-                "strategy_type": "trend_following",
-                "params": {"fast_sma": 50, "slow_sma": 200, "lookback": "5y"},
+                "request_snapshot": {"symbol": "SPY", "strategy": "sma_crossover", "params": {"fast_sma": 50, "slow_sma": 200}, "lookback": "5y", "capital": 10000},
                 "is_public": True,
                 "sharpe_ratio": 0.89,
-                "total_return": 0.67,
+                "total_return_pct": 67.0,
+                "annualized_return_pct": 11.2,
+                "max_drawdown_pct": -18.7,
+                "win_rate_pct": 52.0,
+                "total_trades": 12,
             },
         ]
         for s in strategies:
-            db.add(Strategy(user_id=demo_user.id, **s))
+            db.add(SavedStrategy(user_id=demo_user.id, **s))
         await db.commit()
         logger.info("  ✓ %d strategies seeded", len(strategies))
     except Exception as exc:
@@ -639,12 +642,7 @@ async def step_seed_legal(db, users: dict) -> None:
         if not exists.scalar_one_or_none():
             db.add(LegalConsent(
                 user_id=user.id,
-                terms_accepted=True,
-                privacy_accepted=True,
-                disclaimer_accepted=True,
-                consented_at=datetime.now(timezone.utc),
-                ip_address="127.0.0.1",
-                user_agent="Seeder/1.0",
+                accepted_at=datetime.now(timezone.utc),
             ))
     await db.commit()
     logger.info("  ✓ Legal consents seeded")
