@@ -1,5 +1,9 @@
 ## Fin-Eye Implementation Log
 
+Admin: admin@fin-eye.com AdminFinEye2024! (institutional)
+Demo: demo@fin-eye.com DemoFinEye2024! (free)
+Pro: pro@fin-eye.com ProFinEye2024! (pro)
+
 This log tracks implementation progress for each user story in `user-stories.md`.
 
 **Status legend**
