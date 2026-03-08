@@ -109,6 +109,8 @@ PRO_PASSWORD   = "ProFinEye2024!"
 
 def step_init_db() -> None:
     logger.info("▶ Step 1: Initializing database tables...")
+    # Import models here to ensure they are registered with Base.metadata before init_db()
+    import app.models
     init_db()
     logger.info("  ✓ All tables created/verified")
 
@@ -146,12 +148,10 @@ async def step_seed_users(db) -> dict:
             # Email preferences
             pref = EmailPreference(
                 user_id=user.id,
-                marketing_emails=True,
-                weekly_digest=True,
-                alert_emails=True,
+                marketing_opted_in=True,
+                digest_opted_in=True,
                 unsubscribe_token=str(uuid.uuid4()),
-                onboarding_day3_sent=False,
-                onboarding_day7_sent=False,
+                onboarding_step=0,
             )
             db.add(pref)
             logger.info("  ✓ Created user: %s (%s)", email, tier)
