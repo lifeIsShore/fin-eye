@@ -1,5 +1,6 @@
 from app.api.v1.endpoints import (
     macro, sentiment, technical, backtesting, events,
     explanation, hedging, portfolios, watchlist, legal, gdpr, cms, alerts, strategies, email,
-    api_keys, risk,
+    api_keys, risk, showcase, ops, analytics, experiments, admin_gas, options, sectors,
+    insiders, earnings, shorts, adv_sentiment, fed_policy, indicators,
 )
