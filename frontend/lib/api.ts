@@ -1583,77 +1583,6 @@ export async function unsubscribeByToken(token: string): Promise<{ status: strin
   return res.json();
 }
 
-// ─── API Key Management (P3-API-01) ─────────────────────────────────────────
-
-export interface ApiKeyDto {
-  id: string;
-  name: string;
-  key_prefix: string;
-  scopes: string[];
-  rate_limit_per_minute: number;
-  total_calls: number;
-  last_used_at: string | null;
-  is_active: boolean;
-  created_at: string;
-  expires_at: string | null;
-}
-
-export interface ApiKeyCreatedDto extends ApiKeyDto {
-  raw_key: string;
-  warning: string;
-}
-
-export interface ApiKeyUsageEntry {
-  endpoint: string;
-  method: string;
-  status_code: number | null;
-  response_ms: number | null;
-  called_at: string;
-}
-
-export async function fetchApiKeys(): Promise<ApiKeyDto[]> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
-    headers: authHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error("Failed to load API keys");
-  return res.json();
-}
-
-export async function createApiKey(payload: {
-  name: string;
-  scopes: string[];
-  rate_limit_per_minute: number;
-}): Promise<ApiKeyCreatedDto> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail ?? "Failed to create API key");
-  }
-  return res.json();
-}
-
-export async function revokeApiKey(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys/${id}`, {
-    method: "DELETE",
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error("Failed to revoke API key");
-}
-
-export async function fetchApiKeyUsage(id: string): Promise<ApiKeyUsageEntry[]> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/api-keys/${id}/usage`, {
-    headers: authHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error("Failed to load usage");
-  return res.json();
-}
-
 // ─── Risk & Stress Testing (P3-RISK-01) ───────────────────────────────────────
 
 export interface ScenarioDto {
@@ -2085,7 +2014,6 @@ export async function triggerGasPrecompute(): Promise<{ status: string; message:
   return res.json();
 }
 
-// ─── Ops / Admin Observability (CORE-OPS-01) ────────────────────────────────
 
 export interface OpsHealthDto {
   status: "ok" | "degraded";
