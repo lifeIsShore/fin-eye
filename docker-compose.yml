@@ -43,7 +43,7 @@ services:
     command: >
       postgres
         -c shared_buffers=256MB
-        -c max_connections=100
+        -c max_connections=200
         -c log_min_duration_statement=1000
         -c log_statement=none
 
@@ -65,8 +65,9 @@ services:
     networks:
       - fin-eye-net
     # Enable append-only persistence so cache survives a container restart.
-    # Remove this command line if you want a purely ephemeral cache.
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # BUG-001 FIX: requirepass prevents unauthenticated access to the cache.
+    # Set REDIS_PASSWORD in your .env before starting the stack.
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass "${REDIS_PASSWORD:-changeme_set_REDIS_PASSWORD_in_env}"
 
   # ── pgAdmin (optional — comment out if you don't need it) ───────────────
   pgadmin:

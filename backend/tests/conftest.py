@@ -36,6 +36,7 @@ async def test_db() -> AsyncGenerator[AsyncSession, None]:
     async with TestingSessionLocal() as session:
         yield session
         await session.rollback()
+        await session.close()
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

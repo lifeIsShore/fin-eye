@@ -1,7 +1,9 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
@@ -55,23 +57,28 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     logger.info("📅 APScheduler started with %d jobs.", len(scheduler.get_jobs()))
 
-    # 5. Warm the GAS snapshot cache on startup so the first user sees data
-    #    immediately without waiting for the 15-min scheduler tick.
-    try:
-        from app.services.gas_precompute import run_gas_precompute_batch  # noqa: PLC0415
-        from app.db.database import AsyncSessionLocal  # noqa: PLC0415
-        logger.info("🔥 Warming GAS snapshot cache on startup...")
-        async with AsyncSessionLocal() as session:
-            summary = await run_gas_precompute_batch(session)
-        logger.info(
-            "✅ GAS cache warmed — %d/%d symbols succeeded in %.0fms",
-            summary["symbols_succeeded"],
-            summary["symbols_attempted"],
-            summary["elapsed_ms"],
-        )
-    except Exception as exc:
-        # Never crash startup — the scheduler will retry at the next tick
-        logger.warning("⚠️  GAS cache warm failed (non-fatal): %s", exc)
+    # 5. BUG-014 FIX: Warm the GAS snapshot cache as a non-blocking background task.
+    #    Previously this blocked the lifespan context, causing health check timeouts
+    #    behind load balancers. Now we let the server start serving traffic first,
+    #    then warm the cache in the background after a short delay.
+    async def _warm_gas_cache_bg():
+        await asyncio.sleep(10)  # Let health checks pass first
+        try:
+            from app.services.gas_precompute import run_gas_precompute_batch  # noqa: PLC0415
+            from app.db.database import AsyncSessionLocal  # noqa: PLC0415
+            logger.info("🔥 Warming GAS snapshot cache (background)...")
+            async with AsyncSessionLocal() as session:
+                summary = await run_gas_precompute_batch(session)
+            logger.info(
+                "✅ GAS cache warmed — %d/%d symbols succeeded in %.0fms",
+                summary["symbols_succeeded"],
+                summary["symbols_attempted"],
+                summary["elapsed_ms"],
+            )
+        except Exception as exc:
+            logger.warning("⚠️  GAS cache warm failed (non-fatal): %s", exc)
+
+    asyncio.create_task(_warm_gas_cache_bg())
 
     yield
     
@@ -86,6 +93,15 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+
+# BUG-015 FIX: Global exception handler — prevents raw stack traces leaking to clients.
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception on %s %s", request.method, request.url)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal error occurred. Please try again later."},
+    )
 
 # CORS Middleware
 app.add_middleware(

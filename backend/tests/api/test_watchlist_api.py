@@ -1,28 +1,28 @@
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.services.auth import get_password_hash
 
 
-def create_test_user(db: Session) -> User:
+async def create_test_user(db: AsyncSession) -> User:
     """Create and persist a real user for watchlist FK constraints."""
     user = User(
         email="watchlist_test@example.com",
         hashed_password=get_password_hash("testpass"),
-        is_pro=False,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 
 @pytest.mark.asyncio
 async def test_watchlist_add_and_list(client: AsyncClient, test_db: Session, monkeypatch):
     """Can add a ticker and then see it in the list."""
-    test_user = create_test_user(test_db)
+    test_user = await create_test_user(test_db)
 
     # Override get_current_user to return our real seeded user
     monkeypatch.setattr(
@@ -46,7 +46,7 @@ async def test_watchlist_add_and_list(client: AsyncClient, test_db: Session, mon
 @pytest.mark.asyncio
 async def test_watchlist_add_duplicate_is_idempotent(client: AsyncClient, test_db: Session, monkeypatch):
     """Adding the same symbol twice returns the existing row, not an error."""
-    test_user = create_test_user(test_db)
+    test_user = await create_test_user(test_db)
     monkeypatch.setattr(
         "app.api.v1.endpoints.watchlist.get_current_user",
         lambda **kwargs: test_user,
@@ -65,7 +65,7 @@ async def test_watchlist_add_duplicate_is_idempotent(client: AsyncClient, test_d
 @pytest.mark.asyncio
 async def test_watchlist_remove(client: AsyncClient, test_db: Session, monkeypatch):
     """Can remove a ticker from the watchlist."""
-    test_user = create_test_user(test_db)
+    test_user = await create_test_user(test_db)
     monkeypatch.setattr(
         "app.api.v1.endpoints.watchlist.get_current_user",
         lambda **kwargs: test_user,
@@ -83,7 +83,7 @@ async def test_watchlist_remove(client: AsyncClient, test_db: Session, monkeypat
 @pytest.mark.asyncio
 async def test_watchlist_remove_nonexistent(client: AsyncClient, test_db: Session, monkeypatch):
     """Removing a symbol not in the watchlist returns 404."""
-    test_user = create_test_user(test_db)
+    test_user = await create_test_user(test_db)
     monkeypatch.setattr(
         "app.api.v1.endpoints.watchlist.get_current_user",
         lambda **kwargs: test_user,
@@ -96,7 +96,7 @@ async def test_watchlist_remove_nonexistent(client: AsyncClient, test_db: Sessio
 @pytest.mark.asyncio
 async def test_watchlist_symbol_normalised_to_uppercase(client: AsyncClient, test_db: Session, monkeypatch):
     """Symbols are stored and returned in uppercase regardless of input case."""
-    test_user = create_test_user(test_db)
+    test_user = await create_test_user(test_db)
     monkeypatch.setattr(
         "app.api.v1.endpoints.watchlist.get_current_user",
         lambda **kwargs: test_user,

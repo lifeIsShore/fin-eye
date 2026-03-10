@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 from datetime import datetime
@@ -30,22 +31,21 @@ class ConsentRecordResponse(BaseModel):
 # ─── Endpoints ──────────────────────────────────────────────────────────────
 
 @router.get("/consent/status", response_model=ConsentStatusResponse)
-def get_consent_status(
-    db: Session = Depends(get_db),
+async def get_consent_status(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConsentStatusResponse:
     """
     Return whether the current user has accepted the current legal version.
     Frontend uses this on every app load to decide whether to show the ConsentGate.
     """
-    consent = (
-        db.query(LegalConsent)
-        .filter(
+    result = await db.execute(
+        select(LegalConsent).where(
             LegalConsent.user_id == current_user.id,
             LegalConsent.doc_version == CURRENT_LEGAL_VERSION,
         )
-        .first()
     )
+    consent = result.scalar_one_or_none()
 
     if consent:
         return ConsentStatusResponse(
@@ -68,8 +68,8 @@ def get_consent_status(
     response_model=ConsentRecordResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def record_consent(
-    db: Session = Depends(get_db),
+async def record_consent(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConsentRecordResponse:
     """
@@ -77,14 +77,13 @@ def record_consent(
     Idempotent — if already accepted, returns the existing record.
     """
     # Return existing record if user already accepted this version
-    existing = (
-        db.query(LegalConsent)
-        .filter(
+    result = await db.execute(
+        select(LegalConsent).where(
             LegalConsent.user_id == current_user.id,
             LegalConsent.doc_version == CURRENT_LEGAL_VERSION,
         )
-        .first()
     )
+    existing = result.scalar_one_or_none()
     if existing:
         return ConsentRecordResponse(
             id=existing.id,
@@ -99,19 +98,18 @@ def record_consent(
     )
     db.add(consent)
     try:
-        db.commit()
-        db.refresh(consent)
+        await db.commit()
+        await db.refresh(consent)
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         # Race condition — fetch and return existing
-        consent = (
-            db.query(LegalConsent)
-            .filter(
+        result = await db.execute(
+            select(LegalConsent).where(
                 LegalConsent.user_id == current_user.id,
                 LegalConsent.doc_version == CURRENT_LEGAL_VERSION,
             )
-            .first()
         )
+        consent = result.scalar_one_or_none()
 
     return ConsentRecordResponse(
         id=consent.id,

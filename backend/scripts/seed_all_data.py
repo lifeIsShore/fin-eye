@@ -389,7 +389,7 @@ async def step_seed_blog(db) -> None:
     from sqlalchemy import select
     from app.models.blog import BlogPost
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     posts = [
         {
             "slug": "what-is-the-gas-score",
@@ -655,7 +655,7 @@ async def step_seed_legal(db, users: dict) -> None:
         if not exists.scalar_one_or_none():
             db.add(LegalConsent(
                 user_id=user.id,
-                accepted_at=datetime.now(timezone.utc),
+                accepted_at=datetime.utcnow(),
             ))
     await db.commit()
     logger.info("  ✓ Legal consents seeded")

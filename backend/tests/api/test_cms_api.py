@@ -1,5 +1,6 @@
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -7,29 +8,27 @@ from app.models.blog import BlogPost
 from app.services.auth import get_password_hash
 
 
-def make_admin(db: Session, email: str = "admin@fin-eye.io") -> User:
+async def make_admin(db: AsyncSession, email: str = "admin@fin-eye.io") -> User:
     user = User(
         email=email,
         hashed_password=get_password_hash("adminpass"),
-        is_pro=True,
         is_admin=True,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 
-def make_regular_user(db: Session, email: str = "user@example.com") -> User:
+async def make_regular_user(db: AsyncSession, email: str = "user@example.com") -> User:
     user = User(
         email=email,
         hashed_password=get_password_hash("pass"),
-        is_pro=False,
         is_admin=False,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 
@@ -63,7 +62,7 @@ async def test_published_posts_returns_only_published(
     client: AsyncClient, test_db: Session, monkeypatch
 ):
     """Draft posts are excluded; published posts appear."""
-    admin = make_admin(test_db)
+    admin = await make_admin(test_db)
     patch_admin(monkeypatch, admin)
 
     # Create two posts
@@ -88,7 +87,7 @@ async def test_published_posts_returns_only_published(
 @pytest.mark.asyncio
 async def test_create_post(client: AsyncClient, test_db: Session, monkeypatch):
     """Admin can create a post; it defaults to draft."""
-    admin = make_admin(test_db)
+    admin = await make_admin(test_db)
     patch_admin(monkeypatch, admin)
 
     res = await client.post("/api/v1/cms/posts", json={
@@ -108,7 +107,7 @@ async def test_create_post(client: AsyncClient, test_db: Session, monkeypatch):
 @pytest.mark.asyncio
 async def test_update_post(client: AsyncClient, test_db: Session, monkeypatch):
     """Admin can update post content and title."""
-    admin = make_admin(test_db, "admin2@fin-eye.io")
+    admin = await make_admin(test_db, "admin2@fin-eye.io")
     patch_admin(monkeypatch, admin)
 
     create = await client.post("/api/v1/cms/posts", json={
@@ -128,7 +127,7 @@ async def test_update_post(client: AsyncClient, test_db: Session, monkeypatch):
 @pytest.mark.asyncio
 async def test_publish_and_unpublish(client: AsyncClient, test_db: Session, monkeypatch):
     """Admin can publish and then unpublish a post."""
-    admin = make_admin(test_db, "admin3@fin-eye.io")
+    admin = await make_admin(test_db, "admin3@fin-eye.io")
     patch_admin(monkeypatch, admin)
 
     create = await client.post("/api/v1/cms/posts", json={
@@ -147,7 +146,7 @@ async def test_publish_and_unpublish(client: AsyncClient, test_db: Session, monk
 @pytest.mark.asyncio
 async def test_delete_post(client: AsyncClient, test_db: Session, monkeypatch):
     """Admin can delete a post; subsequent get returns 404."""
-    admin = make_admin(test_db, "admin4@fin-eye.io")
+    admin = await make_admin(test_db, "admin4@fin-eye.io")
     patch_admin(monkeypatch, admin)
 
     create = await client.post("/api/v1/cms/posts", json={
@@ -167,7 +166,7 @@ async def test_slug_auto_generated_from_title(
     client: AsyncClient, test_db: Session, monkeypatch
 ):
     """Slug is auto-generated from title using slugify."""
-    admin = make_admin(test_db, "admin5@fin-eye.io")
+    admin = await make_admin(test_db, "admin5@fin-eye.io")
     patch_admin(monkeypatch, admin)
 
     res = await client.post("/api/v1/cms/posts", json={
@@ -183,7 +182,7 @@ async def test_duplicate_slugs_get_suffix(
     client: AsyncClient, test_db: Session, monkeypatch
 ):
     """Creating two posts with the same title yields slug and slug-2."""
-    admin = make_admin(test_db, "admin6@fin-eye.io")
+    admin = await make_admin(test_db, "admin6@fin-eye.io")
     patch_admin(monkeypatch, admin)
 
     r1 = await client.post("/api/v1/cms/posts", json={

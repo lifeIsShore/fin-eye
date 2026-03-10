@@ -1,0 +1,83 @@
+﻿python : \u274c Redis 
+connection failed: 
+invalid 
+username-password pair 
+or user is disabled.
+At line:1 char:1
++ python 
+test_redis_health.py > 
+out_redis.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (\u274c Redis    
+ co...er is disable    
+d.:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+INIT_REDIS URL: redis://:ffe802599b2ef0acf9e13775@localhost:6379
+INIT_REDIS ERROR [AuthenticationError]: invalid username-password pair or user is disabled.
+Traceback (most recent 
+call last):
+  File "C:\Users\ahmty\
+fin-eye\backend\test_re
+dis_health.py", line 
+14, in <module>
+    asyncio.run(test_he
+alth())
+  File "C:\Program File
+s\WindowsApps\PythonSof
+twareFoundation.Python.
+3.11_3.11.2544.0_x64__q
+bz5n2kfra8p0\Lib\asynci
+o\runners.py", line 
+190, in run
+    return 
+runner.run(main)
+           
+^^^^^^^^^^^^^^^^
+  File "C:\Program File
+s\WindowsApps\PythonSof
+twareFoundation.Python.
+3.11_3.11.2544.0_x64__q
+bz5n2kfra8p0\Lib\asynci
+o\runners.py", line 
+118, in run
+    return self._loop.r
+un_until_complete(task)
+           ^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program File
+s\WindowsApps\PythonSof
+twareFoundation.Python.
+3.11_3.11.2544.0_x64__q
+bz5n2kfra8p0\Lib\asynci
+o\base_events.py", 
+line 654, in 
+run_until_complete
+    return 
+future.result()
+           
+^^^^^^^^^^^^^^^
+  File "C:\Users\ahmty\
+fin-eye\backend\test_re
+dis_health.py", line 
+6, in test_health
+    redis = get_redis()
+            ^^^^^^^^^^^
+  File "C:\Users\ahmty\
+fin-eye\backend\app\db\
+redis_client.py", line 
+54, in get_redis
+    raise 
+RuntimeError("Redis 
+client is not 
+initialized")
+RuntimeError: Redis 
+client is not 
+initialized

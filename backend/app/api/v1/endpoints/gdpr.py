@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pydantic import BaseModel
 
 from app.db.database import get_db
@@ -25,8 +26,8 @@ class DeleteAccountResponse(BaseModel):
 # ─── Endpoints ──────────────────────────────────────────────────────────────
 
 @router.get("/export")
-def request_data_export(
-    db: Session = Depends(get_db),
+async def request_data_export(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> JSONResponse:
     """
@@ -36,7 +37,7 @@ def request_data_export(
     about the current user. The response carries a Content-Disposition
     header so browsers trigger a file download automatically.
     """
-    package = build_user_export_package(current_user, db)
+    package = await build_user_export_package(current_user, db)
 
     return JSONResponse(
         content=package,
@@ -49,9 +50,9 @@ def request_data_export(
 
 
 @router.post("/delete", response_model=DeleteAccountResponse)
-def delete_account(
+async def delete_account(
     body: DeleteAccountRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> DeleteAccountResponse:
     """
@@ -75,14 +76,15 @@ def delete_account(
         )
 
     # Fetch a fresh DB-bound instance (current_user may be a detached mock in tests)
-    db_user = db.query(User).filter(User.id == current_user.id).first()
+    result = await db.execute(select(User).where(User.id == current_user.id))
+    db_user = result.scalar_one_or_none()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found.")
 
     from datetime import datetime
     anonymised_at = datetime.utcnow().isoformat() + "Z"
 
-    anonymise_user(db_user, db)
+    await anonymise_user(db_user, db)
 
     return DeleteAccountResponse(
         message=(

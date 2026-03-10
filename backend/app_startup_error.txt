@@ -1,0 +1,21 @@
+AssertionError: Status code 204 must not have a response body
+
+Traceback (most recent call last):
+  File "C:\Users\ahmty\fin-eye\backend\test_app_create_to_file.py", line 6, in <module>
+    from app.main import app
+  File "C:\Users\ahmty\fin-eye\backend\app\main.py", line 26, in <module>
+    from app.api.v1.endpoints import (
+  File "C:\Users\ahmty\fin-eye\backend\app\api\v1\endpoints\__init__.py", line 1, in <module>
+    from app.api.v1.endpoints import (
+  File "C:\Users\ahmty\fin-eye\backend\app\api\v1\endpoints\indicators.py", line 333, in <module>
+    @router.delete(
+     ^^^^^^^^^^^^^^
+  File "C:\Users\ahmty\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\fastapi\routing.py", line 994, in decorator
+    self.add_api_route(
+  File "C:\Users\ahmty\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\fastapi\routing.py", line 933, in add_api_route
+    route = route_class(
+            ^^^^^^^^^^^^
+  File "C:\Users\ahmty\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\fastapi\routing.py", line 507, in __init__
+    assert is_body_allowed_for_status_code(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Status code 204 must not have a response body

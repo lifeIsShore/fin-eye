@@ -21,11 +21,12 @@ This module is called by:
   - The admin trigger endpoint POST /api/v1/admin/gas/precompute
   - On application startup (warm cache immediately)
 
-Weather labels (GAS → label):
-    75–100  Mild Support
-    55–74   Mixed Signals
-    35–54   Headwind
-    0–34    High Instability
+Weather labels (GAS → label)  — BUG-009 FIXED to match PRD:
+    80–100  Strong Tailwind
+    60–79   Mild Support
+    40–59   Mixed Signals
+    20–39   Headwind
+    0–19    High Instability
 
 Regime labels (from technical consensus score):
     >= 60   Risk-On
@@ -63,11 +64,15 @@ DEFAULT_SYMBOLS: list[str] = settings.ohlcv_symbols_default  # type: ignore[attr
 # ─── Score helpers ─────────────────────────────────────────────────────────
 
 def _gas_to_weather(score: float) -> str:
-    if score >= 75:
+    # BUG-009 FIX: Align thresholds with PRD definition (5 labels, not 4).
+    # PRD: Strong Tailwind=80-100, Mild Support=60-79, Mixed=40-59, Headwind=20-39, High Instability=0-19
+    if score >= 80:
+        return "Strong Tailwind"
+    if score >= 60:
         return "Mild Support"
-    if score >= 55:
+    if score >= 40:
         return "Mixed Signals"
-    if score >= 35:
+    if score >= 20:
         return "Headwind"
     return "High Instability"
 

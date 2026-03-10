@@ -193,7 +193,7 @@ async def patch_experiment(
 async def remove_experiment(
     key: str,
     db: AsyncSession = Depends(get_db),
-) -> None:
+):
     exp = await _get_or_404(db, key)
     await delete_experiment(db, exp)
     await db.commit()

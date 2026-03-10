@@ -1,0 +1,33 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.autogenerate.compare] Detected added table 'showcase_products'
+INFO  [alembic.autogenerate.compare] Detected added index ''ix_showcase_products_id'' on '('id',)'
+INFO  [alembic.autogenerate.compare] Detected added table 'custom_indicators'
+INFO  [alembic.autogenerate.compare] Detected added index ''ix_custom_indicators_id'' on '('id',)'
+INFO  [alembic.autogenerate.compare] Detected added index ''ix_custom_indicators_user_id'' on '('user_id',)'
+INFO  [alembic.autogenerate.compare] Detected added table 'showcase_clicks'
+INFO  [alembic.autogenerate.compare] Detected added index ''ix_showcase_clicks_created_at'' on '('created_at',)'
+INFO  [alembic.autogenerate.compare] Detected added index ''ix_showcase_clicks_id'' on '('id',)'
+INFO  [alembic.autogenerate.compare] Detected added index ''ix_showcase_clicks_product_id'' on '('product_id',)'
+INFO  [alembic.autogenerate.compare] Detected added table 'portfolio_positions'
+INFO  [alembic.autogenerate.compare] Detected added index ''ix_portfolio_positions_id'' on '('id',)'
+INFO  [alembic.autogenerate.compare] Detected added index ''ix_portfolio_positions_symbol'' on '('symbol',)'
+INFO  [alembic.ddl.postgresql] Detected sequence named 'experiments_id_seq' as owned by integer column 'experiments(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'portfolios_id_seq' as owned by integer column 'portfolios(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'blog_posts_id_seq' as owned by integer column 'blog_posts(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'alerts_id_seq' as owned by integer column 'alerts(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'news_articles_id_seq' as owned by integer column 'news_articles(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'legal_consents_id_seq' as owned by integer column 'legal_consents(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'sentiment_aggregates_id_seq' as owned by integer column 'sentiment_aggregates(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'watchlist_items_id_seq' as owned by integer column 'watchlist_items(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'stock_ohlcv_id_seq' as owned by integer column 'stock_ohlcv(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'portfolio_items_id_seq' as owned by integer column 'portfolio_items(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'gas_snapshots_id_seq' as owned by integer column 'gas_snapshots(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'saved_strategies_id_seq' as owned by integer column 'saved_strategies(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'ohlcv_intraday_id_seq' as owned by integer column 'ohlcv_intraday(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'ohlcv_daily_id_seq' as owned by integer column 'ohlcv_daily(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'macro_indicators_id_seq' as owned by integer column 'macro_indicators(id)', assuming SERIAL and omitting
+INFO  [alembic.autogenerate.compare] Detected type change from TIMESTAMP() to DateTime(timezone=True) on 'blog_posts.published_at'
+INFO  [alembic.autogenerate.compare] Detected type change from TIMESTAMP() to DateTime(timezone=True) on 'blog_posts.created_at'
+INFO  [alembic.autogenerate.compare] Detected type change from TIMESTAMP() to DateTime(timezone=True) on 'blog_posts.updated_at'
+Generating C:\Users\ahmty\fin-eye\backend\alembic\versions\fd764d3322c0_volume_bigint.py ...  done

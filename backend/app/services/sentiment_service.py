@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta, date
 from typing import List, Optional, Dict, Tuple
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.schemas.data_models import NewsData
@@ -96,7 +96,7 @@ class SentimentService:
 
     def __init__(
         self,
-        db: Session,
+        db: AsyncSession,
         analyzer: Optional[FinBERTSentimentAnalyzer] = None,
         news_fetcher: Optional[NewsFetcher] = None,
     ):
@@ -148,7 +148,8 @@ class SentimentService:
                 NewsArticle.title == item.title,
                 NewsArticle.published_at == item.published_at,
             )
-            existing = self.db.execute(existing_stmt).scalar_one_or_none()
+            existing_result = await self.db.execute(existing_stmt)
+            existing = existing_result.scalar_one_or_none()
 
             if existing:
                 existing.sentiment_score = score
@@ -183,7 +184,8 @@ class SentimentService:
                 SentimentAggregate.date == agg_date,
                 SentimentAggregate.source_type == "news",
             )
-            existing_agg = self.db.execute(agg_stmt).scalar_one_or_none()
+            existing_agg_result = await self.db.execute(agg_stmt)
+            existing_agg = existing_agg_result.scalar_one_or_none()
 
             if existing_agg:
                 existing_agg.sentiment_score = avg_score
@@ -201,10 +203,10 @@ class SentimentService:
 
             aggregates.append(aggregate_record)
 
-        self.db.commit()
+        await self.db.commit()
         return scored_articles, aggregates
 
-    def get_aggregated_sentiment(
+    async def get_aggregated_sentiment(
         self,
         symbol: str,
         days: int = 30,
@@ -221,7 +223,8 @@ class SentimentService:
             )
             .order_by(SentimentAggregate.date.asc())
         )
-        return self.db.execute(stmt).scalars().all()
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
 
     def compute_window_averages(
         self,
@@ -257,7 +260,7 @@ class SentimentService:
             "30d": avg_for_window(30),
         }
 
-    def get_source_breakdown(
+    async def get_source_breakdown(
         self,
         symbol: str,
         days: int = 30,
@@ -283,7 +286,8 @@ class SentimentService:
                 NewsArticle.sentiment_score.is_not(None),
             )
         )
-        rows: List[NewsArticle] = self.db.execute(stmt).scalars().all()
+        result = await self.db.execute(stmt)
+        rows: List[NewsArticle] = result.scalars().all()
 
         breakdown: Dict[str, Dict[str, int]] = {}
 
@@ -304,5 +308,3 @@ class SentimentService:
             breakdown[source][bucket] += 1
 
         return breakdown
-
-

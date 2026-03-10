@@ -13,7 +13,8 @@ Access model:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -37,15 +38,16 @@ def _slugify(text: str) -> str:
     return text[:200]
 
 
-def _ensure_unique_slug(slug: str, db: Session, exclude_id: int | None = None) -> str:
+async def _ensure_unique_slug(slug: str, db: AsyncSession, exclude_id: int | None = None) -> str:
     """Append -2, -3, … to slug until unique."""
     candidate = slug
     counter = 2
     while True:
-        q = db.query(BlogPost).filter(BlogPost.slug == candidate)
+        stmt = select(BlogPost).where(BlogPost.slug == candidate)
         if exclude_id:
-            q = q.filter(BlogPost.id != exclude_id)
-        if not q.first():
+            stmt = stmt.where(BlogPost.id != exclude_id)
+        result = await db.execute(stmt)
+        if not result.scalar_one_or_none():
             return candidate
         candidate = f"{slug}-{counter}"
         counter += 1
@@ -139,24 +141,27 @@ class BlogPostSummary(BaseModel):
 # ─── Public endpoints ────────────────────────────────────────────────────────
 
 @router.get("/posts/published", response_model=list[BlogPostSummary])
-def list_published_posts(db: Session = Depends(get_db)) -> list[BlogPostSummary]:
+async def list_published_posts(db: AsyncSession = Depends(get_db)) -> list[BlogPostSummary]:
     """Public endpoint — returns all published posts, newest first."""
-    posts = (
-        db.query(BlogPost)
-        .filter(BlogPost.status == "published")
+    result = await db.execute(
+        select(BlogPost)
+        .where(BlogPost.status == "published")
         .order_by(BlogPost.published_at.desc())
-        .all()
     )
+    posts = result.scalars().all()
     return [BlogPostSummary.from_orm(p) for p in posts]
 
 
 @router.get("/posts/by-slug/{slug}", response_model=BlogPostResponse)
-def get_post_by_slug(slug: str, db: Session = Depends(get_db)) -> BlogPostResponse:
+async def get_post_by_slug(slug: str, db: AsyncSession = Depends(get_db)) -> BlogPostResponse:
     """Public — returns a single published post by slug. 404 if not published."""
-    post = db.query(BlogPost).filter(
-        BlogPost.slug == slug,
-        BlogPost.status == "published",
-    ).first()
+    result = await db.execute(
+        select(BlogPost).where(
+            BlogPost.slug == slug,
+            BlogPost.status == "published",
+        )
+    )
+    post = result.scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
     return BlogPostResponse.from_orm(post)
@@ -165,37 +170,43 @@ def get_post_by_slug(slug: str, db: Session = Depends(get_db)) -> BlogPostRespon
 # ─── Admin endpoints ─────────────────────────────────────────────────────────
 
 @router.get("/posts", response_model=list[BlogPostSummary])
-def list_all_posts(
-    db: Session = Depends(get_db),
+async def list_all_posts(
+    db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[BlogPostSummary]:
     """Admin — returns ALL posts (draft + published), newest first."""
-    posts = db.query(BlogPost).order_by(BlogPost.created_at.desc()).all()
+    result = await db.execute(
+        select(BlogPost).order_by(BlogPost.created_at.desc())
+    )
+    posts = result.scalars().all()
     return [BlogPostSummary.from_orm(p) for p in posts]
 
 
 @router.get("/posts/{post_id}", response_model=BlogPostResponse)
-def get_post(
+async def get_post(
     post_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> BlogPostResponse:
     """Admin — get any post by ID including drafts."""
-    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    result = await db.execute(
+        select(BlogPost).where(BlogPost.id == post_id)
+    )
+    post = result.scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
     return BlogPostResponse.from_orm(post)
 
 
 @router.post("/posts", response_model=BlogPostResponse, status_code=status.HTTP_201_CREATED)
-def create_post(
+async def create_post(
     body: BlogPostCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> BlogPostResponse:
     """Admin — create a new draft post."""
     base_slug = _slugify(body.slug or body.title)
-    unique_slug = _ensure_unique_slug(base_slug, db)
+    unique_slug = await _ensure_unique_slug(base_slug, db)
 
     post = BlogPost(
         title=body.title,
@@ -210,20 +221,23 @@ def create_post(
         updated_at=datetime.utcnow(),
     )
     db.add(post)
-    db.commit()
-    db.refresh(post)
+    await db.commit()
+    await db.refresh(post)
     return BlogPostResponse.from_orm(post)
 
 
 @router.put("/posts/{post_id}", response_model=BlogPostResponse)
-def update_post(
+async def update_post(
     post_id: int,
     body: BlogPostUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> BlogPostResponse:
     """Admin — update any field on a post. Slug is re-slugified if provided."""
-    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    result = await db.execute(
+        select(BlogPost).where(BlogPost.id == post_id)
+    )
+    post = result.scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
 
@@ -241,58 +255,67 @@ def update_post(
         post.content_md = body.content_md
     if body.slug is not None:
         base_slug = _slugify(body.slug)
-        post.slug = _ensure_unique_slug(base_slug, db, exclude_id=post_id)
+        post.slug = await _ensure_unique_slug(base_slug, db, exclude_id=post_id)
 
     post.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(post)
+    await db.commit()
+    await db.refresh(post)
     return BlogPostResponse.from_orm(post)
 
 
 @router.post("/posts/{post_id}/publish", response_model=BlogPostResponse)
-def publish_post(
+async def publish_post(
     post_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> BlogPostResponse:
     """Admin — publish a draft post."""
-    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    result = await db.execute(
+        select(BlogPost).where(BlogPost.id == post_id)
+    )
+    post = result.scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
     post.status = "published"
     post.published_at = post.published_at or datetime.utcnow()
     post.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(post)
+    await db.commit()
+    await db.refresh(post)
     return BlogPostResponse.from_orm(post)
 
 
 @router.post("/posts/{post_id}/unpublish", response_model=BlogPostResponse)
-def unpublish_post(
+async def unpublish_post(
     post_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> BlogPostResponse:
     """Admin — revert a published post back to draft."""
-    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    result = await db.execute(
+        select(BlogPost).where(BlogPost.id == post_id)
+    )
+    post = result.scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
     post.status = "draft"
     post.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(post)
+    await db.commit()
+    await db.refresh(post)
     return BlogPostResponse.from_orm(post)
 
 
 @router.delete("/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_post(
+async def delete_post(
     post_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> None:
     """Admin — permanently delete a post."""
-    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    result = await db.execute(
+        select(BlogPost).where(BlogPost.id == post_id)
+    )
+    post = result.scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
-    db.delete(post)
-    db.commit()
+    await db.delete(post)
+    await db.commit()

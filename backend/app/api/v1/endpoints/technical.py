@@ -13,11 +13,13 @@ router = APIRouter()
 
 
 @router.post("/train/{symbol}")
-def train_technical_models(symbol: str, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+async def train_technical_models(symbol: str, background_tasks: BackgroundTasks) -> Dict[str, Any]:
     """
     Triggers ML pipeline training for all timeframes for a given symbol.
     Runs in the background since training 5 models (Logistic, XGBoost, Prophet)
     can take some time.
+    # NEW BUG FIX: was sync `def` which blocks the FastAPI event loop for the
+    # duration of the background task dispatch. Changed to `async def`.
     """
     symbol = symbol.upper()
 
@@ -51,13 +53,17 @@ def train_technical_models(symbol: str, background_tasks: BackgroundTasks) -> Di
 
 
 @router.get("/{symbol}/latest")
-def get_latest_technical_consensus(symbol: str) -> Dict[str, Any]:
+async def get_latest_technical_consensus(symbol: str) -> Dict[str, Any]:
     """
     Return the live technical consensus and 0–100 technical confidence score
     for a symbol, based on the most recently trained winners per timeframe.
+    # NEW BUG FIX: was sync `def` calling CPU-bound inference directly on the
+    # event loop. Changed to async + run_in_executor to avoid blocking.
     """
+    import asyncio  # noqa: PLC0415
     try:
-        result = compute_technical_consensus(symbol.upper())
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, compute_technical_consensus, symbol.upper())
         # To maintain API contract with the frontend existing type `TechnicalConsensusDto`
         # Map the output properly
         

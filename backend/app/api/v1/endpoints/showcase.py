@@ -20,8 +20,8 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.showcase import ShowcaseClick, ShowcaseProduct
@@ -97,36 +97,40 @@ def _anon_id_from_request(request: Request) -> str:
 # ─── Public endpoints ─────────────────────────────────────────────────────────
 
 @router.get("/products", response_model=List[ProductOut])
-def list_products(
+async def list_products(
     category: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Return active products, sorted by sort_order then title."""
-    q = db.query(ShowcaseProduct).filter(ShowcaseProduct.is_active == True)  # noqa: E712
+    stmt = select(ShowcaseProduct).where(ShowcaseProduct.is_active == True)  # noqa: E712
     if category:
-        q = q.filter(ShowcaseProduct.category == category)
-    return q.order_by(ShowcaseProduct.sort_order, ShowcaseProduct.title).all()
+        stmt = stmt.where(ShowcaseProduct.category == category)
+    stmt = stmt.order_by(ShowcaseProduct.sort_order, ShowcaseProduct.title)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)
-def get_product(product_id: int, db: Session = Depends(get_db)):
+async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
     """Return a single active product by id."""
-    product = (
-        db.query(ShowcaseProduct)
-        .filter(ShowcaseProduct.id == product_id, ShowcaseProduct.is_active == True)  # noqa: E712
-        .first()
+    result = await db.execute(
+        select(ShowcaseProduct).where(
+            ShowcaseProduct.id == product_id,
+            ShowcaseProduct.is_active == True,  # noqa: E712
+        )
     )
+    product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found.")
     return product
 
 
 @router.post("/products/{product_id}/click", status_code=status.HTTP_204_NO_CONTENT)
-def track_click(
+async def track_click(
     product_id: int,
     body: ClickRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Record a click event (view | detail | outbound).
@@ -136,11 +140,13 @@ def track_click(
         return   # silently ignore invalid event types
 
     # Confirm product exists (don't create orphan rows)
-    exists = db.query(ShowcaseProduct.id).filter(
-        ShowcaseProduct.id == product_id,
-        ShowcaseProduct.is_active == True,  # noqa: E712
-    ).first()
-    if not exists:
+    result = await db.execute(
+        select(ShowcaseProduct.id).where(
+            ShowcaseProduct.id == product_id,
+            ShowcaseProduct.is_active == True,  # noqa: E712
+        )
+    )
+    if not result.scalar_one_or_none():
         return
 
     anon_id = body.anon_user_id or _anon_id_from_request(request)
@@ -152,9 +158,9 @@ def track_click(
     )
     try:
         db.add(click)
-        db.commit()
+        await db.commit()
     except Exception:
-        db.rollback()
+        await db.rollback()
         # Never surface analytics errors to the client
 
 
@@ -162,60 +168,64 @@ def track_click(
 
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED,
              dependencies=[Depends(require_admin)])
-def create_product(body: ProductCreate, db: Session = Depends(get_db)):
+async def create_product(body: ProductCreate, db: AsyncSession = Depends(get_db)):
     product = ShowcaseProduct(**body.model_dump())
     db.add(product)
-    db.commit()
-    db.refresh(product)
+    await db.commit()
+    await db.refresh(product)
     return product
 
 
 @router.put("/products/{product_id}", response_model=ProductOut,
             dependencies=[Depends(require_admin)])
-def update_product(
+async def update_product(
     product_id: int,
     body: ProductUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    product = db.query(ShowcaseProduct).filter(ShowcaseProduct.id == product_id).first()
+    result = await db.execute(
+        select(ShowcaseProduct).where(ShowcaseProduct.id == product_id)
+    )
+    product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found.")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(product, field, value)
-    db.commit()
-    db.refresh(product)
+    await db.commit()
+    await db.refresh(product)
     return product
 
 
 @router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT,
                dependencies=[Depends(require_admin)])
-def delete_product(product_id: int, db: Session = Depends(get_db)):
-    product = db.query(ShowcaseProduct).filter(ShowcaseProduct.id == product_id).first()
+async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ShowcaseProduct).where(ShowcaseProduct.id == product_id)
+    )
+    product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found.")
-    db.delete(product)
-    db.commit()
+    await db.delete(product)
+    await db.commit()
 
 
 @router.get("/stats", response_model=List[StatRow],
             dependencies=[Depends(require_admin)])
-def click_stats(db: Session = Depends(get_db)):
+async def click_stats(db: AsyncSession = Depends(get_db)):
     """Per-product click breakdown: views, detail-opens, outbound clicks."""
-    products = (
-        db.query(ShowcaseProduct)
-        .order_by(ShowcaseProduct.sort_order, ShowcaseProduct.title)
-        .all()
+    result = await db.execute(
+        select(ShowcaseProduct).order_by(ShowcaseProduct.sort_order, ShowcaseProduct.title)
     )
+    products = result.scalars().all()
 
     rows = []
     for p in products:
-        counts = (
-            db.query(ShowcaseClick.event_type, func.count(ShowcaseClick.id))
-            .filter(ShowcaseClick.product_id == p.id)
+        count_result = await db.execute(
+            select(ShowcaseClick.event_type, func.count(ShowcaseClick.id))
+            .where(ShowcaseClick.product_id == p.id)
             .group_by(ShowcaseClick.event_type)
-            .all()
         )
-        count_map = {et: c for et, c in counts}
+        count_map = {et: c for et, c in count_result.all()}
         rows.append(StatRow(
             product_id=p.id,
             title=p.title,

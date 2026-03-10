@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 # Resolve .env relative to THIS file (backend/app/config.py → backend/.env)
@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     )
 
     # Redis
+    redis_password: str = Field(default="", alias="REDIS_PASSWORD")
     redis_url: str = Field(default="redis://localhost:6379", alias="REDIS_URL")
     cache_ttl: int = Field(default=900, alias="CACHE_TTL")  # 15 minutes
 
@@ -167,11 +168,15 @@ class Settings(BaseSettings):
     def enabled_feature_flags(self) -> list[str]:
         return [f.strip() for f in self.feature_flags.split(",") if f.strip()]
 
-    class Config:
+    model_config = SettingsConfigDict(
         # Absolute path — always resolves to backend/.env regardless of CWD
-        env_file = str(_ENV_FILE)
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+        env_file=str(_ENV_FILE),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        # Ignore extra env vars from .env that aren't fields on this model
+        # (e.g. OAuth providers, webhook secrets, payment provider keys, etc.)
+        extra="ignore",
+    )
 
 
 settings = Settings()

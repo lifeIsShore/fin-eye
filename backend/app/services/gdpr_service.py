@@ -14,7 +14,8 @@ Philosophy:
 """
 
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
 
 from app.models.user import User
 from app.models.watchlist import WatchlistItem
@@ -22,26 +23,25 @@ from app.models.portfolio import Portfolio
 from app.models.legal import LegalConsent
 
 
-def build_user_export_package(user: User, db: Session) -> dict:
+async def build_user_export_package(user: User, db: AsyncSession) -> dict:
     """
     Collect all personal data held about the user and return it as a
     structured dict suitable for JSON serialisation.
     """
-    watchlist = (
-        db.query(WatchlistItem)
-        .filter(WatchlistItem.user_id == user.id)
-        .all()
+    watchlist_result = await db.execute(
+        select(WatchlistItem).where(WatchlistItem.user_id == user.id)
     )
-    portfolios = (
-        db.query(Portfolio)
-        .filter(Portfolio.user_id == user.id)
-        .all()
+    watchlist = watchlist_result.scalars().all()
+    
+    portfolio_result = await db.execute(
+        select(Portfolio).where(Portfolio.user_id == user.id)
     )
-    consents = (
-        db.query(LegalConsent)
-        .filter(LegalConsent.user_id == user.id)
-        .all()
+    portfolios = portfolio_result.scalars().all()
+    
+    consents_result = await db.execute(
+        select(LegalConsent).where(LegalConsent.user_id == user.id)
     )
+    consents = consents_result.scalars().all()
 
     return {
         "export_generated_at": datetime.utcnow().isoformat() + "Z",
@@ -49,7 +49,7 @@ def build_user_export_package(user: User, db: Session) -> dict:
         "account": {
             "id": user.id,
             "email": user.email,
-            "is_pro": user.is_pro,
+            "subscription_tier": user.subscription_tier,
             "created_at": user.created_at.isoformat() if user.created_at else None,
         },
         "watchlist": [
@@ -78,7 +78,7 @@ def build_user_export_package(user: User, db: Session) -> dict:
     }
 
 
-def anonymise_user(user: User, db: Session) -> None:
+async def anonymise_user(user: User, db: AsyncSession) -> None:
     """
     Irreversibly anonymise the user account.
 
@@ -95,16 +95,21 @@ def anonymise_user(user: User, db: Session) -> None:
     # Anonymise PII
     user.email = anon_marker
     user.hashed_password = "DELETED"
-    user.is_pro = False
+    user.subscription_tier = "free"
     user.updated_at = datetime.utcnow()
 
     # Delete personal data tables (cascade handles child rows)
-    db.query(WatchlistItem).filter(WatchlistItem.user_id == user.id).delete(
-        synchronize_session="fetch"
+    await db.execute(
+        delete(WatchlistItem).where(WatchlistItem.user_id == user.id)
     )
+    
     # Portfolios cascade-delete their items via the ORM relationship
-    portfolios = db.query(Portfolio).filter(Portfolio.user_id == user.id).all()
+    # But for async we need to fetch them and delete or use a delete query that cascades
+    portfolios_result = await db.execute(
+        select(Portfolio).where(Portfolio.user_id == user.id)
+    )
+    portfolios = portfolios_result.scalars().all()
     for p in portfolios:
-        db.delete(p)
+        await db.delete(p)
 
-    db.commit()
+    await db.commit()

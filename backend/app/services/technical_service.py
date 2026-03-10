@@ -18,7 +18,9 @@ from app.services.ml_pipeline import (
 logger = logging.getLogger(__name__)
 
 # Supported timeframes that compose the consensus (YF compatible)
-TIMEFRAMES = ["1h", "1d", "1wk", "1mo"]
+# BUG-003 FIX: Must match the timeframes the ML pipeline actually trains.
+# ml_pipeline.py trains "1h" and "4h" — do NOT add 1d/1wk/1mo until training produces them.
+TIMEFRAMES = ["1h", "4h"]
 
 def get_latest_model_metadata(symbol: str, timeframe: str) -> dict:
     """Reads the JSONL registry to find the most recently trained model metadata."""
@@ -68,15 +70,30 @@ def generate_timeframe_signal(symbol: str, timeframe: str) -> dict:
     if not model:
         raise ValueError(f"Model artifact {meta['artifact_file']} missing")
 
-    # Fetch recent data to construct features (limit period based on interval for YF API)
-    period = "730d" if timeframe == "1h" else "5y"
-    records = OHLCVFetcher.fetch_historical_data(symbol, period=period, interval=timeframe)
+    # Fetch recent data to construct features.
+    # yfinance intraday data limits:
+    #   1h  → max 730 days
+    #   4h  → resampled from 1h, so also capped at 730 days
+    # NEW BUG FIX: previously used "5y" for 4h which yfinance rejects silently,
+    # returning an empty DataFrame and causing inference to fail.
+    period = "730d" if timeframe in ("1h", "4h") else "5y"
+    # yfinance does NOT have a native 4h interval — must fetch 1h and resample.
+    # NEW BUG FIX: previously passed interval="4h" to yfinance which silently
+    # returned empty data, causing inference to fail for the 4h timeframe.
+    fetch_interval = "1h" if timeframe == "4h" else timeframe
+    records = OHLCVFetcher.fetch_historical_data(symbol, period=period, interval=fetch_interval)
     if len(records) < 50:
         raise ValueError(f"Not enough data to run inference on {timeframe}")
 
     df = pd.DataFrame([{"date": r.timestamp, "open": r.open, "high": r.high, "low": r.low, "close": r.close, "volume": r.volume} for r in records])
     df.set_index("date", inplace=True)
     df.sort_index(inplace=True)
+
+    # Resample 1h → 4h if needed (mirrors what the training pipeline does)
+    if timeframe == "4h":
+        df = df.resample("4h", label="left", closed="left").agg(
+            {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+        ).dropna()
 
     # Engineer
     df_feat = engineer_features(df)

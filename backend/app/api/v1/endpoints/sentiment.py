@@ -1,7 +1,8 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.db.database import get_db
 from app.schemas.data_models import (
@@ -25,7 +26,7 @@ router = APIRouter()
 )
 async def get_news_sentiment_timeseries(
     symbol: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
     """
     Return 30-day news sentiment timeseries and current 1d/7d/30d averages
@@ -37,7 +38,7 @@ async def get_news_sentiment_timeseries(
     # Refresh underlying data on-demand for MVP
     await service.refresh_symbol_sentiment(symbol=symbol, days_back=30)
 
-    aggregates = service.get_aggregated_sentiment(symbol=symbol, days=30)
+    aggregates = await service.get_aggregated_sentiment(symbol=symbol, days=30)
     window_avgs = service.compute_window_averages(aggregates)
 
     # Map aggregates to response DTO
@@ -51,13 +52,13 @@ async def get_news_sentiment_timeseries(
     ]
 
     # Fetch recent articles (last 30 days) for context
-    articles_stmt = (
-        db.query(NewsArticle)
-        .filter(NewsArticle.symbol == symbol)
+    result = await db.execute(
+        select(NewsArticle)
+        .where(NewsArticle.symbol == symbol)
         .order_by(NewsArticle.published_at.desc())
         .limit(150)
     )
-    article_rows = articles_stmt.all()
+    article_rows = result.scalars().all()
     articles = [
         NewsData(
             symbol=row.symbol,
@@ -92,7 +93,7 @@ async def get_news_sentiment_timeseries(
 async def get_news_sentiment_sources(
     symbol: str,
     days: int = 30,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
     """
     Return per-source positive/negative/neutral article counts over the last
@@ -104,7 +105,7 @@ async def get_news_sentiment_sources(
     # Ensure we have reasonably fresh news data
     await service.refresh_symbol_sentiment(symbol=symbol, days_back=days)
 
-    breakdown_map = service.get_source_breakdown(symbol=symbol, days=days)
+    breakdown_map = await service.get_source_breakdown(symbol=symbol, days=days)
     if not breakdown_map:
         raise HTTPException(
             status_code=404,

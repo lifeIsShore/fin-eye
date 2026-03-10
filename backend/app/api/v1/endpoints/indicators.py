@@ -339,7 +339,7 @@ async def delete_indicator(
     indicator_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> None:
+):
     result = await db.execute(
         select(CustomIndicator).where(
             CustomIndicator.id == indicator_id,

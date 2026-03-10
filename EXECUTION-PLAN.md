@@ -137,13 +137,8 @@ This is the single biggest reason the dashboard shows empty/flat data.
 
 ### 2.1 — Seed OHLCV Data (most important for ML training)
 ```bash
-# Option A: Via API endpoint (if the /data router exposes it)
-curl -X POST http://localhost:8000/api/v1/data/fetch-ohlcv \
-  -H "Content-Type: application/json"
-
-# Option B: Via the seeding script
-cd Y:\programing\projects\fin-eye\backend
-python scripts/seed_live_data.py
+# CORRECTED URL (router mounts at /data, paths use forward-slash not hyphen)
+curl -X POST http://localhost:8000/api/v1/data/fetch/ohlcv
 ```
 
 **What it does:** Fetches 5 years of daily OHLCV + 730 days of hourly bars for all
@@ -160,12 +155,8 @@ curl "http://localhost:8000/api/v1/data/ohlcv/AAPL?interval=1d&limit=5"
 
 ### 2.2 — Seed Macro Indicators (FRED)
 ```bash
-# Option A: Via API
-curl -X POST http://localhost:8000/api/v1/data/fetch-macro
-
-# Option B: Trigger via the scheduler endpoint
-curl -X POST http://localhost:8000/api/v1/ops/jobs/fetch_macro/trigger \
-  -H "Authorization: Bearer <admin_token>"
+# CORRECTED URL
+curl -X POST http://localhost:8000/api/v1/data/fetch/macro
 ```
 
 **What it fetches (FRED series):**
@@ -187,12 +178,8 @@ curl http://localhost:8000/api/v1/macro/latest
 
 ### 2.3 — Seed News + Sentiment (Finnhub → VADER)
 ```bash
-# Option A: Via API
-curl -X POST http://localhost:8000/api/v1/data/fetch-news
-
-# Option B: Manual trigger
-curl -X POST http://localhost:8000/api/v1/ops/jobs/fetch_news/trigger \
-  -H "Authorization: Bearer <admin_token>"
+# CORRECTED URL
+curl -X POST "http://localhost:8000/api/v1/data/fetch/news?lookback_days=7"
 ```
 
 **What it does:** Fetches 2 days of news from Finnhub for all default symbols,
@@ -567,9 +554,9 @@ Create `.github/workflows/ci.yml`:
 ### Data seeding
 | Action | Endpoint | Method |
 |---|---|---|
-| Fetch OHLCV | `/api/v1/data/fetch-ohlcv` | POST |
-| Fetch Macro | `/api/v1/data/fetch-macro` | POST |
-| Fetch News | `/api/v1/data/fetch-news` | POST |
+| Fetch OHLCV | `/api/v1/data/fetch/ohlcv` | POST |
+| Fetch Macro | `/api/v1/data/fetch/macro` | POST |
+| Fetch News | `/api/v1/data/fetch/news` | POST |
 
 ### ML Training
 | Action | Endpoint | Method |
