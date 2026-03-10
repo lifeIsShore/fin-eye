@@ -1,5 +1,21 @@
-the news are working nice. but you need to add the url link to the news since if one wants to investigate the news further or read it in full, he can click on the url link.
+# Fin-Eye UX & Feature Improvements
 
-and also in news scene it will load all the news at one page and can cause performance problems. can you also come up with a solution? maybe you can create a small pagination like 10 news per page and if you want to see the next page you can click on the next page button. and also there cuold be a select bar that you can select how many news you want to see per page. and also tehre can be some filters like show only bearish, bullish, and also you can filter the news soucres too. or any relevant more filters. to help and make the UX better.
+## 1. News Feed Enhancements
+- [ ] **External Links**: Add clickable URL links to news articles so users can read the full story on the original source.
+- [ ] **Pagination/Infinite Scroll**: Implement pagination (e.g., 10 items per page with a selector) or infinite scrolling to prevent performance issues when loading large numbers of articles.
+- [ ] **Filtering & Sorting**: 
+  - Filter by sentiment (Bullish, Bearish, Neutral).
+  - Filter by news source/publisher.
+  - Sort by date or by highest/lowest sentiment score.
 
-and also in general and for evry page there needs more info button and explanations. any terms and scores and indicators need good expanations. there need to be a good documentation for the app. and also UX needs to be improved and also we need to come up with apperant design of showing the information of the data like when you hover your mouse into the relevant data it will show you the explanation of the data. 
+## 2. Educational & Documentation UX (The "Fin-Eye" Mission)
+- [ ] **Tooltips & Hover States**: Add `[i]` (info) or `?` icons next to complex financial terms, GAS scores, and technical indicators. Hovering should pop up a brief, clear explanation of the metric.
+- [ ] **Dedicated Documentation / "Learn" Hub**: Build out a dedicated knowledge base page explaining the methodology behind the FinBERT sentiment analysis, Technical Consensus, and GAS scoring.
+- [ ] **Interactive Onboarding/Tour**: Add a guided product tour for first-time users explaining the dashboard layout.
+
+## 3. General UI/UX Polish
+- [ ] **Skeleton Loaders**: Instead of a simple "Loading..." text or spinner, use skeleton screens that mimic the layout of the data while it is fetching from the backend for a smoother perceived load time.
+- [ ] **Data Visualizations & Charts**: Enhance the dashboard by using interactive charts (e.g., Recharts, Chart.js) for time-series data (like historical sentiment or macro trends) allowing users to hover over data points for specific dates and values.
+- [ ] **Empty States & Error Handling**: Design friendly empty states for when there's no data (e.g., "No news found for this filter") and show elegant toast notifications if an API request fails, rather than a silent failure or raw error message.
+- [ ] **Responsive Design & Mobile Optimization**: Ensure the dashboard tables and navigation collapse gracefully on smaller tablet and mobile screens.
+- [ ] **Color Coding & Badges**: Use highly semantic colors (e.g., soft greens for bullish/positive, soft reds for bearish/negative, and high-contrast badges) to make scanning financial data instantaneous.
