@@ -1,0 +1,5 @@
+the news are working nice. but you need to add the url link to the news since if one wants to investigate the news further or read it in full, he can click on the url link.
+
+and also in news scene it will load all the news at one page and can cause performance problems. can you also come up with a solution? maybe you can create a small pagination like 10 news per page and if you want to see the next page you can click on the next page button. and also there cuold be a select bar that you can select how many news you want to see per page. and also tehre can be some filters like show only bearish, bullish, and also you can filter the news soucres too. or any relevant more filters. to help and make the UX better.
+
+and also in general and for evry page there needs more info button and explanations. any terms and scores and indicators need good expanations. there need to be a good documentation for the app. and also UX needs to be improved and also we need to come up with apperant design of showing the information of the data like when you hover your mouse into the relevant data it will show you the explanation of the data. 
