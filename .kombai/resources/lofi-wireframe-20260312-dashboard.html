@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fin-Eye Dashboard — Redesign Wireframe</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Comic Sans MS', 'Chalkboard SE', cursive;
+      background: #fff;
+      color: #333;
+      font-size: 13px;
+    }
+    /* Legend */
+    .legend {
+      position: fixed; top: 12px; right: 12px; background: #fff;
+      border: 2px solid #999; border-radius: 6px; padding: 10px 14px;
+      font-family: Arial, sans-serif; font-size: 11px; z-index: 999;
+      box-shadow: 2px 2px 6px rgba(0,0,0,0.15);
+    }
+    .legend-title { font-weight: bold; margin-bottom: 6px; font-size: 12px; }
+    .legend-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+    .badge-reuse { background: #4CAF50; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: bold; }
+    .badge-new { background: #FF9800; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: bold; }
+    .badge-fix { background: #E53935; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: bold; }
+
+    /* Shell */
+    .shell { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 220px; flex-shrink: 0;
+      background: #f5f5f5; border-right: 2px solid #ccc;
+      display: flex; flex-direction: column;
+      overflow-y: auto;
+    }
+    .sidebar-logo {
+      padding: 18px 16px 12px;
+      border-bottom: 2px solid #ccc;
+    }
+    .sidebar-logo h1 { font-size: 18px; font-weight: bold; }
+    .sidebar-logo p { font-size: 10px; color: #666; margin-top: 2px; }
+
+    .nav-group { margin-top: 10px; }
+    .nav-group-label {
+      font-size: 9px; font-weight: bold; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #888; padding: 4px 14px 2px;
+      font-family: Arial, sans-serif;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 14px;
+      border-radius: 4px; margin: 1px 6px;
+      cursor: pointer; color: #444;
+      text-decoration: none;
+    }
+    .nav-item:hover { background: #e5e5e5; }
+    .nav-item.active { background: #ddd; color: #000; font-weight: bold; }
+    .nav-icon { width: 14px; height: 14px; border: 1.5px solid #666; border-radius: 2px; display: inline-block; }
+
+    .sidebar-footer {
+      margin-top: auto; border-top: 2px solid #ccc;
+      padding: 12px 14px;
+    }
+    .user-row {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; background: #ccc; border: 2px solid #999; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; }
+    .user-info { font-size: 11px; }
+    .user-info small { display: block; color: #888; font-size: 9px; }
+
+    /* ── Main ── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Top bar */
+    .topbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 20px;
+      border-bottom: 2px solid #ccc;
+      background: #fff;
+    }
+    .topbar-title { font-size: 16px; font-weight: bold; flex: 1; }
+    .topbar-search {
+      display: flex; gap: 6px; align-items: center;
+    }
+    .input-box {
+      border: 2px solid #999; border-radius: 4px;
+      padding: 5px 10px; font-family: inherit; font-size: 12px;
+      width: 160px; background: #fafafa;
+    }
+    .btn {
+      border: 2px solid #333; border-radius: 4px;
+      padding: 5px 12px; background: #333; color: #fff;
+      font-family: inherit; font-size: 12px; cursor: pointer;
+    }
+    .btn-outline {
+      border: 2px solid #999; border-radius: 4px;
+      padding: 5px 10px; background: #fff; color: #333;
+      font-family: inherit; font-size: 12px; cursor: pointer;
+    }
+
+    /* Content area */
+    .content { flex: 1; overflow-y: auto; padding: 18px 20px; background: #fafafa; }
+
+    /* Breadcrumb */
+    .breadcrumb { font-size: 11px; color: #888; margin-bottom: 12px; }
+
+    /* Score row */
+    .score-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .score-card {
+      background: #fff; border: 2px solid #ccc; border-radius: 6px;
+      padding: 14px 16px; position: relative;
+    }
+    .score-card-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+    .score-card-value { font-size: 28px; font-weight: bold; color: #333; margin: 4px 0 2px; }
+    .score-card-sub { font-size: 11px; color: #666; }
+    .score-card-bar { height: 4px; background: #ddd; border-radius: 2px; margin-top: 8px; }
+    .score-card-bar-fill { height: 4px; background: #999; border-radius: 2px; width: 50%; }
+    .score-card-badge {
+      position: absolute; top: 8px; right: 8px;
+      font-size: 9px; background: #eee; border: 1px solid #ccc;
+      border-radius: 10px; padding: 1px 6px; color: #666;
+    }
+    .info-btn { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #999; text-align: center; line-height: 12px; font-size: 9px; color: #999; cursor: pointer; }
+
+    /* Main grid */
+    .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    .widget {
+      background: #fff; border: 2px solid #ccc; border-radius: 6px;
+      padding: 14px; position: relative;
+    }
+    .widget-title { font-size: 12px; font-weight: bold; color: #333; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .widget-title span { flex: 1; }
+
+    /* Timeframe grid */
+    .tf-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .tf-cell { border: 1.5px solid #ccc; border-radius: 4px; padding: 6px 4px; text-align: center; font-size: 10px; }
+    .tf-cell-label { font-size: 9px; color: #888; }
+    .tf-cell-val { font-weight: bold; margin-top: 2px; }
+
+    /* Watchlist inside sidebar */
+    .watchlist-section { margin-top: 10px; border-top: 1px dashed #ccc; padding-top: 8px; }
+    .watchlist-label { font-size: 9px; text-transform: uppercase; color: #888; letter-spacing: 0.08em; padding: 0 14px 4px; font-family: Arial, sans-serif; }
+    .watchlist-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 14px; font-size: 11px; cursor: pointer; }
+    .watchlist-item:hover { background: #e5e5e5; }
+    .wl-ticker { font-weight: bold; }
+    .wl-dir { font-size: 10px; color: #666; }
+    .watchlist-input { margin: 4px 8px; display: flex; gap: 4px; }
+    .watchlist-input input { flex: 1; border: 1.5px solid #ccc; border-radius: 3px; padding: 3px 6px; font-family: inherit; font-size: 11px; }
+    .watchlist-input button { border: 1.5px solid #999; border-radius: 3px; background: #eee; padding: 3px 8px; font-size: 11px; }
+
+    /* Why bullets */
+    .bullet-list { list-style: none; }
+    .bullet-item { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; font-size: 11px; border-bottom: 1px solid #f0f0f0; }
+    .bullet-icon { font-size: 14px; flex-shrink: 0; }
+
+    /* Conflicts */
+    .conflict-alert { border: 2px dashed #ccc; border-radius: 4px; padding: 8px 10px; font-size: 11px; color: #666; margin-bottom: 8px; display: flex; gap: 8px; }
+    .conflict-icon { font-size: 14px; flex-shrink: 0; }
+
+    /* Quick links */
+    .quick-links { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid #ddd; margin-top: 6px; }
+    .quick-link { font-size: 11px; color: #555; border-bottom: 1px solid #999; cursor: pointer; }
+
+    /* Placeholder chart */
+    .chart-placeholder {
+      background: #f5f5f5; border: 2px dashed #ccc; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      height: 80px; font-size: 11px; color: #aaa;
+    }
+
+    /* Reuse badges */
+    .rb { position: absolute; top: 4px; right: 4px; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; font-family: Arial, sans-serif; z-index: 10; }
+    .rb-reuse { background: #4CAF50; color: white; }
+    .rb-new { background: #FF9800; color: white; }
+    .rb-fix { background: #E53935; color: white; }
+
+    /* Mobile note */
+    .mobile-note {
+      background: #fffde7; border: 2px solid #ccc; border-radius: 6px;
+      padding: 10px 14px; margin-bottom: 16px; font-size: 11px; color: #555;
+    }
+    .mobile-note strong { color: #333; }
+
+    /* Notification banner */
+    .notif-banner {
+      background: #f0f0f0; border-left: 4px solid #333;
+      padding: 8px 14px; font-size: 11px; color: #444;
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    /* Meta info bar */
+    .meta-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 11px; color: #888; }
+    .meta-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; display: inline-block; }
+
+    /* Section divider */
+    .section-divider { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #aaa; margin: 14px 0 8px; font-family: Arial, sans-serif; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+    /* Annotation */
+    .annotation {
+      background: #fff9c4; border: 1px dashed #bbb; border-radius: 4px;
+      padding: 6px 10px; font-size: 10px; color: #555; font-family: Arial, sans-serif;
+      margin-top: 6px;
+    }
+    .annotation::before { content: '📝 '; }
+  </style>
+</head>
+<body>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-title">Component Tags</div>
+  <div class="legend-row"><span class="badge-reuse">[REUSE]</span> Existing component</div>
+  <div class="legend-row"><span class="badge-new">[NEW]</span> New component needed</div>
+  <div class="legend-row"><span class="badge-fix">[FIX]</span> Must fix/replace</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!--   FIN-EYE DASHBOARD — REDESIGN WIREFRAME           -->
+<!--   Approach: Sidebar nav + grouped sections         -->
+<!-- ═══════════════════════════════════════════════════ -->
+
+<div class="shell">
+
+  <!-- ────────── LEFT SIDEBAR ────────── -->
+  <aside class="sidebar">
+
+    <!-- Logo -->
+    <div class="sidebar-logo">
+      <h1>Fin-Eye</h1>
+      <p>Market Intelligence · Educational only</p>
+    </div>
+
+    <!-- ANNOTATION: Replace flat 19-item top nav with grouped sidebar -->
+    <div class="annotation" style="margin: 8px; font-size: 9px;">
+      ✅ Grouped sidebar replaces 19-item flat top nav.<br/>Mobile: hamburger drawer.
+    </div>
+
+    <!-- Nav Groups -->
+    <!-- REUSABLE: Nav items use Next.js Link from components/Nav.tsx -->
+    <nav style="position:relative;">
+      <span class="rb rb-new" style="top:0;right:0;font-size:9px;">[NEW] GroupedNav</span>
+
+      <div class="nav-group">
+        <div class="nav-group-label">Overview</div>
+        <a class="nav-item active" href="#">
+          <span class="nav-icon"></span> Dashboard
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Macro Intel
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Indicators
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Fed Policy
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">Sentiment</div>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> News Sentiment
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Retail Sentiment
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Adv. Sentiment
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">Markets</div>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Options
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Sectors
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Insiders
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Earnings
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Shorts
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">Tools</div>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Backtesting
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Hedge
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Portfolio
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Alerts
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Pro Tools
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">Community</div>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Learn
+        </a>
+        <a class="nav-item" href="#">
+          <span class="nav-icon"></span> Community
+        </a>
+      </div>
+    </nav>
+
+    <!-- Watchlist (moved into sidebar) -->
+    <!-- REUSABLE: WatchlistWidget from components/WatchlistWidget.tsx -->
+    <div class="watchlist-section" style="position:relative;">
+      <span class="rb rb-reuse" style="top:6px;right:4px;font-size:9px;">[REUSE] Watchlist</span>
+      <div class="watchlist-label">⭐ Watchlist</div>
+      <div class="watchlist-input">
+        <input placeholder="Add ticker..." />
+        <button>+</button>
+      </div>
+      <div class="watchlist-item"><span class="wl-ticker">AAPL</span><span class="wl-dir">● Active</span></div>
+      <div class="watchlist-item"><span class="wl-ticker">NVDA</span><span class="wl-dir">Bullish</span></div>
+      <div class="watchlist-item"><span class="wl-ticker">MSFT</span><span class="wl-dir">Neutral</span></div>
+    </div>
+
+    <!-- User footer -->
+    <div class="sidebar-footer">
+      <!-- REUSABLE: UserMenu from components/Nav.tsx -->
+      <div class="user-row" style="position:relative;">
+        <span class="rb rb-reuse" style="top:-4px;right:0;font-size:9px;">[REUSE] UserMenu</span>
+        <div class="avatar">D</div>
+        <div class="user-info">
+          dev@mock.local
+          <small>Pro Plan ✦</small>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+  <!-- END SIDEBAR -->
+
+  <!-- ────────── MAIN AREA ────────── -->
+  <div class="main">
+
+    <!-- Top Bar -->
+    <div class="topbar">
+      <!-- Hamburger (mobile) -->
+      <button class="btn-outline" style="display:none; padding:4px 8px; font-size:16px;">☰</button>
+
+      <div class="topbar-title">
+        AAPL Intelligence
+        <span style="font-size:11px; font-weight:normal; color:#888; margin-left:8px;">Dashboard · Apple Inc.</span>
+      </div>
+
+      <!-- Search ticker -->
+      <!-- REUSABLE: form + Input from app/page.tsx -->
+      <div class="topbar-search" style="position:relative;">
+        <span class="rb rb-reuse" style="top:-6px;right:-6px;">[REUSE] TickerSearch</span>
+        <input class="input-box" placeholder="Enter Ticker..." value="AAPL" />
+        <button class="btn">Analyze</button>
+        <!-- Tour button moved to Help icon -->
+        <button class="btn-outline" title="Help & Tour" style="padding:5px 8px;">?</button>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- Breadcrumb + Meta -->
+      <!-- NEW: Breadcrumb component for context -->
+      <div class="breadcrumb">Dashboard › AAPL · Apple Inc.</div>
+
+      <!-- Snapshot meta bar -->
+      <!-- REUSABLE: SnapshotMeta from app/page.tsx -->
+      <div class="meta-bar" style="position:relative;">
+        <span class="rb rb-reuse" style="top:-8px;right:0;">[REUSE] SnapshotMeta</span>
+        <span class="meta-dot" style="background:#4CAF50;"></span>
+        GAS computed just now · from cache
+        <span style="color:#aaa;">|</span>
+        T:50 &nbsp; S:50 &nbsp; M:50
+      </div>
+
+      <!-- ── ROW 1: Score KPI Cards ── -->
+      <div class="section-divider">Signal Overview</div>
+      <div class="score-row">
+
+        <!-- GAS Score -->
+        <!-- REUSABLE: MarketWeatherWidget from components/MarketWeatherWidget.tsx -->
+        <div class="score-card" style="position:relative; border-style:dashed;">
+          <span class="rb rb-reuse">[REUSE] GASWidget</span>
+          <div class="score-card-label">Global Alignment Score <span class="info-btn">i</span></div>
+          <div class="score-card-value">50</div>
+          <div class="score-card-sub">Mixed Signals</div>
+          <div class="score-card-bar"><div class="score-card-bar-fill" style="width:50%;"></div></div>
+          <div class="annotation" style="margin-top:6px;">Remove amber glow border — use bar fill for direction instead.</div>
+        </div>
+
+        <!-- Technical Score -->
+        <!-- REUSABLE: RegimeWidget / TimeframeGrid from components/ -->
+        <div class="score-card" style="position:relative;">
+          <span class="rb rb-reuse">[REUSE] TechScore</span>
+          <div class="score-card-badge">40% of GAS</div>
+          <div class="score-card-label">Technical Score <span class="info-btn">i</span></div>
+          <div class="score-card-value">50.0</div>
+          <div class="score-card-sub">Range-Bound</div>
+          <div class="score-card-bar"><div class="score-card-bar-fill" style="width:50%;"></div></div>
+        </div>
+
+        <!-- Sentiment Score -->
+        <div class="score-card" style="position:relative;">
+          <span class="rb rb-new">[NEW] SentimentKPI</span>
+          <div class="score-card-badge">30% of GAS</div>
+          <div class="score-card-label">News Sentiment <span class="info-btn">i</span></div>
+          <div class="score-card-value">—</div>
+          <div class="score-card-sub">No data yet</div>
+          <div class="score-card-bar"><div class="score-card-bar-fill" style="width:50%;"></div></div>
+        </div>
+
+        <!-- Macro Score -->
+        <div class="score-card" style="position:relative;">
+          <span class="rb rb-new">[NEW] MacroKPI</span>
+          <div class="score-card-badge">30% of GAS</div>
+          <div class="score-card-label">Macro Score <span class="info-btn">i</span></div>
+          <div class="score-card-value">50</div>
+          <div class="score-card-sub">Neutral</div>
+          <div class="score-card-bar"><div class="score-card-bar-fill" style="width:50%;"></div></div>
+        </div>
+      </div>
+
+      <!-- ── ROW 2: Regime + Timeframes ── -->
+      <div class="main-grid">
+
+        <!-- Regime Widget -->
+        <!-- REUSABLE: RegimeWidget from components/RegimeWidget.tsx -->
+        <div class="widget" style="position:relative;">
+          <span class="rb rb-reuse">[REUSE] RegimeWidget</span>
+          <div class="widget-title"><span>Market Regime</span></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div style="border:2px solid #ccc; border-radius:4px; padding:10px;">
+              <div style="font-size:9px; text-transform:uppercase; color:#888;">Technical Regime</div>
+              <div style="font-size:16px; font-weight:bold; margin-top:4px;">Range-Bound</div>
+              <button class="btn-outline" style="margin-top:6px; font-size:10px; padding:3px 8px;">Why? ↗</button>
+            </div>
+            <div style="border:2px solid #ccc; border-radius:4px; padding:10px;">
+              <div style="font-size:9px; text-transform:uppercase; color:#888;">Volatility Regime</div>
+              <div style="font-size:16px; font-weight:bold; margin-top:4px;">Unknown</div>
+              <button class="btn-outline" style="margin-top:6px; font-size:10px; padding:3px 8px;">Why? ↗</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timeframe Grid -->
+        <!-- REUSABLE: TimeframeGrid from components/TimeframeGrid.tsx -->
+        <div class="widget" style="position:relative;">
+          <span class="rb rb-reuse">[REUSE] TimeframeGrid</span>
+          <div class="widget-title">
+            <span>Technical Consensus</span>
+            <span style="font-size:12px; color:#888; font-weight:normal;">50.0 / 100</span>
+          </div>
+          <div class="tf-grid">
+            <div class="tf-cell"><div class="tf-cell-label">1D</div><div class="tf-cell-val">—</div></div>
+            <div class="tf-cell"><div class="tf-cell-label">4H</div><div class="tf-cell-val">—</div></div>
+            <div class="tf-cell"><div class="tf-cell-label">1W</div><div class="tf-cell-val">—</div></div>
+            <div class="tf-cell"><div class="tf-cell-label">1M</div><div class="tf-cell-val">—</div></div>
+          </div>
+          <div style="font-size:10px; color:#aaa; margin-top:8px; text-align:center;">[Train models to see signals]</div>
+        </div>
+      </div>
+
+      <!-- ── ROW 3: Why Moving + Conflicts ── -->
+      <div class="main-grid">
+
+        <!-- Why Moving -->
+        <!-- REUSABLE: WhyMovingPanel from components/WhyMovingPanel.tsx -->
+        <div class="widget" style="position:relative;">
+          <span class="rb rb-reuse">[REUSE] WhyMovingPanel</span>
+          <div class="widget-title">🔍 Why is AAPL moving?</div>
+          <ul class="bullet-list">
+            <li class="bullet-item">
+              <span class="bullet-icon">📈</span>
+              <span>Technical momentum is neutral — no timeframes trained yet. (confidence: 50/100)</span>
+            </li>
+            <li class="bullet-item">
+              <span class="bullet-icon">📰</span>
+              <span>News sentiment data not yet available for this symbol.</span>
+            </li>
+            <li class="bullet-item">
+              <span class="bullet-icon">🌐</span>
+              <span>Macro backdrop is 'Neutral' (score: 50/100). Conditions broadly neutral.</span>
+            </li>
+          </ul>
+          <div style="font-size:9px; color:#aaa; margin-top:8px; border-top:1px solid #eee; padding-top:6px;">
+            Educational analysis only · not investment advice.
+          </div>
+        </div>
+
+        <!-- Conflict Detector -->
+        <!-- REUSABLE: ConflictDetector from components/ConflictDetector.tsx -->
+        <div class="widget" style="position:relative;">
+          <span class="rb rb-reuse">[REUSE] ConflictDetector</span>
+          <div class="widget-title">⚡ Signal Conflicts</div>
+          <div class="conflict-alert">
+            <span class="conflict-icon">✅</span>
+            No major conflicts detected — layers are broadly aligned.
+          </div>
+          <div class="chart-placeholder">[ Conflict radar / heatmap placeholder ]</div>
+        </div>
+      </div>
+
+      <!-- ── ROW 4: Quick Links ── -->
+      <div class="section-divider">Explore More</div>
+      <div class="quick-links">
+        <a class="quick-link" href="#">View Full Macro Intel →</a>
+        <a class="quick-link" href="#">View Full Sentiment Intel →</a>
+        <a class="quick-link" href="#">Backtest this Symbol →</a>
+        <a class="quick-link" href="#">Portfolio Risk →</a>
+      </div>
+
+    </div><!-- end .content -->
+  </div><!-- end .main -->
+</div><!-- end .shell -->
+
+<!-- ── MOBILE LAYOUT NOTE ── -->
+<div style="max-width: 500px; margin: 24px auto; padding: 20px; border: 2px dashed #999; border-radius: 8px; font-family: Arial, sans-serif;">
+  <h2 style="font-size:14px; margin-bottom:12px;">📱 Mobile Layout Notes (390px)</h2>
+
+  <div style="background:#f5f5f5; border:2px solid #ccc; border-radius:6px; padding:14px; position:relative;">
+    <span class="rb rb-new" style="top:6px;right:6px;">[NEW] MobileNav</span>
+    <!-- Mobile topbar -->
+    <div style="display:flex; align-items:center; gap:8px; border-bottom:1px solid #ccc; padding-bottom:10px; margin-bottom:10px;">
+      <button style="border:2px solid #999; background:#fff; border-radius:4px; padding:4px 8px; font-size:14px;">☰</button>
+      <span style="font-weight:bold; font-size:14px;">Fin-Eye</span>
+      <input style="flex:1; border:1.5px solid #ccc; border-radius:3px; padding:4px 8px; font-size:11px;" placeholder="AAPL" />
+      <button style="border:2px solid #333; background:#333; color:#fff; border-radius:4px; padding:4px 8px; font-size:11px;">Go</button>
+    </div>
+    <div style="font-size:10px; color:#888;">
+      ↑ Sidebar slides in from left as a drawer on mobile.<br/>
+      Nav groups become an accordion inside the drawer.
+    </div>
+    <div style="margin-top:10px; border:1.5px solid #ccc; border-radius:4px; padding:8px;">
+      <div style="font-size:11px; font-weight:bold; margin-bottom:4px;">KPIs stack vertically:</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+        <div style="border:1px solid #ccc; border-radius:3px; padding:6px; text-align:center;"><div style="font-size:9px;color:#888;">GAS</div><div style="font-weight:bold;">50</div></div>
+        <div style="border:1px solid #ccc; border-radius:3px; padding:6px; text-align:center;"><div style="font-size:9px;color:#888;">Technical</div><div style="font-weight:bold;">50</div></div>
+        <div style="border:1px solid #ccc; border-radius:3px; padding:6px; text-align:center;"><div style="font-size:9px;color:#888;">Sentiment</div><div style="font-weight:bold;">—</div></div>
+        <div style="border:1px solid #ccc; border-radius:3px; padding:6px; text-align:center;"><div style="font-size:9px;color:#888;">Macro</div><div style="font-weight:bold;">50</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
