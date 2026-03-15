@@ -17,16 +17,6 @@ from app.services.macro_scoring import compute_macro_score
 
 
 class FeatureBuilder(Protocol):
-    """
-    Abstract interface for building model-ready feature matrices.
-
-    Implementations are responsible for:
-      - Pulling OHLCV data
-      - Joining macro indicators and sentiment aggregates
-      - Computing technical indicators
-      - Aligning everything on a common time index
-    """
-
     def build_features(
         self,
         symbol: str,
@@ -39,12 +29,8 @@ class FeatureBuilder(Protocol):
 
 class StubFeatureBuilder:
     """
-    Minimal placeholder implementation of FeatureBuilder.
-
-    This returns a synthetic DataFrame whose columns match TechnicalFeatureRow
-    so that training code can be developed and tested in isolation. A future
-    session will replace this with a real implementation wired to the DB and
-    indicator calculations.
+    Minimal placeholder — returns synthetic data matching TechnicalFeatureRow.
+    Used for unit tests and CI where no DB is available.
     """
 
     def build_features(
@@ -58,14 +44,12 @@ class StubFeatureBuilder:
         if index.empty:
             return pd.DataFrame()
 
-        # Generate returns covering all 3 target classes (-1, 0, 1) expected by the ML script
-        np.random.seed(42)  # For reproducible stubs
+        np.random.seed(42)
         alt_returns = np.random.choice([-0.01, 0.0, 0.01], size=len(index))
 
         data = {
             "symbol": [symbol] * len(index),
             "timestamp": index,
-            # Simple synthetic values; real implementation will use actual indicators
             "return_1d": alt_returns,
             "return_5d": 0.0,
             "volatility_20d": 0.1,
@@ -89,7 +73,6 @@ class StubFeatureBuilder:
         }
 
         df = pd.DataFrame(data, index=index)
-        # Validate against TechnicalFeatureRow schema for early mismatch detection
         for row in df.head(5).to_dict(orient="records"):
             TechnicalFeatureRow(**row)
         return df
@@ -98,11 +81,7 @@ class StubFeatureBuilder:
 class DbFeatureBuilder:
     """
     DB-backed FeatureBuilder for daily (1d) timeframe.
-
-    Currently implements:
-      - OHLCV-based price features (returns, volatility, RSI-14, Bollinger bands)
-      - Macro backdrop (VIX level) and placeholder Macro Score
-      - Synthetic defaults for sentiment-related fields
+    Falls back to StubFeatureBuilder for intraday (no 1h/4h bars in DB yet).
     """
 
     def __init__(self, db: Session) -> None:
@@ -116,10 +95,8 @@ class DbFeatureBuilder:
         end: datetime,
     ) -> pd.DataFrame:
         if timeframe in (Timeframe.ONE_HOUR, Timeframe.FOUR_HOUR):
-            # Fallback to stub for intraday since our DB doesn't have 1h/4h bars yet
             return StubFeatureBuilder().build_features(symbol, timeframe, start, end)
 
-        # 1. Load OHLCV from DB
         rows = (
             self.db.query(StockOHLCV)
             .filter(
@@ -149,81 +126,54 @@ class DbFeatureBuilder:
         )
         ohlcv_df = ohlcv_df.set_index("timestamp").sort_index()
 
-        # Resample to weekly bars if requested (use week ending Friday for equities)
         if timeframe is Timeframe.ONE_WEEK:
             ohlcv_df = (
                 ohlcv_df.resample("W-FRI", label="right", closed="right")
-                .agg(
-                    {
-                        "open": "first",
-                        "high": "max",
-                        "low": "min",
-                        "close": "last",
-                        "volume": "sum",
-                    }
-                )
+                .agg({"open": "first", "high": "max", "low": "min",
+                      "close": "last", "volume": "sum"})
                 .dropna(subset=["open", "high", "low", "close"])
             )
-        # Resample to monthly bars if requested (use month end)
         elif timeframe is Timeframe.ONE_MONTH:
             ohlcv_df = (
                 ohlcv_df.resample("ME", label="right", closed="right")
-                .agg(
-                    {
-                        "open": "first",
-                        "high": "max",
-                        "low": "min",
-                        "close": "last",
-                        "volume": "sum",
-                    }
-                )
+                .agg({"open": "first", "high": "max", "low": "min",
+                      "close": "last", "volume": "sum"})
                 .dropna(subset=["open", "high", "low", "close"])
             )
 
         close = ohlcv_df["close"]
 
-        # 2. Basic technical indicators
-        return_1d = close.pct_change(1).fillna(0.0)
-        return_5d = close.pct_change(5).fillna(0.0)
+        return_1d      = close.pct_change(1).fillna(0.0)
+        return_5d      = close.pct_change(5).fillna(0.0)
         volatility_20d = close.pct_change(1).rolling(20).std().fillna(0.0)
 
-        # RSI-14 (Wilder's smoothing)
-        delta = close.diff()
-        gain = delta.clip(lower=0)
-        loss = -delta.clip(upper=0)
-        roll_up = gain.rolling(14).mean()
+        delta     = close.diff()
+        gain      = delta.clip(lower=0)
+        loss      = -delta.clip(upper=0)
+        roll_up   = gain.rolling(14).mean()
         roll_down = loss.rolling(14).mean()
-        rs = roll_up / (roll_down.replace(0, np.nan))
-        rsi_14 = 100 - (100 / (1 + rs))
-        rsi_14 = rsi_14.fillna(50.0)
+        rs        = roll_up / (roll_down.replace(0, np.nan))
+        rsi_14    = (100 - (100 / (1 + rs))).fillna(50.0)
 
-        # Bollinger Bands (20-day, 2 std)
         rolling_mean = close.rolling(20).mean()
-        rolling_std = close.rolling(20).std()
-        bb_middle = rolling_mean.fillna(close)
-        bb_upper = (rolling_mean + 2 * rolling_std).fillna(close)
-        bb_lower = (rolling_mean - 2 * rolling_std).fillna(close)
+        rolling_std  = close.rolling(20).std()
+        bb_middle    = rolling_mean.fillna(close)
+        bb_upper     = (rolling_mean + 2 * rolling_std).fillna(close)
+        bb_lower     = (rolling_mean - 2 * rolling_std).fillna(close)
 
-        # MACD (12, 26, 9) on close
-        ema_12 = close.ewm(span=12, adjust=False).mean()
-        ema_26 = close.ewm(span=26, adjust=False).mean()
-        macd = (ema_12 - ema_26).fillna(0.0)
+        ema_12     = close.ewm(span=12, adjust=False).mean()
+        ema_26     = close.ewm(span=26, adjust=False).mean()
+        macd       = (ema_12 - ema_26).fillna(0.0)
         macd_signal = macd.ewm(span=9, adjust=False).mean().fillna(0.0)
-        macd_hist = (macd - macd_signal).fillna(0.0)
+        macd_hist  = (macd - macd_signal).fillna(0.0)
 
-        # 3. Macro indicators per date (simple join) -> macro_score series
         dates = ohlcv_df.index.normalize().unique()
         macro_rows = (
             self.db.query(MacroIndicator)
             .filter(
                 MacroIndicator.indicator_name.in_(
-                    [
-                        "vix",
-                        "yield_spread_10y_2y",
-                        "fed_funds_rate",
-                        "unemployment_rate",
-                        "cpi_yoy",
-                    ]
+                    ["vix", "yield_spread_10y_2y", "fed_funds_rate",
+                     "unemployment_rate", "cpi_yoy"]
                 ),
                 MacroIndicator.date >= dates.min().date(),
                 MacroIndicator.date <= dates.max().date(),
@@ -233,14 +183,8 @@ class DbFeatureBuilder:
         )
         macro_df = (
             pd.DataFrame(
-                [
-                    {
-                        "date": r.date,
-                        "indicator_name": r.indicator_name,
-                        "value": r.value,
-                    }
-                    for r in macro_rows
-                ]
+                [{"date": r.date, "indicator_name": r.indicator_name, "value": r.value}
+                 for r in macro_rows]
             )
             if macro_rows
             else pd.DataFrame(columns=["date", "indicator_name", "value"])
@@ -252,47 +196,44 @@ class DbFeatureBuilder:
                 .sort_index()
                 .ffill()
             )
-            wide = wide.reindex(dates, method="ffill")
+            # BUG FIX: reindex(..., method="ffill") was removed in pandas 2.0.
+            # Use .reindex(dates) followed by .ffill() instead.
+            wide = wide.reindex(dates).ffill()
         else:
             wide = pd.DataFrame(index=dates)
 
-        vix_series = wide.get("vix", pd.Series(20.0, index=wide.index)).fillna(20.0)
-        yield_series = wide.get(
-            "yield_spread_10y_2y", pd.Series(0.0, index=wide.index)
-        ).fillna(0.0)
+        vix_series   = wide.get("vix", pd.Series(20.0, index=wide.index)).fillna(20.0)
+        yield_series = wide.get("yield_spread_10y_2y", pd.Series(0.0, index=wide.index)).fillna(0.0)
 
-        # Compute macro score per date using the shared heuristic
         macro_scores = []
         for d in wide.index:
             indicators = {
                 "fed_funds_rate": float(wide.at[d, "fed_funds_rate"])
-                if "fed_funds_rate" in wide.columns and pd.notna(wide.at[d, "fed_funds_rate"])
-                else None,
+                    if "fed_funds_rate" in wide.columns and pd.notna(wide.at[d, "fed_funds_rate"])
+                    else None,
                 "unemployment_rate": float(wide.at[d, "unemployment_rate"])
-                if "unemployment_rate" in wide.columns and pd.notna(wide.at[d, "unemployment_rate"])
-                else None,
+                    if "unemployment_rate" in wide.columns and pd.notna(wide.at[d, "unemployment_rate"])
+                    else None,
                 "yield_spread_10y_2y": float(wide.at[d, "yield_spread_10y_2y"])
-                if "yield_spread_10y_2y" in wide.columns and pd.notna(wide.at[d, "yield_spread_10y_2y"])
-                else None,
+                    if "yield_spread_10y_2y" in wide.columns and pd.notna(wide.at[d, "yield_spread_10y_2y"])
+                    else None,
                 "cpi_yoy": float(wide.at[d, "cpi_yoy"])
-                if "cpi_yoy" in wide.columns and pd.notna(wide.at[d, "cpi_yoy"])
-                else None,
+                    if "cpi_yoy" in wide.columns and pd.notna(wide.at[d, "cpi_yoy"])
+                    else None,
                 "vix": float(wide.at[d, "vix"])
-                if "vix" in wide.columns and pd.notna(wide.at[d, "vix"])
-                else None,
+                    if "vix" in wide.columns and pd.notna(wide.at[d, "vix"])
+                    else None,
             }
             _ms = compute_macro_score(indicators)
             macro_scores.append(_ms.score if hasattr(_ms, "score") else _ms.get("score", 50.0))
         macro_score_by_date = pd.Series(macro_scores, index=wide.index).fillna(50.0)
 
-        # Map date-indexed macro series back to timestamp index (same order as ohlcv_df)
-        vix_aligned = pd.Series(vix_series.values, index=ohlcv_df.index)
+        vix_aligned   = pd.Series(vix_series.values, index=ohlcv_df.index)
         yield_aligned = pd.Series(yield_series.values, index=ohlcv_df.index)
-        macro_score = pd.Series(macro_score_by_date.values, index=ohlcv_df.index)
+        macro_score   = pd.Series(macro_score_by_date.values, index=ohlcv_df.index)
 
-        # 4. Sentiment aggregates (news) + source diversity
         start_date = dates.min().date()
-        end_date = dates.max().date()
+        end_date   = dates.max().date()
 
         sent_rows = (
             self.db.query(SentimentAggregate)
@@ -307,17 +248,15 @@ class DbFeatureBuilder:
         )
         sent_df = (
             pd.DataFrame(
-                [
-                    {
-                        "date": r.date,
-                        "mentions": int(r.mentions or 0),
-                        "score": float(r.sentiment_score or 0.0),
-                    }
-                    for r in sent_rows
-                ]
+                [{"date": r.date, "mentions": int(r.mentions or 0),
+                  "score": float(r.sentiment_score or 0.0)}
+                 for r in sent_rows]
             ).set_index("date")
             if sent_rows
-            else pd.DataFrame(columns=["mentions", "score"], index=pd.Index([], name="date"))
+            else pd.DataFrame(
+                columns=["mentions", "score"],
+                index=pd.Index([], name="date"),
+            )
         )
 
         sent_df = sent_df.reindex(wide.index).fillna({"mentions": 0, "score": 0.0})
@@ -329,11 +268,10 @@ class DbFeatureBuilder:
             d = den.rolling(window).sum()
             return (n / d.replace(0, np.nan)).fillna(0.0)
 
-        news_1d = weighted_roll(1)
-        news_7d = weighted_roll(7)
+        news_1d  = weighted_roll(1)
+        news_7d  = weighted_roll(7)
         news_30d = weighted_roll(30)
 
-        # Source diversity: distinct news sources observed over last 30 days (uses NewsArticle)
         article_rows = (
             self.db.query(NewsArticle)
             .filter(
@@ -348,22 +286,19 @@ class DbFeatureBuilder:
             d = a.published_at.date()
             sources_by_date.setdefault(d, set()).add(a.source or "Unknown")
 
-        # Sliding window distinct count
         from collections import Counter, deque
-        window = deque()
+        window_q: deque = deque()
         counts: Counter = Counter()
         diversity_values = []
         for d in wide.index:
-            cur = d.date()
-            # add current date sources
+            cur    = d.date()
             todays = sources_by_date.get(cur, set())
-            window.append((cur, todays))
+            window_q.append((cur, todays))
             for s in todays:
                 counts[s] += 1
-            # drop older than 30 days window (inclusive)
             cutoff = cur - timedelta(days=29)
-            while window and window[0][0] < cutoff:
-                old_date, old_sources = window.popleft()
+            while window_q and window_q[0][0] < cutoff:
+                old_date, old_sources = window_q.popleft()
                 for s in old_sources:
                     counts[s] -= 1
                     if counts[s] <= 0:
@@ -371,44 +306,37 @@ class DbFeatureBuilder:
             diversity_values.append(float(len(counts)))
         source_div_30d_by_date = pd.Series(diversity_values, index=wide.index).replace(0.0, 1.0)
 
-        # 5. Assemble feature DataFrame
         df = pd.DataFrame(
             {
-                "symbol": symbol,
+                "symbol":    symbol,
                 "timestamp": ohlcv_df.index,
                 "return_1d": return_1d,
                 "return_5d": return_5d,
                 "volatility_20d": volatility_20d,
-                "rsi_14": rsi_14,
-                "macd": macd,
+                "rsi_14":    rsi_14,
+                "macd":      macd,
                 "macd_signal": macd_signal,
                 "macd_hist": macd_hist,
-                "bb_upper": bb_upper,
+                "bb_upper":  bb_upper,
                 "bb_middle": bb_middle,
-                "bb_lower": bb_lower,
-                # Sentiment (news)
-                "news_sentiment_1d": pd.Series(news_1d.values, index=ohlcv_df.index),
-                "news_sentiment_7d": pd.Series(news_7d.values, index=ohlcv_df.index),
+                "bb_lower":  bb_lower,
+                "news_sentiment_1d":  pd.Series(news_1d.values, index=ohlcv_df.index),
+                "news_sentiment_7d":  pd.Series(news_7d.values, index=ohlcv_df.index),
                 "news_sentiment_30d": pd.Series(news_30d.values, index=ohlcv_df.index),
                 "news_source_diversity_30d": pd.Series(
                     source_div_30d_by_date.values, index=ohlcv_df.index
                 ),
-                # Macro backdrop
-                "macro_score": macro_score,
-                "vix_level": vix_aligned,
+                "macro_score":        macro_score,
+                "vix_level":          vix_aligned,
                 "yield_spread_10y_2y": yield_aligned,
-                # Temporal
                 "day_of_week": [ts.weekday() for ts in ohlcv_df.index],
-                "month": [ts.month for ts in ohlcv_df.index],
-                "hour_of_day": [ts.hour for ts in ohlcv_df.index],
+                "month":       [ts.month    for ts in ohlcv_df.index],
+                "hour_of_day": [ts.hour     for ts in ohlcv_df.index],
             },
             index=ohlcv_df.index,
         )
 
-        # Validate against TechnicalFeatureRow schema for early mismatch detection
         for row in df.head(5).to_dict(orient="records"):
             TechnicalFeatureRow(**row)
 
         return df
-
-

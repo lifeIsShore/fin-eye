@@ -1,30 +1,76 @@
 # Fin-Eye Model Inspection Report
 
-**Generated:** 2026-03-16 01:14:31  
+**Generated:** 2026-03-16 01:31:43  
 **Registry:** all  
 **Symbol filter:** all  
-**Total records in registry:** 11  
-**Active models:** 6  
+**Total records:** 13  |  **Active models:** 8
 
 ## Summary
 
 | Status | Count |
 |--------|-------|
 | ✅ PASS — safe to deploy | 1 |
-| ⚠️ WARN — review before deploying | 2 |
-| ❌ FAIL — do not use | 3 |
+| ⚠️ WARN — review | 2 |
+| ❌ FAIL — do not use | 5 |
 
 ### Models Safe for GAS
 
 - **AAPL / 4h** — XGBOOST — Sharpe `1.847`
 
-> ℹ️ 5 older training run(s) superseded in registry.
+> ℹ️ 5 older run(s) superseded in registry.
 
 ---
 
 ## LLM Assessment (DeepSeek R1 32B)
 
-> ⚠️ *LLM call failed: [LLM ERROR] Request timed out. Try increasing timeout_seconds in config.yaml.*
+### OVERALL HEALTH  
+Most models cannot be trusted in production due to negative or low Sharpe ratios, below-random accuracy, and suspicious artifacts. Only AAPL/4h [backend] passes all checks but should be monitored for overfitting.
+
+---
+
+### ROOT CAUSE ANALYSIS  
+
+1. **AAPL/1d [backend] (FAIL)**  
+   - The model has a positive Sharpe (2.55) but accuracy below 50% (49%), indicating it predicts the opposite of intended.  
+   - A 2.1KB logistic artifact suggests minimal data or fallback logic, leading to anti-predictive behavior.
+
+2. **AAPL/1h [store] (FAIL)**  
+   - Negative Sharpe (-0.269) and accuracy (37%) indicate the model is actively harmful.  
+   - Tiny logistic artifact (1.9KB) suggests minimal data or fallback logic, likely causing poor performance.
+
+3. **BTC-USD/1h [backend] (FAIL)**  
+   - Negative Sharpe (-0.373) despite 52.2% accuracy implies the model produces unprofitable signals.  
+   - Minimal logistic artifact (2.2KB) and large validation set (3415 rows) suggest data issues or poor feature engineering.
+
+4. **AAPL/1wk [backend] (WARN)**  
+   - Sharpe of 10.127 is unusually high, likely due to small validation size or overfitting.  
+   - Tiny logistic artifact (2.1KB) indicates minimal data or fallback logic.
+
+---
+
+### PRIORITY FIXES  
+
+1. **Fix Data Handling in AAPL/1d**  
+   Investigate why a positive Sharpe exists with below-random accuracy. Validate return calculations and target distribution.  
+   File: `data_processor.py`
+
+2. **Investigate Tiny Logistic Artifacts**  
+   Ensure logistic models are properly trained and saved. Check for fallback logic or data truncation.  
+   File: `model_saver.py`
+
+3. **Improve BTC-USD Models**  
+   Add more features or adjust hyperparameters to capture Bitcoin's volatility better.  
+   Function: `feature_engineer_bitcoin()`
+
+4. **Adjust AAPL/1wk Validation Size**  
+   Increase validation periods for weekly models to reduce overfitting risk.  
+   File: `model_validator.py`
+
+---
+
+### SAFEST MODEL RIGHT NOW  
+
+**AAPL/4h [backend]** is the most trustworthy due to its balanced Sharpe (1.847) and accuracy (57.7%), with no critical issues flagged. XGBoost's artifact size (111KB) confirms a full model, making it suitable for production while others are being fixed.
 
 ---
 
@@ -35,15 +81,16 @@
 | Field | Value |
 |-------|-------|
 | Source | `backend` |
-| Winning model | `LOGISTIC` |
-| Validation Sharpe | `2.5524` |
-| Trained at | `2026-03-03 20:24` |
+| Winner | `LOGISTIC` |
+| Sharpe | `2.5524` |
+| Trained | `2026-03-03 20:24` |
 | Artifact | ✅ `AAPL_1d_winner.joblib` (2KB) |
+| Horizon | `? periods` |
 
-**All model results:**
+**Model competition:**
 
-| Model | Sharpe | Accuracy | Total Return | Notes |
-|-------|--------|----------|--------------|-------|
+| Model | Sharpe | Accuracy | Return | Notes |
+|-------|--------|----------|--------|-------|
 | `logistic` | ✅ `2.552` | ❌ `49.0%` | `+0.643` | **← WINNER** |
 | `xgboost` | ❌ `-0.137` | ❌ `46.9%` | `-0.072` | |
 | `prophet` | ✅ `2.032` | ✅ `54.8%` | `+1.419` | |
@@ -63,17 +110,18 @@
 | Field | Value |
 |-------|-------|
 | Source | `backend` |
-| Winning model | `XGBOOST` |
-| Validation Sharpe | `0.2452` |
-| Trained at | `2026-03-15 22:04` |
+| Winner | `XGBOOST` |
+| Sharpe | `0.2452` |
+| Trained | `2026-03-15 22:04` |
 | Artifact | ✅ `AAPL_1h_winner.joblib` (115KB) |
-| Data rows | `3380` total / `2704` train / `676` val |
-| Target balance | `54.0%` UP |
+| Horizon | `? periods` |
+| Rows | `3380` total / `676` val |
+| Target | `54.0%` UP |
 
-**All model results:**
+**Model competition:**
 
-| Model | Sharpe | Accuracy | Total Return | Notes |
-|-------|--------|----------|--------------|-------|
+| Model | Sharpe | Accuracy | Return | Notes |
+|-------|--------|----------|--------|-------|
 | `logistic` | ✅ `0.603` | ❌ `49.9%` | `+0.098` | |
 | `xgboost` | ⚠️ `0.245` | ⚠️ `50.7%` | `+0.065` | **← WINNER** |
 | `prophet` | ❌ `-0.003` | ✅ `52.4%` | `-0.002` | |
@@ -94,10 +142,11 @@
 | Field | Value |
 |-------|-------|
 | Source | `store` |
-| Winning model | `LOGISTIC` |
-| Validation Sharpe | `-0.2689` |
-| Trained at | `2026-03-02 22:14` |
+| Winner | `LOGISTIC` |
+| Sharpe | `-0.2689` |
+| Trained | `2026-03-02 22:14` |
 | Artifact | ✅ `logistic.joblib` (2KB) |
+| Horizon | `? periods` |
 
 **Issues:**
 
@@ -114,15 +163,16 @@
 | Field | Value |
 |-------|-------|
 | Source | `backend` |
-| Winning model | `LOGISTIC` |
-| Validation Sharpe | `10.1269` |
-| Trained at | `2026-03-03 20:25` |
+| Winner | `LOGISTIC` |
+| Sharpe | `10.1269` |
+| Trained | `2026-03-03 20:25` |
 | Artifact | ✅ `AAPL_1wk_winner.joblib` (2KB) |
+| Horizon | `? periods` |
 
-**All model results:**
+**Model competition:**
 
-| Model | Sharpe | Accuracy | Total Return | Notes |
-|-------|--------|----------|--------------|-------|
+| Model | Sharpe | Accuracy | Return | Notes |
+|-------|--------|----------|--------|-------|
 | `logistic` | ✅ `10.127` | ✅ `59.5%` | `+1.272` | **← WINNER** |
 | `xgboost` | ✅ `9.928` | ✅ `64.3%` | `+1.341` | |
 | `prophet` | ✅ `9.350` | ✅ `76.2%` | `+1.419` | |
@@ -142,17 +192,18 @@
 | Field | Value |
 |-------|-------|
 | Source | `backend` |
-| Winning model | `XGBOOST` |
-| Validation Sharpe | `1.8470` |
-| Trained at | `2026-03-15 22:04` |
+| Winner | `XGBOOST` |
+| Sharpe | `1.8470` |
+| Trained | `2026-03-15 22:04` |
 | Artifact | ✅ `AAPL_4h_winner.joblib` (111KB) |
-| Data rows | `1097` total / `877` train / `220` val |
-| Target balance | `55.1%` UP |
+| Horizon | `? periods` |
+| Rows | `1097` total / `220` val |
+| Target | `55.1%` UP |
 
-**All model results:**
+**Model competition:**
 
-| Model | Sharpe | Accuracy | Total Return | Notes |
-|-------|--------|----------|--------------|-------|
+| Model | Sharpe | Accuracy | Return | Notes |
+|-------|--------|----------|--------|-------|
 | `logistic` | ⚠️ `0.000` | ✅ `57.7%` | `+0.000` | |
 | `xgboost` | ✅ `1.847` | ✅ `57.7%` | `+0.233` | **← WINNER** |
 | `prophet` | ❌ `-1.022` | ❌ `42.3%` | `-0.263` | |
@@ -171,10 +222,11 @@
 | Field | Value |
 |-------|-------|
 | Source | `store` |
-| Winning model | `LOGISTIC` |
-| Validation Sharpe | `-0.2689` |
-| Trained at | `2026-03-02 22:14` |
+| Winner | `LOGISTIC` |
+| Sharpe | `-0.2689` |
+| Trained | `2026-03-02 22:14` |
 | Artifact | ✅ `logistic.joblib` (2KB) |
+| Horizon | `? periods` |
 
 **Issues:**
 
@@ -186,23 +238,72 @@
 
 ---
 
-## Quality Gate Thresholds
+### BTC-USD / 1h &nbsp; ❌ FAIL
 
-| Threshold | Value |
-|-----------|-------|
-| Minimum Sharpe | `0.3` |
-| Minimum Accuracy | `52%` |
-| Suspicious Sharpe | `> 5.0` |
+| Field | Value |
+|-------|-------|
+| Source | `backend` |
+| Winner | `LOGISTIC` |
+| Sharpe | `-0.3731` |
+| Trained | `2026-03-15 22:27` |
+| Artifact | ✅ `BTC-USD_1h_winner.joblib` (2KB) |
+| Horizon | `3 periods` |
+| Rows | `17072` total / `3415` val |
+| Target | `51.0%` UP |
 
-Configured in `.claude/agents/config.yaml`
+**Model competition:**
+
+| Model | Sharpe | Accuracy | Return | Notes |
+|-------|--------|----------|--------|-------|
+| `logistic` | ❌ `-0.373` | ✅ `52.2%` | `-0.668` | **← WINNER** |
+| `xgboost` | ❌ `-0.577` | ⚠️ `51.2%` | `-1.059` | |
+| `prophet` | ❌ `-0.354` | ⚠️ `50.5%` | `-0.588` | |
+
+**Issues:**
+
+- ❌ **[NEGATIVE_SHARPE]** Sharpe is negative (-0.373) — model destroys value
+- ⚠️ **[TINY_LOGISTIC]** Logistic artifact is only 2.2KB — likely fallback or minimal data
+- ℹ️ **[VALIDATION_SIZE]** Validation set: 3415 rows
+
+> ❌ **Do not use.** Fix errors before deploying.
 
 ---
 
-## Next Steps
+### BTC-USD / 4h &nbsp; ❌ FAIL
 
-1. Run `python .claude/agents/data_quality_checker.py --symbol AAPL --check-macro`
-2. Check actual OHLCV row counts before training (see `OHLCVFetcher` in `market_data.py`)
-3. After fixing data: retrain, then re-run `python .claude/agents/inspect_models.py --llm --save-report`
-4. Clean test data: `python .claude/agents/inspect_models.py --clean-test`
+| Field | Value |
+|-------|-------|
+| Source | `backend` |
+| Winner | `LOGISTIC` |
+| Sharpe | `-0.4468` |
+| Trained | `2026-03-15 22:27` |
+| Artifact | ✅ `BTC-USD_4h_winner.joblib` (2KB) |
+| Horizon | `3 periods` |
+| Rows | `4232` total / `847` val |
+| Target | `51.7%` UP |
 
-*Generated by `inspect_models.py` · fin-eye · 2026-03-16 01:14:31*
+**Model competition:**
+
+| Model | Sharpe | Accuracy | Return | Notes |
+|-------|--------|----------|--------|-------|
+| `logistic` | ❌ `-0.447` | ⚠️ `51.7%` | `-0.398` | **← WINNER** |
+| `xgboost` | ❌ `-1.200` | ❌ `49.0%` | `-1.118` | |
+| `prophet` | ❌ `-1.018` | ⚠️ `50.9%` | `-0.833` | |
+
+**Issues:**
+
+- ❌ **[NEGATIVE_SHARPE]** Sharpe is negative (-0.447) — model destroys value
+- ⚠️ **[LOW_ACCURACY]** Accuracy 51.7% below deployment threshold (52%)
+- ⚠️ **[TINY_LOGISTIC]** Logistic artifact is only 2.2KB — likely fallback or minimal data
+- ℹ️ **[VALIDATION_SIZE]** Validation set: 847 rows
+
+> ❌ **Do not use.** Fix errors before deploying.
+
+---
+
+## Thresholds
+
+Min Sharpe: `0.3` · Min Accuracy: `52%` · Suspicious Sharpe: `> 5.0`  
+Configured in `.claude/agents/config.yaml`
+
+*`inspect_models.py` · fin-eye · 2026-03-16 01:31:43*

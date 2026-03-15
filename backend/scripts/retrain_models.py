@@ -18,7 +18,7 @@ def main(symbol: str):
     for tf in TIMEFRAMES:
         logger.info(f"--- Training {symbol} on timeframe {tf} ---")
         try:
-            period = "730d" if tf in ("1h", "4h") else "5y"
+            period = "730d" if tf in ("1h", "4h") else "max"
             fetch_interval = "1h" if tf == "4h" else tf
             records = OHLCVFetcher.fetch_historical_data(symbol, period=period, interval=fetch_interval)
             
