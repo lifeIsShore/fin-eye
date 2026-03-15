@@ -3,7 +3,7 @@
 
 ollama:
   base_url: "http://localhost:11434"
-  timeout_seconds: 120
+  timeout_seconds: 360
   # Set to false to always run in rule-based mode (no LLM calls)
   enabled: true
 
@@ -18,7 +18,7 @@ models:
 # Fin-Eye API base URL (used by gas_sanity_agent and data_quality_checker)
 fineye_api:
   base_url: "http://localhost:8000"
-  timeout_seconds: 10
+  timeout_seconds: 100
 
 # Path to the model registry (relative to fin-eye project root)
 model_registry_path: "backend/data/models/model_registry.jsonl"

@@ -5,11 +5,12 @@ Local model registry inspector for fin-eye.
 
 Reads both registries (backend/data/models/ and model_store/) and produces:
   1. A terminal report with rule-based quality checks
-  2. An optional LLM evaluation via local Ollama (DeepSeek R1 32B)
+  2. An optional LLM evaluation via local Ollama (DeepSeek R1 32B) — STREAMING
   3. An optional markdown report saved to .claude/reports/
 
 The LLM adds a narrative layer ON TOP of the rule-based checks — it reasons
 about WHY the numbers look the way they do and what to do about it.
+Streaming is used so the terminal shows live output instead of hanging silently.
 
 Usage:
     python inspect_models.py                        # rule-based only
@@ -58,9 +59,8 @@ def load_config() -> dict:
     if CONFIG_PATH.exists():
         with open(CONFIG_PATH) as f:
             return yaml.safe_load(f)
-    # Sensible defaults if config.yaml not found
     return {
-        "ollama": {"base_url": "http://localhost:11434", "timeout_seconds": 120, "enabled": True},
+        "ollama": {"base_url": "http://localhost:11434", "timeout_seconds": 360, "enabled": True},
         "models": {"reasoning": "deepseek-r1:32b"},
     }
 
@@ -168,7 +168,7 @@ def detect_issues(record: dict) -> list[dict]:
     elif winner == "xgboost" and size_kb and size_kb > 100:
         add("INFO", "XGBOOST_FULL", f"XGBoost artifact is {size_kb:.0f}KB — full model confirmed")
 
-    # Diagnostics block (populated by updated ml_pipeline.py)
+    # Diagnostics
     diag = record.get("diagnostics", {})
     val_rows       = diag.get("val_rows")
     target_balance = diag.get("target_balance_up_pct")
@@ -244,22 +244,14 @@ def get_active_models(records: list[dict]) -> dict[tuple, dict]:
 # ── Ollama LLM evaluation ─────────────────────────────────────────────────────
 
 def check_ollama(config: dict) -> bool:
-    """Returns True if Ollama is reachable."""
     try:
-        requests.get(
-            f"{config['ollama']['base_url']}/api/tags",
-            timeout=3,
-        )
+        requests.get(f"{config['ollama']['base_url']}/api/tags", timeout=3)
         return True
     except Exception:
         return False
 
 
 def build_llm_prompt(active_models: dict, all_issues: dict) -> str:
-    """
-    Build a single prompt that covers ALL active models in one LLM call.
-    This is more efficient than one call per model.
-    """
     model_summaries = []
 
     for key, record in sorted(active_models.items(), key=lambda x: (x[0][0] or "", x[0][1] or "")):
@@ -278,80 +270,99 @@ def build_llm_prompt(active_models: dict, all_issues: dict) -> str:
         for m_name in ["logistic", "xgboost", "prophet"]:
             m = metrics.get(m_name, {})
             if m:
-                acc = m.get("accuracy", 0)
-                sh  = m.get("sharpe_ratio", -99)
-                model_lines.append(f"    {m_name}: Sharpe={sh:.3f}, Acc={acc:.1%}")
+                model_lines.append(
+                    f"    {m_name}: Sharpe={m.get('sharpe_ratio',-99):.3f}, "
+                    f"Acc={m.get('accuracy',0):.1%}"
+                )
 
-        summary = f"""
-  {symbol}/{tf} [{record.get('_source')}] — VERDICT: {v_label}
-  Winning model: {winner.upper()}, Sharpe={sharpe:.3f}"""
-
+        summary = f"\n  {symbol}/{tf} [{record.get('_source')}] — {v_label}"
+        summary += f"\n  Winner: {winner.upper()}, Sharpe={sharpe:.3f}"
         if model_lines:
             summary += "\n  All models:\n" + "\n".join(model_lines)
-
         if diag:
-            summary += (f"\n  Training data: {diag.get('total_rows','?')} total rows, "
-                       f"{diag.get('val_rows','?')} validation rows, "
-                       f"target={diag.get('target_balance_up_pct','?')}% UP")
-
+            summary += (
+                f"\n  Data: {diag.get('total_rows','?')} rows, "
+                f"{diag.get('val_rows','?')} val, "
+                f"target={diag.get('target_balance_up_pct','?')}% UP, "
+                f"horizon={record.get('horizon_periods','?')} periods"
+            )
         if issue_codes:
-            summary += "\n  Issues detected:\n" + "\n".join(f"    {c}" for c in issue_codes)
+            summary += "\n  Issues:\n" + "\n".join(f"    {c}" for c in issue_codes)
 
         model_summaries.append(summary)
 
-    all_summaries = "\n".join(model_summaries)
+    return f"""You are a senior quantitative analyst reviewing ML model results for a fintech stock signal platform.
 
-    return f"""You are a senior quantitative analyst reviewing ML model training results for a fintech stock signal platform called fin-eye.
+The platform trains XGBoost, Logistic Regression, and Prophet to predict forward price direction.
+Winner per timeframe is selected by highest Sharpe on a hold-out validation set.
+Sharpe is computed from real forward returns. Target is binary (up=1, down=0).
 
-The platform trains three competing models (XGBoost, Logistic Regression, Prophet) per symbol and timeframe.
-The target is predicting 5-period forward price direction (binary: up=1, down=0).
-Winner is selected by highest Sharpe ratio on a validation set.
-Sharpe is computed on real forward returns, not proxies.
+Current active models:
+{"".join(model_summaries)}
 
-Here are ALL the current active models and their quality check results:
+Provide a structured response with these four sections:
 
-{all_summaries}
+1. OVERALL HEALTH (2-3 sentences): Can any of these be trusted in production?
 
-Please provide a structured assessment covering:
+2. ROOT CAUSE ANALYSIS: For each FAIL or WARN, diagnose the most likely cause.
+   Be specific — reference the actual numbers.
 
-1. OVERALL HEALTH (2-3 sentences): Is the model suite in a state worth trusting for production GAS scores?
+3. PRIORITY FIXES (max 4, ordered by impact): What should the developer do first?
+   Name the file or function where applicable.
 
-2. ROOT CAUSE ANALYSIS: For each FAIL or suspicious result, what is the most likely root cause?
-   Focus especially on:
-   - Why Logistic can have positive Sharpe but accuracy < 50% (the 1d case)
-   - Why 1wk has Sharpe ~10 across all models (smells like data issue or tiny sample)
-   - Why store registry models have negative Sharpe and 37% accuracy
-   
-3. WHAT TO FIX FIRST (prioritized list, max 4 items): Concrete actions the developer should take,
-   in order of impact. Be specific — name the file, function, or data issue.
+4. SAFEST MODEL RIGHT NOW: Which symbol/timeframe is most trustworthy and why?
 
-4. WHICH MODEL IS SAFE TO USE RIGHT NOW: Given the current results, which single symbol/timeframe
-   combination would you trust most for a production GAS score, and why?
-
-Be direct, specific, and developer-focused. The reader is a Python developer, not a quant researcher.
-Keep the total response under 400 words.
+Under 400 words. Developer audience, not academic.
 """
 
 
 def call_ollama(prompt: str, config: dict) -> Optional[str]:
-    """Call Ollama and return the response text."""
-    model   = config["models"]["reasoning"]
+    """
+    Streaming Ollama call. Prints tokens as they arrive — no frozen terminal.
+    Returns the full assembled response string.
+    """
+    model    = config["models"]["reasoning"]
     base_url = config["ollama"]["base_url"]
     timeout  = config["ollama"]["timeout_seconds"]
 
-    print(f"\n  [LLM] Calling {model} for assessment... (may take 30–90s)")
+    print(f"\n  [LLM] Calling {model} — streaming response:")
+    print("  " + "─" * 61)
 
+    collected = []
     try:
-        resp = requests.post(
+        with requests.post(
             f"{base_url}/api/generate",
-            json={"model": model, "prompt": prompt, "stream": False},
+            json={"model": model, "prompt": prompt, "stream": True},
             timeout=timeout,
-        )
-        resp.raise_for_status()
-        return resp.json().get("response", "").strip()
+            stream=True,
+        ) as resp:
+            resp.raise_for_status()
+            for raw_line in resp.iter_lines():
+                if not raw_line:
+                    continue
+                try:
+                    chunk = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+                token = chunk.get("response", "")
+                collected.append(token)
+                print(token, end="", flush=True)
+                if chunk.get("done", False):
+                    break
+
+        print()
+        print("  " + "─" * 61)
+        return "".join(collected).strip()
+
     except requests.exceptions.Timeout:
-        return "[LLM ERROR] Request timed out. Try increasing timeout_seconds in config.yaml."
+        print()
+        return (
+            f"[LLM ERROR] Timed out after {timeout}s. "
+            "Try: increase timeout_seconds in config.yaml, "
+            "or use gemma2:27b (faster) by changing models.reasoning in config.yaml."
+        )
     except Exception as e:
+        print()
         return f"[LLM ERROR] {e}"
 
 
@@ -366,6 +377,7 @@ def print_model_block(record: dict, issues: list[dict], show_breakdown: bool = T
     source  = record.get("_source", "?")
     metrics = record.get("metrics", {})
     diag    = record.get("diagnostics", {})
+    horizon = record.get("horizon_periods", "?")
 
     artifact_exists, artifact_path = check_artifact_exists(record)
     size_kb = get_artifact_size_kb(artifact_path) if artifact_exists else None
@@ -376,10 +388,12 @@ def print_model_block(record: dict, issues: list[dict], show_breakdown: bool = T
     print(f"  │  Trained:  {trained}  Artifact: {'✅ ' + f'{size_kb:.0f}KB' if artifact_exists and size_kb else '❌ MISSING'}")
 
     if diag:
-        val_rows   = diag.get("val_rows", "?")
-        total_rows = diag.get("total_rows", "?")
-        target_bal = diag.get("target_balance_up_pct", "?")
-        print(f"  │  Data:     total={total_rows}  val={val_rows}  target={target_bal}% UP")
+        print(
+            f"  │  Data:     total={diag.get('total_rows','?')}  "
+            f"val={diag.get('val_rows','?')}  "
+            f"target={diag.get('target_balance_up_pct','?')}% UP  "
+            f"horizon={horizon}p"
+        )
 
     if metrics and show_breakdown:
         print(f"  │  All models:")
@@ -405,24 +419,26 @@ def print_model_block(record: dict, issues: list[dict], show_breakdown: bool = T
     print(f"  └{'─' * 60}")
 
 
-def print_llm_section(llm_response: str, ollama_available: bool, llm_requested: bool):
+def print_llm_section(llm_response: Optional[str], ollama_available: bool, llm_requested: bool):
     print()
     print("═" * 65)
     print("  LLM ASSESSMENT (DeepSeek R1 32B)")
     print("═" * 65)
 
     if not llm_requested:
-        print("  ℹ️  LLM assessment not requested. Run with --llm to enable.")
+        print("  ℹ️  Not requested. Run with --llm to enable.")
     elif not ollama_available:
         print("  ⚠️  Ollama is not running or unreachable.")
-        print("  Start with: ollama serve")
-        print("  Pull model: ollama pull deepseek-r1:32b")
+        print("  Start: ollama serve")
+        print("  Pull:  ollama pull deepseek-r1:32b")
+        print("  Faster alternative: change models.reasoning to gemma2:27b in config.yaml")
+    elif llm_response and llm_response.startswith("[LLM ERROR]"):
+        print(f"  {llm_response}")
     elif llm_response:
-        print()
-        for line in llm_response.split("\n"):
-            print(f"  {line}")
+        # Already streamed to terminal — just close the section
+        pass
     else:
-        print("  ⚠️  LLM call failed — check Ollama logs.")
+        print("  ⚠️  No response received.")
 
     print("═" * 65)
 
@@ -462,15 +478,14 @@ def build_markdown_report(
         f"**Generated:** {run_at}  ",
         f"**Registry:** {registry_filter}  ",
         f"**Symbol filter:** {symbol_filter or 'all'}  ",
-        f"**Total records in registry:** {len(all_records)}  ",
-        f"**Active models:** {total}  ",
+        f"**Total records:** {len(all_records)}  |  **Active models:** {total}",
         "",
         "## Summary",
         "",
         "| Status | Count |",
         "|--------|-------|",
         f"| ✅ PASS — safe to deploy | {passed} |",
-        f"| ⚠️ WARN — review before deploying | {warned} |",
+        f"| ⚠️ WARN — review | {warned} |",
         f"| ❌ FAIL — do not use | {failed} |",
         "",
     ]
@@ -482,35 +497,24 @@ def build_markdown_report(
             lines.append(f"- **{sym} / {tf}** — {model.upper()} — Sharpe `{sh:.3f}`")
         lines.append("")
     else:
-        lines += [
-            "> ⚠️ **No models currently pass all quality gates.**",
-            "",
-        ]
+        lines += ["> ⚠️ **No models pass all quality gates.**", ""]
 
     if older > 0:
-        lines += [f"> ℹ️ {older} older training run(s) superseded in registry.", ""]
+        lines += [f"> ℹ️ {older} older run(s) superseded in registry.", ""]
 
-    # ── LLM Assessment section ──
+    # LLM section
     lines += ["---", "", "## LLM Assessment (DeepSeek R1 32B)", ""]
 
     if not llm_requested:
-        lines += [
-            "> *LLM assessment not requested. Re-run with `--llm` to include.*",
-            "",
-        ]
+        lines += ["> *Run with `--llm` to include LLM assessment.*", ""]
     elif not ollama_available:
-        lines += [
-            "> ⚠️ *Ollama was not running at report generation time.*  ",
-            "> Start with `ollama serve` and pull `deepseek-r1:32b` to enable.",
-            "",
-        ]
+        lines += ["> ⚠️ *Ollama was not reachable at report time.*", ""]
     elif llm_response and not llm_response.startswith("[LLM ERROR]"):
-        lines.append(llm_response)
-        lines.append("")
+        lines += [llm_response, ""]
     else:
-        lines += [f"> ⚠️ *LLM call failed: {llm_response}*", ""]
+        lines += [f"> ⚠️ *{llm_response}*", ""]
 
-    # ── Per-model detail sections ──
+    # Per-model sections
     lines += ["---", "", "## Model Details", ""]
 
     for key in sorted(active_models.keys(), key=lambda x: (x[0] or "", x[1] or "")):
@@ -524,6 +528,7 @@ def build_markdown_report(
         source  = record.get("_source", "?")
         metrics = record.get("metrics", {})
         diag    = record.get("diagnostics", {})
+        horizon = record.get("horizon_periods", "?")
         v_label, v_icon = verdict(issues)
 
         artifact_exists, artifact_path = check_artifact_exists(record)
@@ -535,28 +540,29 @@ def build_markdown_report(
             "| Field | Value |",
             "|-------|-------|",
             f"| Source | `{source}` |",
-            f"| Winning model | `{winner.upper()}` |",
-            f"| Validation Sharpe | `{sharpe:.4f}` |" if sharpe else "| Validation Sharpe | N/A |",
-            f"| Trained at | `{trained}` |",
-            f"| Artifact | {'✅ `' + Path(artifact_path).name + '` (' + f'{size_kb:.0f}KB)' if artifact_exists and size_kb else '❌ MISSING'} |",
+            f"| Winner | `{winner.upper()}` |",
+            f"| Sharpe | `{sharpe:.4f}` |" if sharpe else "| Sharpe | N/A |",
+            f"| Trained | `{trained}` |",
+            f"| Artifact | {'✅ `' + Path(artifact_path).name + f'` ({size_kb:.0f}KB)' if artifact_exists and size_kb else '❌ MISSING'} |",
+            f"| Horizon | `{horizon} periods` |",
         ]
 
         if diag:
             lines += [
-                f"| Data rows | `{diag.get('total_rows','?')}` total / `{diag.get('train_rows','?')}` train / `{diag.get('val_rows','?')}` val |",
-                f"| Target balance | `{diag.get('target_balance_up_pct','?')}%` UP |",
+                f"| Rows | `{diag.get('total_rows','?')}` total / `{diag.get('val_rows','?')}` val |",
+                f"| Target | `{diag.get('target_balance_up_pct','?')}%` UP |",
             ]
             if diag.get("low_variance_features"):
-                lines.append(f"| Low-variance features | `{diag['low_variance_features']}` |")
+                lines.append(f"| Low-var features | `{diag['low_variance_features']}` |")
 
         lines.append("")
 
         if metrics:
             lines += [
-                "**All model results:**",
+                "**Model competition:**",
                 "",
-                "| Model | Sharpe | Accuracy | Total Return | Notes |",
-                "|-------|--------|----------|--------------|-------|",
+                "| Model | Sharpe | Accuracy | Return | Notes |",
+                "|-------|--------|----------|--------|-------|",
             ]
             for m_name in ["logistic", "xgboost", "prophet"]:
                 m = metrics.get(m_name)
@@ -581,32 +587,21 @@ def build_markdown_report(
                 lines.append(f"- {icon} **[{iss['code']}]** {iss['message']}")
             lines.append("")
 
-        rec_map = {"FAIL": "> ❌ **Do not use.** Fix errors before deploying.",
-                   "WARN": "> ⚠️ **Review warnings before deploying.**",
-                   "PASS": "> ✅ **Passes all quality gates.** Safe for GAS."}
+        rec_map = {
+            "FAIL": "> ❌ **Do not use.** Fix errors before deploying.",
+            "WARN": "> ⚠️ **Review warnings before deploying.**",
+            "PASS": "> ✅ **Passes all quality gates.** Safe for GAS.",
+        }
         lines += [rec_map[v_label], "", "---", ""]
 
     lines += [
-        "## Quality Gate Thresholds",
+        "## Thresholds",
         "",
-        "| Threshold | Value |",
-        "|-----------|-------|",
-        f"| Minimum Sharpe | `{MIN_SHARPE}` |",
-        f"| Minimum Accuracy | `{MIN_ACCURACY:.0%}` |",
-        f"| Suspicious Sharpe | `> {SUSPICIOUS_SHARPE}` |",
-        "",
+        f"Min Sharpe: `{MIN_SHARPE}` · Min Accuracy: `{MIN_ACCURACY:.0%}` · "
+        f"Suspicious Sharpe: `> {SUSPICIOUS_SHARPE}`  ",
         "Configured in `.claude/agents/config.yaml`",
         "",
-        "---",
-        "",
-        "## Next Steps",
-        "",
-        "1. Run `python .claude/agents/data_quality_checker.py --symbol AAPL --check-macro`",
-        "2. Check actual OHLCV row counts before training (see `OHLCVFetcher` in `market_data.py`)",
-        "3. After fixing data: retrain, then re-run `python .claude/agents/inspect_models.py --llm --save-report`",
-        "4. Clean test data: `python .claude/agents/inspect_models.py --clean-test`",
-        "",
-        f"*Generated by `inspect_models.py` · fin-eye · {run_at}*",
+        f"*`inspect_models.py` · fin-eye · {run_at}*",
     ]
 
     return "\n".join(lines)
@@ -619,12 +614,10 @@ def save_markdown_report(content: str, run_at_dt: datetime) -> Path:
     filename    = f"model_report_{run_at_dt.strftime('%Y%m%d_%H%M%S')}.md"
     path        = REPORTS_DIR / filename
     latest_path = REPORTS_DIR / "latest.md"
-
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
     with open(latest_path, "w", encoding="utf-8") as f:
         f.write(content)
-
     return path
 
 
@@ -637,29 +630,29 @@ def clean_test_entries(registry_path: Path):
     records, removed = [], 0
     with open(registry_path, encoding="utf-8") as f:
         for line in f:
-            stripped = line.strip()
-            if not stripped:
+            s = line.strip()
+            if not s:
                 continue
             try:
-                r = json.loads(stripped)
+                r = json.loads(s)
                 if r.get("symbol") == "TEST_SYM":
                     removed += 1
                 else:
-                    records.append(stripped)
+                    records.append(s)
             except Exception:
-                records.append(stripped)
+                records.append(s)
 
     if removed == 0:
-        print(f"[INFO] No TEST_SYM entries found in {registry_path.name}")
+        print(f"[INFO] No TEST_SYM entries found.")
         return
 
     backup = registry_path.with_suffix(".jsonl.bak")
     registry_path.rename(backup)
-    print(f"[INFO] Backed up original to {backup.name}")
+    print(f"[INFO] Backed up to {backup.name}")
     with open(registry_path, "w", encoding="utf-8") as f:
         for line in records:
             f.write(line + "\n")
-    print(f"[INFO] Removed {removed} TEST_SYM entries from {registry_path.name}")
+    print(f"[INFO] Removed {removed} TEST_SYM entries.")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -668,14 +661,12 @@ def main():
     parser = argparse.ArgumentParser(description="fin-eye model registry inspector")
     parser.add_argument("--registry", choices=["backend", "store", "all"], default="all")
     parser.add_argument("--symbol", type=str)
-    parser.add_argument("--flag-issues", action="store_true",
-                        help="Only show models with WARN or ERROR in terminal")
+    parser.add_argument("--flag-issues", action="store_true")
     parser.add_argument("--llm", action="store_true",
-                        help="Run LLM assessment via local Ollama (DeepSeek R1 32B)")
+                        help="Run streaming LLM assessment via Ollama")
     parser.add_argument("--save-report", action="store_true",
                         help="Save markdown report to .claude/reports/")
-    parser.add_argument("--clean-test", action="store_true",
-                        help="Remove TEST_SYM entries from backend registry")
+    parser.add_argument("--clean-test", action="store_true")
     parser.add_argument("--no-model-breakdown", action="store_true")
     args = parser.parse_args()
 
@@ -690,32 +681,27 @@ def main():
 
     all_records = load_all_registries(args.registry)
     if not all_records:
-        print(f"\n[ERROR] No records found.")
+        print("\n[ERROR] No records found.")
         sys.exit(1)
 
     if args.symbol:
         all_records = [r for r in all_records if r.get("symbol") == args.symbol.upper()]
         if not all_records:
-            print(f"\n[ERROR] No records found for {args.symbol.upper()}")
+            print(f"\n[ERROR] No records for {args.symbol.upper()}")
             sys.exit(1)
 
     active_models = get_active_models(all_records)
     all_issues    = {key: detect_issues(record) for key, record in active_models.items()}
 
-    # ── Terminal: header ──
     print()
     print("═" * 65)
     print("  FIN-EYE MODEL REGISTRY INSPECTOR")
     print(f"  Run at: {run_at}")
-    print(f"  Registries: {args.registry}   Symbol filter: {args.symbol or 'all'}")
-    print(f"  Registry records: {len(all_records)}   Active models: {len(active_models)}")
-    if args.llm:
-        print(f"  LLM evaluation: ENABLED (DeepSeek R1 32B)")
-    else:
-        print(f"  LLM evaluation: OFF (use --llm to enable)")
+    print(f"  Registries: {args.registry}   Symbol: {args.symbol or 'all'}")
+    print(f"  Records: {len(all_records)}   Active models: {len(active_models)}")
+    print(f"  LLM: {'ENABLED — DeepSeek R1 32B (streaming)' if args.llm else 'OFF (use --llm)'}")
     print("═" * 65)
 
-    # ── Terminal: per-model blocks ──
     printed = 0
     for key, record in sorted(active_models.items(), key=lambda x: (x[0][0] or "", x[0][1] or "")):
         issues  = all_issues[key]
@@ -727,13 +713,12 @@ def main():
         printed += 1
 
     if printed == 0:
-        print("\n  ✅ All models passed. Use --flag-issues to filter.")
+        print("\n  ✅ All models passed.")
 
     older = len(all_records) - len(active_models)
     if older > 0:
-        print(f"\n  ℹ️  {older} older training run(s) superseded in registry.")
+        print(f"\n  ℹ️  {older} older run(s) superseded.")
 
-    # ── Terminal: summary ──
     total  = len(active_models)
     passed = sum(1 for k in active_models if verdict(all_issues[k])[0] == "PASS")
     warned = sum(1 for k in active_models if verdict(all_issues[k])[0] == "WARN")
@@ -750,21 +735,16 @@ def main():
     print("═" * 65)
     print("  SUMMARY")
     print("═" * 65)
-    print(f"  Total active models:   {total}")
-    print(f"  ✅ PASS (deployable):  {passed}")
-    print(f"  ⚠️  WARN (review):     {warned}")
-    print(f"  ❌ FAIL (do not use):  {failed}")
+    print(f"  Total: {total}  ✅ {passed}  ⚠️  {warned}  ❌ {failed}")
     if deployable:
-        print()
-        print("  Models safe for GAS:")
+        print("\n  Safe for GAS:")
         for d in deployable:
             print(f"    → {d}")
     else:
-        print()
-        print("  ⚠️  No models pass all quality gates right now.")
+        print("\n  ⚠️  No models pass all quality gates.")
     print("═" * 65)
 
-    # ── LLM evaluation ──
+    # LLM
     llm_response     = None
     ollama_available = False
 
@@ -777,18 +757,16 @@ def main():
     elif args.llm:
         print_llm_section(None, False, args.llm)
 
-    # ── Save markdown ──
     if args.save_report:
-        md_content  = build_markdown_report(
+        md = build_markdown_report(
             all_records, active_models, all_issues,
             run_at, args.registry, args.symbol,
             llm_response, ollama_available, args.llm,
         )
-        report_path = save_markdown_report(md_content, run_at_dt)
+        path = save_markdown_report(md, run_at_dt)
         print()
-        print(f"  📄 Report saved:")
-        print(f"     {report_path}")
-        print(f"     {REPORTS_DIR / 'latest.md'}  ← always the most recent")
+        print(f"  📄 Saved: {path}")
+        print(f"     {REPORTS_DIR / 'latest.md'}")
         print()
 
 
