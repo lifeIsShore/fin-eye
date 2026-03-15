@@ -28,7 +28,7 @@ const NAV_ITEMS = [
     { href: "/community", label: "Community" },
 ];
 
-function UserMenu() {
+export function UserMenu() {
     const { user, logout } = useAuth();
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
@@ -150,29 +150,26 @@ export function Nav() {
     const pathname = usePathname();
 
     return (
-        <div className="flex items-center gap-1">
-            <nav className="flex flex-wrap gap-1 text-sm text-slate-400">
-                {NAV_ITEMS.map((item) => {
-                    const active = pathname === item.href;
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className={`
-                                ${item.label === "Learn" ? "tour-learn-tab" : ""}
-                                rounded-md px-2.5 py-1 text-xs font-medium transition-colors
-                                ${active
-                                    ? "bg-slate-800 text-slate-50"
-                                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-100"
-                                }
-                            `}
-                        >
-                            {item.label}
-                        </Link>
-                    );
-                })}
-            </nav>
-            <UserMenu />
-        </div>
+        <nav className="flex w-full items-center gap-1.5 overflow-x-auto py-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            {NAV_ITEMS.map((item) => {
+                const active = pathname === item.href;
+                return (
+                    <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`
+                            ${item.label === "Learn" ? "tour-learn-tab" : ""}
+                            whitespace-nowrap flex-shrink-0 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors
+                            ${active
+                                ? "bg-slate-800 text-slate-50"
+                                : "text-slate-400 hover:bg-slate-900 hover:text-slate-100"
+                            }
+                        `}
+                    >
+                        {item.label}
+                    </Link>
+                );
+            })}
+        </nav>
     );
 }
