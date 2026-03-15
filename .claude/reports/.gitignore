@@ -1,0 +1,5 @@
+# Ignore timestamped report files — they are local inspection snapshots
+model_report_*.md
+
+# latest.md is kept — it is always the most recent run and useful to track
+!latest.md
