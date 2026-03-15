@@ -5,6 +5,104 @@
 
 ---
 
+## TODO #2 — AI Portfolio Allocation & Autonomous Trading Bot
+> **Status:** Planned · **Depends on:** Signal Grade system (implemented in `gas_precompute.py`) + stable model quality  
+> **Vision:** Use the A+→F signal grade as the decision layer for AI-driven portfolio weighting and, ultimately, a fully autonomous trading execution bot.
+
+### Phase 2A — Grade-Based Portfolio Construction (UI + API)
+- [ ] 🔴 **Grade filter on watchlist**: Let users filter their watchlist by signal grade. "Show me only A+ and A signals right now." This is the core portfolio construction UI.
+- [ ] 🔴 **Portfolio builder page** (`/portfolio/build`): A page where users select a universe of symbols, set a minimum grade threshold (e.g., "only A/B"), and fin-eye proposes an equal-weighted or GAS-weighted allocation.
+- [ ] 🟠 **Grade badge on every ticker card**: Everywhere a symbol appears in the UI (watchlist, dashboard, cross-asset view), show the grade badge with color coding:
+  - A+ / A → emerald
+  - B       → sky
+  - C       → amber
+  - D / F   → rose
+- [ ] 🟠 **Grade history sparkline**: Show how the grade has changed over the last 7 days for each symbol. A ticker that was F last week and is now A is more interesting than one that has been A all along.
+- [ ] 🟠 **Grade explanation panel**: When a user clicks a grade, show the exact breakdown — which factors contributed, what the reasons were, and what would need to change to improve the grade.
+- [ ] 🟡 **Grade leaderboard**: A ranked list of all tracked symbols sorted by grade descending, updated every 15 minutes. "Today's top signals" — extremely high engagement feature.
+
+### Phase 2B — AI Allocation Engine
+> The AI reads the current signal grades across a portfolio and proposes allocation weights.
+- [ ] 🔴 **Allocation API endpoint** (`POST /api/v1/portfolio/allocate`): Takes a list of symbols + total capital, returns suggested position sizes based on grade and GAS score. Initial algorithm: grade-weighted with risk caps.
+  - A+ → up to 20% position
+  - A  → up to 15%
+  - B  → up to 10%
+  - C  → up to 5% (monitoring only)
+  - D/F → 0% (no allocation)
+- [ ] 🔴 **AI allocation explainer**: After generating weights, call Claude/DeepSeek R1 (via local Ollama or Claude API) to write a 3-5 sentence plain-English explanation of why the portfolio is weighted this way. "AAPL gets 18% because its A+ grade reflects strong technical alignment with macro support. BTC-USD gets 8% as a B-grade diversifier..."
+- [ ] 🟠 **Rebalancing trigger**: When any symbol's grade changes by 2+ steps (e.g., A → C), fire an alert: "Rebalancing recommended — AAPL dropped from A to C. Suggested action: reduce position by 50%."
+- [ ] 🟠 **Max drawdown guard**: The allocation engine must respect a portfolio-level max drawdown setting. If estimated portfolio drawdown (sum of individual MaxDD × weight) exceeds the user's threshold, reduce all positions proportionally.
+- [ ] 🟡 **Backtesting the grade strategy**: Add a backtest mode where the system simulates grade-based allocation over historical GAS snapshots. Shows what equity curve would look like if you always held A/B signals and exited D/F signals.
+- [ ] 🟡 **Multi-asset class support**: Extend the grade system beyond equities to cover crypto (BTC-USD, ETH-USD), ETFs (SPY, QQQ, GLD, TLT), and eventually forex pairs. Each asset class may need different grade thresholds.
+
+### Phase 2C — Autonomous Trading Bot
+> **⚠️ IMPORTANT PREREQUISITES before building this:**
+> - At least 90 days of live grade tracking data to validate grade → return correlation
+> - A+ grade precision rate ≥ 65% on out-of-sample data (not backtested)
+> - Full audit log of every decision (regulatory requirement in EU)
+> - User must explicitly opt in with risk acknowledgement
+> - Paper trading mode must be validated for at least 30 days before live execution
+
+- [ ] 🔴 **Paper trading mode** (`/bot/paper`): Execute simulated trades based on grade signals. Track hypothetical P&L, drawdown, win rate. This is the gate before live trading.
+- [ ] 🔴 **Broker integration layer**: Connect to a broker API (Interactive Brokers, Alpaca, or eToro for EU users) via OAuth. Store credentials encrypted, never in plaintext.
+  - Alpaca: US equities + crypto, REST API, free paper trading
+  - Interactive Brokers: EU-compliant, full asset class coverage
+  - eToro: EU retail focus, good for fin-eye's target demographic
+- [ ] 🔴 **Bot decision engine** (`/api/v1/bot/evaluate`): Runs every 15 minutes (aligned with GAS precompute). For each symbol in the bot's universe:
+  1. Fetch current grade from GAS snapshot
+  2. Check current position in broker
+  3. Apply decision rules:
+     - Grade A+ / A + not yet in position → BUY (size per allocation engine)
+     - Grade D / F + in position → SELL (close position)
+     - Grade C → hold existing, no new entry
+  4. Log decision with full reasoning
+  5. Execute via broker API if in live mode
+- [ ] 🔴 **Full audit log** (`/admin/bot/log`): Every decision — evaluate, entry, exit, hold, skip — must be logged with: timestamp, symbol, grade, GAS score, component scores, action taken, size, price. Required for EU regulatory compliance and for debugging.
+- [ ] 🟠 **Kill switch**: A single button in the UI and a `POST /api/v1/bot/halt` endpoint that immediately stops all bot activity and optionally closes all open positions. Must work even if the scheduler is down (direct DB flag).
+- [ ] 🟠 **Position sizing rules**: 
+  - Never more than 20% in any single symbol
+  - Never more than 40% in any single sector
+  - Maximum total deployed capital configurable (e.g., "deploy max 60% of portfolio")
+  - Remaining cash never deployed below grade B
+- [ ] 🟠 **Risk management circuit breakers**:
+  - Daily loss limit: if portfolio drops > X% in one day, bot pauses for 24h
+  - Drawdown limit: if portfolio drops > max_drawdown setting from peak, close all positions
+  - Grade flip speed: if A+ → F happens in < 2 cycles, wait for confirmation before acting
+- [ ] 🟡 **Notification system for bot actions**: Every trade the bot executes triggers an email + in-app notification: "BOT: Bought 5 AAPL @ $178.40 — Grade A+, GAS 82, Reason: Strong Tailwind with full component alignment."
+- [ ] 🟢 **Strategy variants**: Allow users to configure bot personality:
+  - Aggressive: trade C and above, higher position sizes
+  - Balanced: trade B and above (default)
+  - Conservative: trade A and above only, smaller sizes
+  - Custom: user-defined grade threshold and position rules
+
+### Phase 2D — Infrastructure for Autonomous Trading
+- [ ] 🟠 **Grade persistence in DB**: Add `signal_grade`, `signal_grade_score`, `signal_tradeable` columns to the `gas_snapshots` table. Currently these fields are computed and cached in Redis but not persisted to DB. Needed for grade history tracking.
+  - Migration: `alembic revision --autogenerate -m "add signal grade to gas snapshots"`
+- [ ] 🟠 **Grade history table** (`signal_grade_history`): A separate table logging every grade change per symbol (symbol, timestamp, old_grade, new_grade, gas_score). Powers the grade sparkline and the backtest engine.
+- [ ] 🟠 **Bot state table** (`bot_positions`): Tracks what the bot currently holds (symbol, entry_price, entry_grade, entry_gas, size, opened_at). Independent from the broker — the broker is the source of truth for execution, but this is the bot's internal view.
+- [ ] 🟡 **WebSocket for live bot updates**: Push grade changes and bot actions to the frontend in real time via WebSocket. Users can watch the bot "think" live.
+
+### Grade System Design Reference (already implemented)
+The `compute_signal_grade()` function in `gas_precompute.py` is the authoritative grade source.
+
+| Component | Max Points | Description |
+|-----------|-----------|-------------|
+| GAS score | 40 | Primary composite signal (GAS 30→100 mapped to 0→40) |
+| Component alignment | 30 | Do technical + sentiment + macro all agree? |
+| Technical model Sharpe | 20 | Best timeframe model quality |
+| Signal conviction | 10 | How far from neutral (50)? |
+
+| Grade | Score | Tradeable | Description |
+|-------|-------|-----------|-------------|
+| A+ | 88-100 | ✅ Yes | Exceptional — all factors strongly aligned |
+| A  | 78-87  | ✅ Yes | Strong — reliable signal |
+| B  | 65-77  | ✅ Yes | Good — minor disagreements |
+| C  | 50-64  | ❌ Monitor only | Mixed — use with caution |
+| D  | 35-49  | ❌ No | Weak — avoid new positions |
+| F  | 0-34   | ❌ No | Do not use |
+
+---
+
 ## 1. News Feed Enhancements
 - [ ] 🟠 **External Links**: Add clickable URL links to news articles so users can read the full story on the original source.
 - [ ] 🟠 **Pagination/Infinite Scroll**: Implement pagination (e.g., 10 items per page with a selector) or infinite scrolling to prevent performance issues when loading large numbers of articles.
@@ -32,156 +130,152 @@
 - [ ] 🟠 **Empty States**: Every data section (Sentiment, Macro, Backtesting, News) needs a designed empty state with an icon, message, and a clear next-action CTA. "No data" text alone causes abandonment.
 - [ ] 🟠 **Responsive Design & Mobile Optimization**: The NAV_ITEMS list has 19 items — on mobile this overflows catastrophically. Implement a hamburger/drawer nav for screens below `md`. The dashboard grid also needs a single-column reflow tested on 375px width.
 - [ ] 🟠 **Color Coding & Badges**: Standardize semantic colors globally. Bullish = emerald-400, Bearish = rose-400, Neutral = amber-400, Loading = sky-400. Ensure badges on StrategyCard, TimeframeGrid, RegimeWidget all follow the same palette. Currently mixed.
-- [ ] 🟡 **Dark Mode Contrast Audit**: Run a WCAG AA contrast check. Several elements (text-slate-500 on bg-slate-900, small labels) fail 4.5:1 contrast ratio. This affects readability for users with visual impairments and is an SEO/legal risk.
-- [ ] 🟡 **Page Transition Animations**: Add subtle fade/slide transitions between pages using Framer Motion. Creates a polished, app-like feel that increases perceived quality and trust — critical for a paid finance tool.
-- [ ] 🟢 **Keyboard Navigation**: All interactive elements (score cards, tooltips, dropdowns) should be accessible via keyboard Tab + Enter. Required for accessibility compliance.
+- [ ] 🟡 **Dark Mode Contrast Audit**: Run a WCAG AA contrast check. Several elements (text-slate-500 on bg-slate-900, small labels) fail 4.5:1 contrast ratio.
+- [ ] 🟡 **Page Transition Animations**: Add subtle fade/slide transitions between pages using Framer Motion.
+- [ ] 🟢 **Keyboard Navigation**: All interactive elements accessible via keyboard Tab + Enter.
 
 ---
 
 ## 4. Performance & Technical Debt
-- [ ] 🔴 **SWR Error Boundary**: Wrap data-dependent UI sections in error boundaries. Currently if `fetchGasSnapshot` throws, the entire Dashboard page crashes. Use `ErrorBoundary` + fallback UI per section.
-- [ ] 🔴 **API Response Caching Headers**: Ensure FastAPI responses for `/gas/snapshot`, `/macro/latest`, and `/sentiment` include proper `Cache-Control` headers so the browser/CDN layer caches aggressively. Reduces backend load and improves LCP.
-- [ ] 🟠 **Bundle Size Audit**: Run `next build --profile` and analyze the bundle. Recharts, Lucide, and large component files likely inflate the initial JS bundle past 500kB. Code-split each route page using Next.js dynamic imports. Target < 200kB initial JS.
-- [ ] 🟠 **Redis Cache Warming**: On startup/deploy, pre-warm Redis cache for the top 20 most-watched symbols (AAPL, MSFT, TSLA, etc.) so first users see sub-200ms responses, not cold cache misses.
-- [ ] 🟠 **Background Data Refresh Indicator**: The `SnapshotMeta` component shows staleness — but users don't know if a silent refresh is happening. Add a subtle spinning indicator on the GAS widget when SWR is revalidating in the background (`isValidating`).
-- [ ] 🟡 **Debounce Ticker Input**: The ticker input currently triggers a symbol change on form submit, which is correct. But ensure no accidental extra API calls are fired on re-render. Validate `activeSymbol !== tickerInput` before setting state.
-- [ ] 🟡 **API Rate Limit Feedback**: When Finnhub or FRED hits rate limits, the backend should return a structured `429` with a `retry_after` field. The frontend should display "Data refreshing — check back in 2 minutes" rather than a generic error.
-- [ ] 🟡 **Service Worker / PWA**: Add a basic Service Worker for offline caching of the last-seen dashboard state. Fin-Eye users are traders — they check at odd hours with spotty connections. A cached "last known state" is better than a blank screen.
-- [ ] 🟡 **Image Optimization**: Ensure all images (blog thumbnails, showcase product images) use Next.js `<Image>` with `priority` on above-the-fold images and `lazy` on the rest. Add proper `width`/`height` to avoid layout shift (CLS).
-- [ ] 🟢 **TypeScript Strict Mode**: Several API response types use `any` (e.g., `macroData: any` in `page.tsx`). Enable `"strict": true` in `tsconfig.json` and replace `any` with proper typed DTOs. Prevents production regressions.
-- [ ] 🟢 **Automated Lighthouse CI**: Add a GitHub Action that runs Lighthouse on every PR. Gate merges on Performance ≥ 85, Accessibility ≥ 90. Prevents regression as the product grows.
+- [ ] 🔴 **SWR Error Boundary**: Wrap data-dependent UI sections in error boundaries.
+- [ ] 🔴 **API Response Caching Headers**: Ensure FastAPI responses for `/gas/snapshot`, `/macro/latest`, and `/sentiment` include proper `Cache-Control` headers.
+- [ ] 🟠 **Bundle Size Audit**: Run `next build --profile` and analyze the bundle. Target < 200kB initial JS.
+- [ ] 🟠 **Redis Cache Warming**: On startup/deploy, pre-warm Redis cache for the top 20 most-watched symbols.
+- [ ] 🟠 **Background Data Refresh Indicator**: Add subtle spinning indicator on GAS widget when SWR is revalidating.
+- [ ] 🟡 **Debounce Ticker Input**: Validate `activeSymbol !== tickerInput` before setting state.
+- [ ] 🟡 **API Rate Limit Feedback**: Return structured `429` with `retry_after` field when FRED/Finnhub rate limits are hit.
+- [ ] 🟡 **Service Worker / PWA**: Add basic Service Worker for offline caching of last-seen dashboard state.
+- [ ] 🟡 **Image Optimization**: Use Next.js `<Image>` with `priority` on above-the-fold images.
+- [ ] 🟢 **TypeScript Strict Mode**: Enable `"strict": true` in `tsconfig.json`.
+- [ ] 🟢 **Automated Lighthouse CI**: Gate merges on Performance ≥ 85, Accessibility ≥ 90.
 
 ---
 
 ## 5. Activation & User Retention (Product Growth)
-- [ ] 🔴 **"Aha Moment" Optimization**: The fastest path to the Aha Moment is a user seeing GAS change and understanding why. Add a **"GAS History" sparkline** (last 7 days) directly on the dashboard so users see movement, not just a static score. Movement = engagement.
-- [ ] 🔴 **Email Alert Engine**: Users should be able to set threshold-based alerts (e.g., "Notify me when TSLA GAS crosses above 65" or "Alert if Macro Score drops below 40"). This is the #1 retention tool for active traders. Integrate with SendGrid.
-- [ ] 🟠 **Daily/Weekly Digest Email**: Auto-generate a weekly email summarizing the top 5 movers in a user's watchlist, macro changes, and a "GAS Leaderboard" (most improved stocks). This passive touchpoint drives re-engagement without requiring users to open the app.
-- [ ] 🟠 **Watchlist Improvements**:
-  - Add the ability to reorder watchlist items (drag-and-drop).
-  - Show mini GAS score badge next to each ticker in the watchlist (not just the name).
-  - Persist watchlist in the DB (currently unclear if it's local-only).
-  - Allow grouping tickers into custom portfolios/categories.
-- [ ] 🟠 **"What Changed Today" Dashboard Widget**: A feed-style panel showing: "AAPL GAS: 62 → 71 ↑" and "TSLA Regime: Risk-Off → Risk-On" for all watchlist items. This gives power users a reason to return every day.
-- [ ] 🟡 **Social Proof & Trust Signals**: Add a subtle counter near the signup CTA: "Join 1,200+ investors using Fin-Eye" (update dynamically). Add 2–3 user testimonials on the landing/billing page. Trust signals directly increase free-to-paid conversion.
-- [ ] 🟡 **Streak & Engagement Gamification**: Show users a "learning streak" (days in a row they've visited). Small gamification loops (streaks, badges for completing the tour, first backtest, etc.) dramatically improve early-stage retention in EdFintech products.
-- [ ] 🟡 **NPS Survey (In-App)**: After a user's 7th session or 30 days, show a 1-question in-app NPS survey: "How likely are you to recommend Fin-Eye?" Collect verbatim feedback. NPS above 40 is the growth threshold for referral loops.
-- [ ] 🟢 **Referral Program**: "Invite a friend, get 1 month free." Financial-education tools have high organic referral potential among students and trading communities. Build a simple referral tracking system with unique invite links.
+- [ ] 🔴 **"Aha Moment" Optimization**: Add GAS History sparkline (last 7 days) directly on the dashboard.
+- [ ] 🔴 **Email Alert Engine**: Threshold-based alerts (e.g., "Notify me when TSLA GAS crosses above 65").
+- [ ] 🟠 **Daily/Weekly Digest Email**: Auto-generate weekly email summarizing top 5 movers.
+- [ ] 🟠 **Watchlist Improvements**: Drag-and-drop reorder, mini GAS badge, DB persistence, grouping.
+- [ ] 🟠 **"What Changed Today" Dashboard Widget**: Feed showing GAS movements for watchlist items.
+- [ ] 🟡 **Social Proof & Trust Signals**: User count, testimonials on landing/billing page.
+- [ ] 🟡 **Streak & Engagement Gamification**: Learning streak, badges for tour completion.
+- [ ] 🟡 **NPS Survey (In-App)**: After 7th session or 30 days.
+- [ ] 🟢 **Referral Program**: "Invite a friend, get 1 month free."
 
 ---
 
 ## 6. Monetization & Conversion Optimization
-- [ ] 🔴 **Upgrade Gate UX**: Currently the free/pro distinction is not visible in the UI. Every Pro-only feature should have a tasteful "lock" icon with a tooltip "Available on Pro — Upgrade for €14.99/mo". Clicking opens the billing modal directly. Friction-free upsell.
-- [ ] 🔴 **Billing Page Redesign** (`/billing`): The billing page should show: (1) a feature comparison table (Free vs Pro), (2) monthly vs annual toggle with annual savings prominently displayed, (3) a "Most Popular" badge on Pro, (4) 1-click upgrade via Stripe Checkout. Use loss-aversion copy: "You're missing real-time macro data."
-- [ ] 🟠 **Free Trial for Pro**: Offer a 7-day free trial on the Pro plan (no credit card required on sign-up, card required to activate). This removes the biggest conversion barrier. SaaS industry data: free trials increase paid conversion by 25–40%.
-- [ ] 🟠 **Annual Plan Incentive**: Add a banner on the billing page: "Lock in €10.99/mo — save 27% with annual billing." Display the savings as a concrete number (e.g., "Save €48/year") rather than a percentage.
-- [ ] 🟡 **Cancellation Flow**: When a user cancels, implement a cancellation survey (1 question: "Why are you leaving?") and an offer to pause for 1 month for free. Pause option reduces churn by 15–20% in SaaS benchmarks.
-- [ ] 🟡 **Invoice & Receipt Download**: Allow Pro users to download PDF invoices from the `/billing` page for expense reporting. Missing this causes support tickets and churn from business users.
+- [ ] 🔴 **Upgrade Gate UX**: Lock icon on Pro-only features with tooltip and direct billing modal.
+- [ ] 🔴 **Billing Page Redesign** (`/billing`): Feature comparison table, monthly/annual toggle, Stripe Checkout.
+- [ ] 🟠 **Free Trial for Pro**: 7-day free trial, no credit card on sign-up.
+- [ ] 🟠 **Annual Plan Incentive**: "Save €48/year" banner.
+- [ ] 🟡 **Cancellation Flow**: Survey + 1-month pause offer.
+- [ ] 🟡 **Invoice & Receipt Download**: PDF invoices for Pro users.
 
 ---
 
 ## 7. Dashboard Intelligence Upgrades
-- [ ] 🟠 **GAS History Chart (7-day)**: Show a mini line chart of the GAS score over the past 7 days on the main dashboard card. A single static number tells users nothing about trend. Trend = insight = stickiness.
-- [ ] 🟠 **Regime Change Notification**: When the Regime flips (e.g., Risk-Off → Risk-On), surface a highlighted "Regime Changed" banner with a timestamp and a brief explanation. This is a high-value signal for traders.
-- [ ] 🟠 **Cross-Asset Dashboard**: Add a summary row (e.g., "Market Overview") showing GAS scores for SPY, QQQ, GLD, TLT, and BTC without requiring users to switch tickers. Gives macro traders a quick portfolio-level read.
-- [ ] 🟡 **Price Chart Integration**: Embed a lightweight TradingView chart (or use Yahoo Finance iframe) directly on the dashboard for the active ticker. Users currently have to leave the app to see price action — this is a major session-killer.
-- [ ] 🟡 **Technical Consensus Explanation Expansion**: The `ScoreExplainPanel` for Technical shows timeframe signals but doesn't explain which ML model "won" for each timeframe or what features drove the signal. Add a collapsible "Top Drivers" sub-section (e.g., "RSI oversold bounce + price crossed SMA50").
-- [ ] 🟢 **Printable/Shareable Report**: A "Share Analysis" button that generates a clean, shareable PNG or PDF card of the current GAS, regime, and key conflicts for a given ticker. Shareable content = free distribution. Traders love sharing setups.
+- [ ] 🟠 **GAS History Chart (7-day)**: Mini line chart of GAS score over past 7 days.
+- [ ] 🟠 **Regime Change Notification**: Highlighted banner when Regime flips.
+- [ ] 🟠 **Cross-Asset Dashboard**: Summary row showing GAS for SPY, QQQ, GLD, TLT, BTC.
+- [ ] 🟡 **Price Chart Integration**: Lightweight TradingView chart embedded on dashboard.
+- [ ] 🟡 **Technical Consensus Explanation Expansion**: "Top Drivers" sub-section per timeframe signal.
+- [ ] 🟢 **Printable/Shareable Report**: "Share Analysis" button generating PNG/PDF card.
 
 ---
 
 ## 8. Backtesting UX Improvements
-- [ ] 🟠 **More Strategy Templates**: Currently only "Momentum (SMA Crossover + RSI)" is available. Add at minimum: (1) Mean Reversion (Bollinger Band bounce), (2) Macro-Responsive (buy when macro score > 60), (3) Trend Following (EMA cross). More templates = more "Aha" moments for diverse user types.
-- [ ] 🟠 **Monthly Returns Heatmap**: Add a calendar-style heatmap (green/red by month) showing monthly returns. This is a standard feature in every serious backtesting tool and immediately communicates seasonality and risk.
-- [ ] 🟠 **Drawdown Chart**: Add a separate drawdown chart below the equity curve showing peak-to-trough losses over time. Currently only max drawdown as a number is shown — visual drawdown is far more visceral and educational.
-- [ ] 🟡 **Benchmark Comparison Toggle**: Let users switch the benchmark line (Buy & Hold) to compare against SPY, QQQ, or BTC. "Did my strategy beat the S&P?" is the first question every user has.
-- [ ] 🟡 **Trade Log Table**: Show a paginated table of all individual trades (entry date, exit date, entry price, exit price, P&L, holding period). This is critical for users learning from their strategies.
-- [ ] 🟡 **Walk-Forward Validation Panel**: Add a dedicated "Walk-Forward" tab in backtesting results showing rolling 6-month performance windows. Visually shows overfitting if Sharpe degrades over time — the single most educational feature a backtesting tool can have.
-- [ ] 🟢 **Parameter Optimization Grid**: Allow users to scan a range of parameter values (e.g., SMA Fast: 5–20) and display a heatmap of Sharpe ratios. Teaches users about overfitting risk in a hands-on way.
+- [ ] 🟠 **More Strategy Templates**: Mean Reversion, Macro-Responsive, Trend Following.
+- [ ] 🟠 **Monthly Returns Heatmap**: Calendar-style heatmap (green/red by month).
+- [ ] 🟠 **Drawdown Chart**: Peak-to-trough losses over time below equity curve.
+- [ ] 🟡 **Benchmark Comparison Toggle**: Compare against SPY, QQQ, or BTC.
+- [ ] 🟡 **Trade Log Table**: Paginated table of all individual trades.
+- [ ] 🟡 **Walk-Forward Validation Panel**: Rolling 6-month performance windows tab.
+- [ ] 🟢 **Parameter Optimization Grid**: Heatmap of Sharpe ratios across parameter range.
 
 ---
 
 ## 9. Macro Dashboard Improvements
-- [ ] 🟠 **Fed Meeting Countdown**: Show a prominent countdown timer to the next FOMC decision. "Next Fed Decision in 12 days" — this is a high-value, low-cost feature that traders check constantly.
-- [ ] 🟠 **Economic Calendar Integration**: Replace or expand the EventTimeline with a full economic calendar showing the next 2 weeks of macro events (NFP, CPI, FOMC, ECB, etc.) with expected vs prior values. This is the most-checked feature by active traders.
-- [ ] 🟡 **Macro Regime Label with History**: The current macro score shows a label (e.g., "Goldilocks") but not how long the current regime has lasted or what the previous regime was. Add "Regime since: Jan 2025 (72 days)" and a brief history.
-- [ ] 🟡 **Central Bank Comparison Panel**: Show Fed, ECB, and BoE rates side-by-side. As Fin-Eye targets EU users, EUR/USD macro divergence is a key signal they watch.
-- [ ] 🟢 **Yield Curve Inversion Alert Banner**: If the 2Y–10Y spread goes negative (inverted), auto-display a prominent educational banner explaining what yield curve inversion means historically. Educational + high visibility = strong social sharing trigger.
+- [ ] 🟠 **Fed Meeting Countdown**: Countdown timer to next FOMC decision.
+- [ ] 🟠 **Economic Calendar Integration**: Full 2-week macro events calendar with expected vs prior values.
+- [ ] 🟡 **Macro Regime Label with History**: "Regime since: Jan 2025 (72 days)".
+- [ ] 🟡 **Central Bank Comparison Panel**: Fed, ECB, BoE rates side-by-side.
+- [ ] 🟢 **Yield Curve Inversion Alert Banner**: Auto-display when 2Y–10Y spread goes negative.
 
 ---
 
 ## 10. Navigation & Information Architecture
-- [ ] 🔴 **Nav Overflow Fix**: 19 nav items in a flat horizontal bar is unusable on any screen below 1400px. Implement a grouped dropdown nav with categories: Intelligence (Dashboard, Macro, Sentiment, Retail), Markets (Options, Sectors, Earnings, Insiders, Shorts), Tools (Backtest, Portfolio, Hedge, Alerts), Learn, Community. Dramatically improves discoverability.
-- [ ] 🟠 **Search Bar (Global)**: Add a CMD+K / Ctrl+K command palette that lets users type a ticker and jump to its analysis, or search for a blog post/learn article. Power-user UX staple that improves DAU for engaged users.
-- [ ] 🟠 **Breadcrumbs on Inner Pages**: Pages like `/backtesting`, `/macro`, `/hedge` have no visual hierarchy. Add breadcrumbs ("Dashboard > Backtesting") to improve orientation — especially for users who arrive from a deep link.
-- [ ] 🟡 **Active Page Highlighting in Nav**: The current nav highlights the active route — but given 19 items, consider adding a subtle left-border accent or background color that's more visually distinct than the current `bg-slate-800`.
-- [ ] 🟡 **"New" / "Beta" Badges on Nav Items**: Tag newer features (Adv. Sentiment, Fed Policy, Experiments) with a "NEW" or "BETA" badge in the nav. This drives exploration and signals ongoing product development — a key churn reducer.
+- [ ] 🔴 **Nav Overflow Fix**: Grouped dropdown nav with categories.
+- [ ] 🟠 **Search Bar (Global)**: CMD+K command palette.
+- [ ] 🟠 **Breadcrumbs on Inner Pages**: "Dashboard > Backtesting" navigation.
+- [ ] 🟡 **Active Page Highlighting in Nav**: More visually distinct than current `bg-slate-800`.
+- [ ] 🟡 **"New" / "Beta" Badges on Nav Items**: Tag newer features.
 
 ---
 
 ## 11. Onboarding & First-Time Experience
-- [ ] 🔴 **Activation Funnel Tracking**: Instrument key activation events: (1) First ticker searched, (2) GAS explain panel opened, (3) First backtest run, (4) Macro page visited, (5) Watchlist item added. Without this data, you cannot improve onboarding. Use Mixpanel or PostHog.
-- [ ] 🔴 **Progressive Disclosure**: New users see all 19 nav items and an information-dense dashboard simultaneously — overwhelming. Implement a "simplified mode" for the first 3 sessions that hides advanced features (Options, Shorts, Insiders) until the user has completed the tour or visited 3+ pages.
-- [ ] 🟠 **"Start Here" Flow for New Users**: After email confirmation, redirect new users to a focused `/welcome` page (not the full dashboard). Ask: "What's your goal?" (Learn basics / Improve timing / Research stocks). Route them to the most relevant feature. Personalization at the entry point = 2x activation rates.
-- [ ] 🟠 **Empty Watchlist CTA**: If a user's watchlist is empty, the `WatchlistWidget` should show a friendly prompt: "Add your first stock to track its GAS score" with a pre-filled search. An empty watchlist is a strong churn predictor.
-- [ ] 🟡 **Feature Discovery Tooltips**: On the 3rd, 7th, and 14th day, surface contextual tooltips introducing unused features (e.g., "Did you know you can set price alerts?" or "Try the Conflict Detector to spot diverging signals").
+- [ ] 🔴 **Activation Funnel Tracking**: Instrument key activation events with Mixpanel or PostHog.
+- [ ] 🔴 **Progressive Disclosure**: Simplified mode for first 3 sessions.
+- [ ] 🟠 **"Start Here" Flow for New Users**: `/welcome` page with goal selection.
+- [ ] 🟠 **Empty Watchlist CTA**: Friendly prompt with pre-filled search.
+- [ ] 🟡 **Feature Discovery Tooltips**: Contextual tooltips on days 3, 7, 14.
 
 ---
 
 ## 12. Community & Social Features
-- [ ] 🟡 **Public Strategy Leaderboard**: On the Community/Backtesting page, show a sorted leaderboard of public strategies by Sharpe ratio with a weekly/monthly reset. Competitive elements are powerful retention tools — traders are inherently competitive.
-- [ ] 🟡 **Discussion Threads per Ticker**: Allow users to post brief text comments on a ticker's analysis page ("I agree with the bearish macro signal for TSLA — earnings call was weak"). Lightweight social layer increases daily return visits.
-- [ ] 🟢 **"Bull vs Bear" Weekly Poll**: Each Monday, post a simple in-app poll: "Are you bullish or bearish on SPY this week?" Show aggregate results. Minimal dev cost, high engagement, creates weekly habit loops.
-- [ ] 🟢 **User-Submitted Blog Post Drafts**: Allow Pro users to submit draft blog posts/analyses for review. Community-generated content at zero editorial cost. Publish the best ones to build a contributor identity for power users.
+- [ ] 🟡 **Public Strategy Leaderboard**: Sorted by Sharpe ratio with weekly reset.
+- [ ] 🟡 **Discussion Threads per Ticker**: Brief text comments on ticker analysis pages.
+- [ ] 🟢 **"Bull vs Bear" Weekly Poll**: Monday SPY sentiment poll.
+- [ ] 🟢 **User-Submitted Blog Post Drafts**: Pro users submit drafts for review.
 
 ---
 
 ## 13. Data Quality & Trust
-- [ ] 🔴 **Data Freshness Indicators on Every Data Section**: Every data section (Macro, Sentiment, Technical) should show "Last updated: 14 min ago" with a colored dot (green < 30 min, amber 30–60 min, red > 60 min). Users need to know they are seeing current data — especially traders making time-sensitive decisions.
-- [ ] 🟠 **Data Source Attribution**: Each indicator/score should link to its source (e.g., "VIX from FRED · VIXCLS"). This builds trust, meets educational positioning, and protects against accusations of fabricated data.
-- [ ] 🟠 **Graceful Degradation Messages**: When a data source is down (Finnhub, FRED, Yahoo Finance), display a banner: "News sentiment is temporarily unavailable. GAS is being computed without the sentiment layer." Currently silent failures confuse users and lead to support tickets.
-- [ ] 🟡 **Model Confidence Intervals**: Where the ML model gives a directional signal (Bullish/Bearish), also display a confidence % (e.g., "Bullish — 67% confidence"). Low confidence signals should be visually distinct (lighter color, "low confidence" badge) so users calibrate expectations correctly.
+- [ ] 🔴 **Data Freshness Indicators on Every Data Section**: Colored dot with "Last updated: 14 min ago".
+- [ ] 🟠 **Data Source Attribution**: Link each indicator to its source (FRED, Finnhub, etc.).
+- [ ] 🟠 **Graceful Degradation Messages**: Banner when a data source is down.
+- [ ] 🟡 **Model Confidence Intervals**: Show confidence % alongside directional signals.
 
 ---
 
 ## 14. Settings & Personalization
-- [ ] 🟠 **Notification Preferences Page**: The Alerts feature exists (`/alerts`) but users need a central Settings page with: alert thresholds, email frequency, preferred timezone, default ticker, and preferred timeframe. Personalization = retention.
-- [ ] 🟡 **Default Ticker**: Let users set a default ticker that loads on dashboard open (instead of always AAPL). Power users have a primary stock they track — making it their "home" creates habitual return visits.
-- [ ] 🟡 **Currency Preference**: Allow users to toggle between USD/EUR display. Fin-Eye targets EU users — showing "$10,000" initial capital in backtesting for a EUR user creates subtle friction.
-- [ ] 🟢 **Compact / Expanded View Toggle**: Power users (traders) want data density. Beginners (students) want spacious layout with more explanations. A toggle between "Compact" and "Guided" view modes serves both without requiring separate products.
+- [ ] 🟠 **Notification Preferences Page**: Central settings for alerts, email frequency, timezone.
+- [ ] 🟡 **Default Ticker**: User-configurable default symbol on dashboard open.
+- [ ] 🟡 **Currency Preference**: USD/EUR toggle.
+- [ ] 🟢 **Compact / Expanded View Toggle**: Data density setting.
 
 ---
 
 ## 15. Legal & Trust Compliance
-- [ ] 🔴 **Cookie Consent Banner**: The `ConsentGate` component exists but verify it blocks analytics cookies until consent is given (GDPR requirement). Analytics must only fire post-consent. Use a CMP (Consent Management Platform) like Cookiebot or a custom solution.
-- [ ] 🟠 **Risk Disclaimer on Every Data-Driven Page**: The layout footer has a disclaimer but it's small and at the very bottom. Add a subtle inline disclaimer bar on the Backtesting, Hedge Simulator, and Signals pages specifically — these are highest legal-risk surfaces.
-- [ ] 🟡 **Data Deletion Flow**: Under GDPR, users have the right to erasure. Add a "Delete My Account" button in Settings that triggers a confirmed deletion of all user data within 30 days. Show a confirmation email. Missing this is a compliance risk.
+- [ ] 🔴 **Cookie Consent Banner**: Verify ConsentGate blocks analytics until consent.
+- [ ] 🟠 **Risk Disclaimer on Every Data-Driven Page**: Inline disclaimer on Backtesting, Hedge, Signals.
+- [ ] 🟡 **Data Deletion Flow**: "Delete My Account" with 30-day erasure confirmation email.
 
 ---
 
 ## 16. Fin-Eye Showcase / Marketplace (Pro Tools)
-- [ ] 🟠 **Product Cards with Preview Screenshots**: The `/showcase` page should display product cards with: title, 1-2 line description, price, category badge, and a thumbnail screenshot. Currently unclear if this is implemented beyond a basic list.
-- [ ] 🟠 **UTM Tracking on External Product Links**: Every "Buy Now" redirect to the external product site should append `?utm_source=terminal&utm_medium=showcase&utm_campaign=product_id`. Enables proper attribution for revenue from this channel.
-- [ ] 🟡 **"Featured" Product Rotation**: Allow admin to flag 2–3 products as "Featured" that display in a highlighted hero row at the top of the Showcase page. Drive attention to highest-margin products.
-- [ ] 🟡 **Click Analytics on Showcase**: Track which products are viewed and clicked most. Inform which new products to build next — data-driven product development at zero extra cost.
+- [ ] 🟠 **Product Cards with Preview Screenshots**: Title, description, price, category badge, thumbnail.
+- [ ] 🟠 **UTM Tracking on External Product Links**: `?utm_source=terminal&utm_medium=showcase`.
+- [ ] 🟡 **"Featured" Product Rotation**: Admin flag for highlighted hero row.
+- [ ] 🟡 **Click Analytics on Showcase**: Track which products are viewed and clicked most.
 
 ---
 
 ## 17. Admin & Operations
-- [ ] 🟠 **User Lifecycle Dashboard** (`/admin/analytics`): The admin analytics page should show: DAU/WAU/MAU trend, free vs Pro user ratio, top tickers searched, feature adoption heatmap (which pages are visited), and funnel conversion (signup → activation → paid). Essential for data-driven growth decisions.
-- [ ] 🟠 **Churn Early Warning**: Flag users who have not visited in 7 days in the admin dashboard. Trigger an automated re-engagement email (e.g., "We have new macro data for your watchlist"). Proactive churn prevention.
-- [ ] 🟡 **A/B Experiment Framework** (`/admin/experiments` already exists): Ensure the experiment framework supports feature flags and percentage rollouts. First experiments to run: (1) Onboarding flow variants, (2) GAS widget copy variants, (3) Upgrade CTA placement.
-- [ ] 🟡 **Error Rate Monitoring**: Integrate Sentry (or equivalent) to capture frontend JS errors in production. Set up alerts for error rate > 1%. Currently silent errors are likely causing invisible user abandonment.
+- [ ] 🟠 **User Lifecycle Dashboard** (`/admin/analytics`): DAU/WAU/MAU, funnel conversion.
+- [ ] 🟠 **Churn Early Warning**: Flag users not visited in 7 days, trigger re-engagement email.
+- [ ] 🟡 **A/B Experiment Framework**: Feature flags and percentage rollouts.
+- [ ] 🟡 **Error Rate Monitoring**: Sentry integration, alert on error rate > 1%.
 
 ---
 
 ## 18. Future / Roadmap Items (Phase 2+)
-- [ ] 🟢 **Mobile App (React Native)**: Push notifications for regime changes and GAS threshold crossings are the killer feature. Without push, mobile engagement is limited to browser visits.
-- [ ] 🟢 **Portfolio-Level GAS**: Aggregate GAS across a user's portfolio weighted by position size. The ultimate answer to "What is the macro regime for MY portfolio?" — a feature no Bloomberg terminal offers in this format.
-- [ ] 🟢 **Earnings Calendar with Sentiment Pre-loading**: Before earnings, pre-compute and display the 30-day sentiment trend for the stock and show the historical pattern of GAS before/after earnings beats vs misses. High-value predictive educational content.
-- [ ] 🟢 **API Tier for Developers**: Allow Pro+ users to access GAS scores via a personal API key (rate-limited). Quants and developers building bots will pay for this. Also generates organic word-of-mouth in tech/trading communities.
-- [ ] 🟢 **White-Label Inquiry Form**: Add a "For Institutions" CTA on the landing page that routes to a contact form for brokers/fund managers interested in white-labeling. Even 1 institutional deal at €5k/mo changes the business trajectory.
+- [ ] 🟢 **Mobile App (React Native)**: Push notifications for regime changes and grade changes.
+- [ ] 🟢 **Portfolio-Level GAS**: Aggregate GAS across portfolio weighted by position size.
+- [ ] 🟢 **Earnings Calendar with Sentiment Pre-loading**: 30-day sentiment trend before earnings.
+- [ ] 🟢 **API Tier for Developers**: GAS scores via personal API key (rate-limited).
+- [ ] 🟢 **White-Label Inquiry Form**: "For Institutions" CTA on landing page.
 
 ---
 
-*Last updated: March 2026 · Version 2.0*
+*Last updated: March 2026 · Version 2.1 — Added TODO #2 (AI Portfolio + Autonomous Trading Bot)*

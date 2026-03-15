@@ -25,25 +25,55 @@ model_registry_path: "backend/data/models/model_registry.jsonl"
 model_artifacts_dir: "backend/data/models"
 
 # ── ML Output Evaluator thresholds ───────────────────────────────────────────
+# All values used by inspect_models.py, ml_output_evaluator.py, cicd_model_gate.py
 ml_evaluation:
-  # Minimum Sharpe ratio for a model to be considered deployable
+
+  # ── Sharpe ───────────────────────────────────────────────────────────────
+  # Below min_sharpe → FAIL (no deployable edge)
   min_sharpe: 0.30
-  # Minimum directional accuracy (must beat random = 50%)
-  min_accuracy: 0.52
-  # If ALL models in a training run have Sharpe below this, trigger FAIL not WARN
+  # Above max_sharpe → WARN (likely noise or tiny validation set)
+  max_sharpe: 5.0
+  # All models below this → hard FAIL regardless of other metrics
   hard_fail_sharpe: 0.0
-  # Max allowed gap between train accuracy and validation accuracy (overfitting check)
+
+  # ── Sharpe tier scale (informational — not configurable, just documented) ─
+  # < 0.0   FAIL  — destroys value
+  # 0.0–0.3 FAIL  — no edge
+  # 0.3–0.5 ★     MARGINAL  — weak signal
+  # 0.5–1.0 ★★    ACCEPTABLE
+  # 1.0–2.0 ★★★   GOOD
+  # 2.0–5.0 ★★★★  STRONG  (verify not overfitted)
+  # > 5.0   ?     SUSPICIOUS
+
+  # ── Accuracy ─────────────────────────────────────────────────────────────
+  # Below 50% → FAIL (anti-predictive / worse than random)
+  # Below min_accuracy → WARN
+  min_accuracy: 0.52
+
+  # ── Min trades (validation set size) ─────────────────────────────────────
+  # Below 50     → FAIL (statistically meaningless)
+  # Below min_trades → WARN (noisy estimates)
+  min_trades: 200
+
+  # ── Max drawdown (estimated from Sharpe proxy) ───────────────────────────
+  # Above max_drawdown_pct → WARN
+  max_drawdown_pct: 25.0
+
+  # ── Profit factor (estimated proxy from accuracy + total_return) ─────────
+  # Below min_profit_factor → WARN
+  # Profit factor = gross wins / gross losses. Must exceed 1.0 to be profitable.
+  min_profit_factor: 1.1
+
+  # ── Overfitting check ─────────────────────────────────────────────────────
+  # Max allowed gap between train accuracy and validation accuracy
   max_train_val_accuracy_gap: 0.15
-  # Confidence distribution: if this % of predictions fall within ±3% of 50%, flag as low conviction
+  # If this fraction of predictions cluster near 50%, flag as low conviction
   low_conviction_threshold: 0.65
 
 # ── Data Quality thresholds ───────────────────────────────────────────────────
 data_quality:
-  # Max allowed single-bar price gap as a fraction (0.20 = 20%)
   max_price_gap_pct: 0.20
-  # Max consecutive bars with volume = 0 before flagging
   max_zero_volume_bars: 3
-  # Macro data staleness limits in days (per indicator)
   macro_staleness_days:
     vix: 1
     fed_funds_rate: 7
@@ -52,32 +82,20 @@ data_quality:
     unemployment_rate: 35
     nonfarm_payrolls_mom: 35
     industrial_production_yoy: 35
-  # Sentiment: if this fraction of articles score the same direction, flag as suspicious
   sentiment_concentration_threshold: 0.90
-  # Minimum number of OHLCV bars required before a training run is allowed
   min_ohlcv_bars_for_training: 200
 
 # ── GAS Sanity thresholds ─────────────────────────────────────────────────────
 gas_sanity:
-  # Max GAS point movement between two consecutive snapshots before flagging
   max_single_cycle_gas_movement: 15.0
-  # Max allowed divergence between macro score direction and GAS direction
-  # e.g. if macro dropped 20pts but GAS rose 10pts, that is suspicious
   max_component_divergence: 25.0
-  # If technical and sentiment disagree by more than this, add a WARN
   component_disagreement_threshold: 40.0
 
 # ── CI/CD Model Gate thresholds ───────────────────────────────────────────────
 model_gate:
-  # Challenger must be within this Sharpe delta of champion to be promoted
-  # Negative value means challenger can be slightly worse and still promote
-  # (useful when champion is very old — some regression is acceptable)
   min_sharpe_delta: -0.05
-  # Challenger must be within this accuracy delta
   min_accuracy_delta: -0.02
-  # Challenger max drawdown must not exceed champion's by more than this multiplier
   max_drawdown_multiplier: 2.0
-  # Backup old champion before promoting (always recommended)
   backup_champion: true
   backup_suffix: ".champion_backup"
 

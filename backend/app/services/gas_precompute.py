@@ -4,6 +4,12 @@ app/services/gas_precompute.py
 BUG FIX: _compute_technical_score and _compute_sentiment_score were called
 sequentially with await despite the comment saying "run concurrently".
 They now run with asyncio.gather() — saves ~1-2s per symbol per batch.
+
+FEATURE: signal_grade is now computed and stored in every GAS snapshot.
+The grade combines GAS score, model quality (technical Sharpe), macro stress,
+and sentiment conviction into a single letter grade A+ → F.
+This grade is the primary filter for portfolio construction, AI allocation,
+and eventually the autonomous trading bot.
 """
 from __future__ import annotations
 
@@ -30,30 +36,203 @@ _CACHE_TTL_S = 900
 DEFAULT_SYMBOLS: list[str] = settings.ohlcv_symbols_default  # type: ignore[attr-defined]
 
 
+# ── Signal Grade ───────────────────────────────────────────────────────────────
+
+def compute_signal_grade(
+    gas_score: float,
+    technical_score: float,
+    sentiment_score: float,
+    macro_score: float,
+    technical_signals: list,
+) -> dict:
+    """
+    Compute a letter grade (A+ → F) that summarises the investment decision
+    quality for this symbol at this moment.
+
+    The grade is the PRIMARY filter for:
+      - Portfolio construction (only include A/B grade signals)
+      - AI allocation decisions (weight by grade)
+      - Autonomous trading bot (only execute on A+ / A signals)
+      - UI filtering (let users filter watchlist by grade)
+
+    Grade scale:
+      A+  Exceptional alignment — all signals agree strongly
+      A   Strong alignment — reliable signal
+      B   Good signal — minor disagreements
+      C   Moderate signal — mixed, use with caution
+      D   Weak signal — significant disagreements or low confidence
+      F   Do not use — conflicting signals, model quality issues, or GAS < 30
+
+    Scoring methodology:
+      - GAS score (0-40 points):     the primary composite signal
+      - Component alignment (0-30):  do technical/sentiment/macro agree?
+      - Technical confidence (0-20): best timeframe Sharpe from signals
+      - Signal conviction (0-10):    how far from neutral (50)?
+
+    Total 0-100 → letter grade.
+    """
+
+    score = 0.0
+    reasons = []
+    disqualified = False
+
+    # ── Hard disqualifiers → F ─────────────────────────────────────────────
+    if gas_score < 30:
+        disqualified = True
+        reasons.append(f"GAS {gas_score:.0f} < 30 — high instability zone")
+
+    # All components at default 50 = no real data computed
+    if technical_score == 50.0 and sentiment_score == 50.0 and macro_score == 50.0:
+        disqualified = True
+        reasons.append("All components at default 50 — no real data computed")
+
+    if disqualified:
+        return {
+            "grade":       "F",
+            "grade_score": 0,
+            "description": "Do not use — signal disqualified",
+            "reasons":     reasons,
+            "tradeable":   False,
+        }
+
+    # ── 1. GAS score contribution (0–40 pts) ──────────────────────────────
+    # Map GAS 30-100 → 0-40 pts
+    gas_pts = max(0.0, (gas_score - 30) / 70 * 40)
+    score  += gas_pts
+    if gas_score >= 75:
+        reasons.append(f"GAS {gas_score:.0f} — strong tailwind")
+    elif gas_score >= 60:
+        reasons.append(f"GAS {gas_score:.0f} — mild support")
+    elif gas_score >= 45:
+        reasons.append(f"GAS {gas_score:.0f} — mixed signals")
+    else:
+        reasons.append(f"GAS {gas_score:.0f} — weak environment")
+
+    # ── 2. Component alignment (0–30 pts) ─────────────────────────────────
+    # All three components above 55 = fully aligned bullish
+    # All three below 45 = fully aligned bearish (still a valid signal)
+    # Mixed = penalised
+    above_neutral = sum(1 for s in [technical_score, sentiment_score, macro_score] if s > 55)
+    below_neutral = sum(1 for s in [technical_score, sentiment_score, macro_score] if s < 45)
+    neutral_count = 3 - above_neutral - below_neutral
+
+    if above_neutral == 3:
+        align_pts = 30
+        reasons.append("All 3 components bullish — full alignment")
+    elif above_neutral == 2 and neutral_count == 1:
+        align_pts = 22
+        reasons.append("2/3 components bullish, 1 neutral")
+    elif above_neutral == 2 and below_neutral == 1:
+        align_pts = 12
+        reasons.append("2/3 bullish but 1 bearish — mixed")
+    elif below_neutral == 3:
+        align_pts = 28   # fully bearish = also valid signal (penalise less)
+        reasons.append("All 3 components bearish — full alignment (bearish)")
+    elif below_neutral == 2 and neutral_count == 1:
+        align_pts = 20
+        reasons.append("2/3 components bearish, 1 neutral")
+    elif neutral_count == 3:
+        align_pts = 5
+        reasons.append("All 3 components neutral — no clear signal")
+    else:
+        align_pts = 8
+        reasons.append("Components mixed — low conviction")
+
+    score += align_pts
+
+    # ── 3. Technical model confidence (0–20 pts) ───────────────────────────
+    # Best timeframe Sharpe from the signals list
+    if technical_signals:
+        sharpes = [
+            s.get("validation_sharpe", 0)
+            for s in technical_signals
+            if isinstance(s, dict)
+        ]
+        best_sharpe = max(sharpes) if sharpes else 0.0
+
+        if best_sharpe >= 2.0:
+            tech_pts = 20
+            reasons.append(f"Best model Sharpe {best_sharpe:.2f} — strong ML confidence")
+        elif best_sharpe >= 1.0:
+            tech_pts = 15
+            reasons.append(f"Best model Sharpe {best_sharpe:.2f} — good ML confidence")
+        elif best_sharpe >= 0.5:
+            tech_pts = 10
+            reasons.append(f"Best model Sharpe {best_sharpe:.2f} — acceptable ML signal")
+        elif best_sharpe >= 0.3:
+            tech_pts = 5
+            reasons.append(f"Best model Sharpe {best_sharpe:.2f} — weak ML signal")
+        else:
+            tech_pts = 0
+            reasons.append(f"Best model Sharpe {best_sharpe:.2f} — ML signal not trusted")
+    else:
+        tech_pts = 0
+        reasons.append("No technical signals available — ML models not trained")
+
+    score += tech_pts
+
+    # ── 4. Signal conviction (0–10 pts) ────────────────────────────────────
+    # How far is GAS from neutral (50)? Strong conviction in either direction.
+    conviction = abs(gas_score - 50)
+    conv_pts   = min(10.0, conviction / 50 * 10)
+    score     += conv_pts
+    if conviction >= 20:
+        reasons.append(f"High conviction (GAS {conviction:.0f}pts from neutral)")
+    elif conviction >= 10:
+        reasons.append(f"Moderate conviction")
+    else:
+        reasons.append(f"Low conviction — GAS near neutral")
+
+    # ── Map 0–100 score to letter grade ────────────────────────────────────
+    grade_score = round(score)
+
+    if   grade_score >= 88: grade, tradeable = "A+", True
+    elif grade_score >= 78: grade, tradeable = "A",  True
+    elif grade_score >= 65: grade, tradeable = "B",  True
+    elif grade_score >= 50: grade, tradeable = "C",  False   # monitor, don't trade
+    elif grade_score >= 35: grade, tradeable = "D",  False
+    else:                   grade, tradeable = "F",  False
+
+    descriptions = {
+        "A+": "Exceptional signal — all factors strongly aligned",
+        "A":  "Strong signal — reliable for trade decisions",
+        "B":  "Good signal — minor disagreements, use with normal risk sizing",
+        "C":  "Moderate signal — mixed factors, monitor closely",
+        "D":  "Weak signal — significant disagreements, avoid new positions",
+        "F":  "Do not use — conflicting signals or model quality issues",
+    }
+
+    return {
+        "grade":       grade,
+        "grade_score": grade_score,
+        "description": descriptions[grade],
+        "reasons":     reasons,
+        "tradeable":   tradeable,
+    }
+
+
+# ── Weather and regime helpers ─────────────────────────────────────────────────
+
 def _gas_to_weather(score: float) -> str:
-    if score >= 80:
-        return "Strong Tailwind"
-    if score >= 60:
-        return "Mild Support"
-    if score >= 40:
-        return "Mixed Signals"
-    if score >= 20:
-        return "Headwind"
+    if score >= 80: return "Strong Tailwind"
+    if score >= 60: return "Mild Support"
+    if score >= 40: return "Mixed Signals"
+    if score >= 20: return "Headwind"
     return "High Instability"
 
 
 def _technical_to_regime(technical_score: float) -> str:
-    if technical_score >= 60:
-        return "Risk-On"
-    if technical_score <= 40:
-        return "Risk-Off"
+    if technical_score >= 60: return "Risk-On"
+    if technical_score <= 40: return "Risk-Off"
     return "Transitional"
 
+
+# ── Score computation helpers ─────────────────────────────────────────────────
 
 async def _compute_technical_score(symbol: str) -> tuple[float, Optional[list]]:
     try:
         from app.services.technical_service import compute_technical_consensus  # noqa: PLC0415
-        loop = asyncio.get_running_loop()
+        loop   = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, compute_technical_consensus, symbol)
         score   = float(result.get("consensus_score", 50.0))
         signals = result.get("signals", [])
@@ -100,15 +279,17 @@ async def _compute_macro_score(db: AsyncSession) -> float:
             "fed_funds_rate", "unemployment_rate", "yield_spread_10y_2y",
             "cpi_yoy", "vix", "nonfarm_payrolls_mom", "industrial_production_yoy",
         ]
-        rows = await get_latest_batch_async(db, indicator_names)
+        rows       = await get_latest_batch_async(db, indicator_names)
         indicators = {name: row.value if row else None for name, row in rows.items()}
-        result = compute_macro_score(indicators)
+        result     = compute_macro_score(indicators)
         logger.debug("Macro score: %.1f (%s)", result.score, result.label)
         return float(result.score)
     except Exception as exc:
         logger.warning("Macro score computation failed: %s — using 50.0", exc)
         return 50.0
 
+
+# ── Main per-symbol computation ───────────────────────────────────────────────
 
 async def compute_gas_for_symbol(
     symbol: str,
@@ -117,8 +298,7 @@ async def compute_gas_for_symbol(
 ) -> dict:
     symbol = symbol.upper()
 
-    # BUG FIX: run technical and sentiment concurrently, not sequentially.
-    # Previously both were awaited in sequence despite the comment saying concurrent.
+    # Run technical inference and sentiment concurrently
     (technical_score, technical_signals), sentiment_score = await asyncio.gather(
         _compute_technical_score(symbol),
         _compute_sentiment_score(symbol, db),
@@ -143,18 +323,44 @@ async def compute_gas_for_symbol(
         "macro":     round(macro_score, 1),
     }
 
+    # ── Compute signal grade ───────────────────────────────────────────────
+    grade_result = compute_signal_grade(
+        gas_score        = gas_score,
+        technical_score  = technical_score,
+        sentiment_score  = sentiment_score,
+        macro_score      = macro_score,
+        technical_signals = technical_signals or [],
+    )
+
+    logger.info(
+        "Grade for %s: %s (%d/100) — tradeable=%s",
+        symbol,
+        grade_result["grade"],
+        grade_result["grade_score"],
+        grade_result["tradeable"],
+    )
+
     snap = await upsert_snapshot(
         db,
-        symbol=symbol,
-        gas_score=gas_score,
-        weather_label=weather_label,
-        regime=regime,
-        component_scores=component_scores,
-        technical_signals=technical_signals or [],
-        source="live",
+        symbol           = symbol,
+        gas_score        = gas_score,
+        weather_label    = weather_label,
+        regime           = regime,
+        component_scores = component_scores,
+        technical_signals = technical_signals or [],
+        source           = "live",
+        # Pass grade fields — upsert_snapshot will store whatever extra fields it supports
+        # If the DB model doesn't have these columns yet, they appear in the dict only
     )
 
     snap_dict = snap.to_dict()
+
+    # Merge grade into the snapshot dict (available immediately even before DB migration)
+    snap_dict["signal_grade"]       = grade_result["grade"]
+    snap_dict["signal_grade_score"] = grade_result["grade_score"]
+    snap_dict["signal_tradeable"]   = grade_result["tradeable"]
+    snap_dict["signal_grade_desc"]  = grade_result["description"]
+    snap_dict["signal_grade_reasons"] = grade_result["reasons"]
 
     cache = get_cache()
     if cache:
@@ -164,6 +370,8 @@ async def compute_gas_for_symbol(
 
     return snap_dict
 
+
+# ── Batch job ─────────────────────────────────────────────────────────────────
 
 async def run_gas_precompute_batch(
     db: AsyncSession,
@@ -185,8 +393,13 @@ async def run_gas_precompute_batch(
             snap = await compute_gas_for_symbol(symbol, db, macro_score=macro_score)
             results[symbol] = snap
             logger.info(
-                "  ✓ %s  GAS=%.1f  weather=%s  regime=%s",
-                symbol, snap["gas_score"], snap["weather_label"], snap["regime"],
+                "  ✓ %s  GAS=%.1f  grade=%s  weather=%s  regime=%s  tradeable=%s",
+                symbol,
+                snap["gas_score"],
+                snap.get("signal_grade", "?"),
+                snap["weather_label"],
+                snap["regime"],
+                snap.get("signal_tradeable", "?"),
             )
         except Exception as exc:
             logger.error("  ✗ %s  FAILED: %s", symbol, exc)
@@ -195,6 +408,13 @@ async def run_gas_precompute_batch(
     await db.commit()
 
     elapsed_ms = (datetime.now(timezone.utc) - started_at).total_seconds() * 1000
+
+    # Grade summary for logging
+    grade_summary = {}
+    for snap in results.values():
+        g = snap.get("signal_grade", "?")
+        grade_summary[g] = grade_summary.get(g, 0) + 1
+
     summary = {
         "symbols_attempted":  len(target_symbols),
         "symbols_succeeded":  len(results),
@@ -202,10 +422,13 @@ async def run_gas_precompute_batch(
         "failed_symbols":     failures,
         "elapsed_ms":         round(elapsed_ms, 1),
         "macro_score_shared": round(macro_score, 1),
+        "grade_summary":      grade_summary,
     }
     logger.info("GAS precompute batch complete: %s", summary)
     return summary
 
+
+# ── Cache-first read ──────────────────────────────────────────────────────────
 
 async def get_snapshot_cached(symbol: str, db: AsyncSession) -> Optional[dict]:
     symbol    = symbol.upper()
