@@ -5,9 +5,10 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import pandas as pd
-from app.services.ml_pipeline import run_training_pipeline
-from app.services.technical_service import TIMEFRAMES
+from app.services.ml_pipeline import run_training_pipeline, TIMEFRAME_HORIZON
 from app.services.market_data import OHLCVFetcher
+
+TIMEFRAMES = list(TIMEFRAME_HORIZON.keys())
 
 import logging
 logging.basicConfig(level=logging.INFO)

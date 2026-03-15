@@ -680,19 +680,19 @@ async def step_warm_cache() -> None:
 # ════════════════════════════════════════════════════════════════════════════
 
 def print_summary(symbols: list[str]) -> None:
-    print("\n" + "═" * 65)
+    print("\n" + "=" * 65)
     print("  FIN-EYE SEED COMPLETE")
-    print("═" * 65)
+    print("=" * 65)
     print(f"  Symbols seeded : {', '.join(symbols[:8])}{'...' if len(symbols) > 8 else ''}")
     print(f"  Admin login    : {ADMIN_EMAIL}  /  {ADMIN_PASSWORD}")
     print(f"  Demo login     : {DEMO_EMAIL}  /  {DEMO_PASSWORD}")
     print(f"  Pro login      : {PRO_EMAIL}  /  {PRO_PASSWORD}")
     print()
     print("  App URLs:")
-    print("    Frontend   → http://localhost:3000")
-    print("    API docs   → http://localhost:8000/docs")
-    print("    Admin ops  → http://localhost:3000/admin")
-    print("═" * 65 + "\n")
+    print("    Frontend   -> http://localhost:3000")
+    print("    API docs   -> http://localhost:8000/docs")
+    print("    Admin ops  -> http://localhost:3000/admin")
+    print("=" * 65 + "\n")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -706,10 +706,10 @@ async def main(args: argparse.Namespace) -> None:
         else DEFAULT_SYMBOLS
     )
 
-    logger.info("═" * 60)
+    logger.info("=" * 60)
     logger.info("  FIN-EYE SEEDER  |  symbols=%d  skip_ml=%s  fast=%s",
                 len(symbols), args.skip_ml, args.fast)
-    logger.info("═" * 60)
+    logger.info("=" * 60)
 
     # Step 1 — DB
     step_init_db()

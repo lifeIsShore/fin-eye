@@ -1,6 +1,6 @@
 """
 inspect_models.py
-─────────────────────────────────────────────────────────────────────────────
+-----------------------------------------------------------------------------
 Local model registry inspector for fin-eye.
 
 Reads both registries (backend/data/models/ and model_store/) and produces:
@@ -35,7 +35,7 @@ from typing import Optional
 import requests
 import yaml
 
-# ── Project paths ─────────────────────────────────────────────────────────────
+# -- Project paths -------------------------------------------------------------
 
 SCRIPT_DIR    = Path(__file__).parent
 PROJECT_ROOT  = SCRIPT_DIR.parent.parent
@@ -47,13 +47,13 @@ BACKEND_ARTIFACTS = PROJECT_ROOT / "backend" / "data" / "models"
 STORE_REGISTRY    = PROJECT_ROOT / "model_store" / "registry.jsonl"
 STORE_ARTIFACTS   = PROJECT_ROOT / "model_store" / "artifacts"
 
-# ── Thresholds ────────────────────────────────────────────────────────────────
+# -- Thresholds ----------------------------------------------------------------
 
 MIN_SHARPE        = 0.30
 MIN_ACCURACY      = 0.52
 SUSPICIOUS_SHARPE = 5.0
 
-# ── Config loader ─────────────────────────────────────────────────────────────
+# -- Config loader -------------------------------------------------------------
 
 def load_config() -> dict:
     if CONFIG_PATH.exists():
@@ -65,7 +65,7 @@ def load_config() -> dict:
     }
 
 
-# ── Registry loaders ──────────────────────────────────────────────────────────
+# -- Registry loaders ----------------------------------------------------------
 
 def load_registry(path: Path, source_label: str) -> list[dict]:
     if not path.exists():
@@ -96,7 +96,7 @@ def load_all_registries(which: str) -> list[dict]:
     return records
 
 
-# ── Artifact helpers ──────────────────────────────────────────────────────────
+# -- Artifact helpers ----------------------------------------------------------
 
 def check_artifact_exists(record: dict) -> tuple[bool, str]:
     if record.get("_source") == "backend":
@@ -113,7 +113,7 @@ def get_artifact_size_kb(path_str: str) -> Optional[float]:
         return None
 
 
-# ── Rule-based issue detection ────────────────────────────────────────────────
+# -- Rule-based issue detection ------------------------------------------------
 
 def detect_issues(record: dict) -> list[dict]:
     issues = []
@@ -216,22 +216,22 @@ def detect_issues(record: dict) -> list[dict]:
     return issues
 
 
-# ── Verdict ───────────────────────────────────────────────────────────────────
+# -- Verdict -------------------------------------------------------------------
 
 LEVEL_ORDER = {"ERROR": 0, "WARN": 1, "INFO": 2}
-LEVEL_ICON  = {"ERROR": "❌", "WARN": "⚠️ ", "INFO": "ℹ️ "}
+LEVEL_ICON  = {"ERROR": "[X]", "WARN": "[!]", "INFO": "[i]"}
 
 
 def verdict(issues: list[dict]) -> tuple[str, str]:
     levels = [i["level"] for i in issues]
     if "ERROR" in levels:
-        return "FAIL", "❌"
+        return "FAIL", "[X]"
     if "WARN" in levels:
-        return "WARN", "⚠️ "
-    return "PASS", "✅"
+        return "WARN", "[!]"
+    return "PASS", "[OK]"
 
 
-# ── Active model selection ────────────────────────────────────────────────────
+# -- Active model selection ----------------------------------------------------
 
 def get_active_models(records: list[dict]) -> dict[tuple, dict]:
     active: dict[tuple, dict] = {}
@@ -241,7 +241,7 @@ def get_active_models(records: list[dict]) -> dict[tuple, dict]:
     return active
 
 
-# ── Ollama LLM evaluation ─────────────────────────────────────────────────────
+# -- Ollama LLM evaluation -----------------------------------------------------
 
 def check_ollama(config: dict) -> bool:
     try:
@@ -326,7 +326,7 @@ def call_ollama(prompt: str, config: dict) -> Optional[str]:
     timeout  = config["ollama"]["timeout_seconds"]
 
     print(f"\n  [LLM] Calling {model} — streaming response:")
-    print("  " + "─" * 61)
+    print("  " + "-" * 61)
 
     collected = []
     try:
@@ -351,7 +351,7 @@ def call_ollama(prompt: str, config: dict) -> Optional[str]:
                     break
 
         print()
-        print("  " + "─" * 61)
+        print("  " + "-" * 61)
         return "".join(collected).strip()
 
     except requests.exceptions.Timeout:
@@ -366,7 +366,7 @@ def call_ollama(prompt: str, config: dict) -> Optional[str]:
         return f"[LLM ERROR] {e}"
 
 
-# ── Terminal output ───────────────────────────────────────────────────────────
+# -- Terminal output -----------------------------------------------------------
 
 def print_model_block(record: dict, issues: list[dict], show_breakdown: bool = True):
     symbol  = record.get("symbol", "?")
@@ -383,47 +383,47 @@ def print_model_block(record: dict, issues: list[dict], show_breakdown: bool = T
     size_kb = get_artifact_size_kb(artifact_path) if artifact_exists else None
     label, icon = verdict(issues)
 
-    print(f"  ┌─ {symbol} / {tf}  [{source}]  {icon} {label}")
-    print(f"  │  Winner:   {winner.upper():<12}  Sharpe: {sharpe:.4f}" if sharpe else f"  │  Winner: {winner}  Sharpe: N/A")
-    print(f"  │  Trained:  {trained}  Artifact: {'✅ ' + f'{size_kb:.0f}KB' if artifact_exists and size_kb else '❌ MISSING'}")
+    print(f"  +- {symbol} / {tf}  [{source}]  {icon} {label}")
+    print(f"  |  Winner:   {winner.upper():<12}  Sharpe: {sharpe:.4f}" if sharpe else f"  |  Winner: {winner}  Sharpe: N/A")
+    print(f"  |  Trained:  {trained}  Artifact: {'OK ' + f'{size_kb:.0f}KB' if artifact_exists and size_kb else 'X MISSING'}")
 
     if diag:
         print(
-            f"  │  Data:     total={diag.get('total_rows','?')}  "
+            f"  |  Data:     total={diag.get('total_rows','?')}  "
             f"val={diag.get('val_rows','?')}  "
             f"target={diag.get('target_balance_up_pct','?')}% UP  "
             f"horizon={horizon}p"
         )
 
     if metrics and show_breakdown:
-        print(f"  │  All models:")
+        print(f"  |  All models:")
         for m_name in ["logistic", "xgboost", "prophet"]:
             m = metrics.get(m_name, {})
             if not m:
-                print(f"  │    {m_name:<10} — not trained")
+                print(f"  |    {m_name:<10} - not trained")
                 continue
             acc  = m.get("accuracy", 0)
             sh   = m.get("sharpe_ratio", -99)
             ret  = m.get("total_return", 0)
             disq = " [DISQ]" if m.get("disqualified") else ""
-            mark = " ← WINNER" if m_name == winner else ""
-            sh_i  = "✅" if sh >= MIN_SHARPE else ("⚠️ " if sh >= 0 else "❌")
-            acc_i = "✅" if acc >= MIN_ACCURACY else ("⚠️ " if acc >= 0.50 else "❌")
-            print(f"  │    {m_name:<10}  Sharpe:{sh:>7.3f} {sh_i}  Acc:{acc:.1%} {acc_i}  Ret:{ret:+.3f}{mark}{disq}")
+            mark = " <- WINNER" if m_name == winner else ""
+            sh_i  = "OK" if sh >= MIN_SHARPE else ("!!" if sh >= 0 else "X ")
+            acc_i = "OK" if acc >= MIN_ACCURACY else ("!!" if acc >= 0.50 else "X ")
+            print(f"  |    {m_name:<10}  Sharpe:{sh:>7.3f} {sh_i}  Acc:{acc:.1%} {acc_i}  Ret:{ret:+.3f}{mark}{disq}")
 
     if issues:
-        print(f"  │  Issues:")
+        print(f"  |  Issues:")
         for iss in sorted(issues, key=lambda x: LEVEL_ORDER[x["level"]]):
-            print(f"  │    {LEVEL_ICON[iss['level']]} [{iss['code']}] {iss['message']}")
+            print(f"  |    {LEVEL_ICON[iss['level']]} [{iss['code']}] {iss['message']}")
 
-    print(f"  └{'─' * 60}")
+    print(f"  +{'-' * 60}")
 
 
 def print_llm_section(llm_response: Optional[str], ollama_available: bool, llm_requested: bool):
     print()
-    print("═" * 65)
+    print("=" * 65)
     print("  LLM ASSESSMENT (DeepSeek R1 32B)")
-    print("═" * 65)
+    print("=" * 65)
 
     if not llm_requested:
         print("  ℹ️  Not requested. Run with --llm to enable.")
@@ -440,10 +440,10 @@ def print_llm_section(llm_response: Optional[str], ollama_available: bool, llm_r
     else:
         print("  ⚠️  No response received.")
 
-    print("═" * 65)
+    print("=" * 65)
 
 
-# ── Markdown report builder ───────────────────────────────────────────────────
+# -- Markdown report builder ---------------------------------------------------
 
 def build_markdown_report(
     all_records: list[dict],
@@ -607,7 +607,7 @@ def build_markdown_report(
     return "\n".join(lines)
 
 
-# ── Save report ───────────────────────────────────────────────────────────────
+# -- Save report ---------------------------------------------------------------
 
 def save_markdown_report(content: str, run_at_dt: datetime) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -621,7 +621,7 @@ def save_markdown_report(content: str, run_at_dt: datetime) -> Path:
     return path
 
 
-# ── Registry cleaner ──────────────────────────────────────────────────────────
+# -- Registry cleaner ----------------------------------------------------------
 
 def clean_test_entries(registry_path: Path):
     if not registry_path.exists():
@@ -655,7 +655,7 @@ def clean_test_entries(registry_path: Path):
     print(f"[INFO] Removed {removed} TEST_SYM entries.")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="fin-eye model registry inspector")
@@ -694,13 +694,13 @@ def main():
     all_issues    = {key: detect_issues(record) for key, record in active_models.items()}
 
     print()
-    print("═" * 65)
+    print("=" * 65)
     print("  FIN-EYE MODEL REGISTRY INSPECTOR")
     print(f"  Run at: {run_at}")
     print(f"  Registries: {args.registry}   Symbol: {args.symbol or 'all'}")
     print(f"  Records: {len(all_records)}   Active models: {len(active_models)}")
-    print(f"  LLM: {'ENABLED — DeepSeek R1 32B (streaming)' if args.llm else 'OFF (use --llm)'}")
-    print("═" * 65)
+    print(f"  LLM: {'ENABLED -- DeepSeek R1 32B (streaming)' if args.llm else 'OFF (use --llm)'}")
+    print("=" * 65)
 
     printed = 0
     for key, record in sorted(active_models.items(), key=lambda x: (x[0][0] or "", x[0][1] or "")):
@@ -717,7 +717,7 @@ def main():
 
     older = len(all_records) - len(active_models)
     if older > 0:
-        print(f"\n  ℹ️  {older} older run(s) superseded.")
+        print(f"\n  [i]  {older} older run(s) superseded.")
 
     total  = len(active_models)
     passed = sum(1 for k in active_models if verdict(all_issues[k])[0] == "PASS")
@@ -732,17 +732,17 @@ def main():
     ]
 
     print()
-    print("═" * 65)
+    print("=" * 65)
     print("  SUMMARY")
-    print("═" * 65)
-    print(f"  Total: {total}  ✅ {passed}  ⚠️  {warned}  ❌ {failed}")
+    print("=" * 65)
+    print(f"  Total: {total}  [OK] {passed}  [!] {warned}  [X] {failed}")
     if deployable:
         print("\n  Safe for GAS:")
         for d in deployable:
-            print(f"    → {d}")
+            print(f"    -> {d}")
     else:
-        print("\n  ⚠️  No models pass all quality gates.")
-    print("═" * 65)
+        print("\n  [!] No models pass all quality gates.")
+    print("=" * 65)
 
     # LLM
     llm_response     = None
@@ -765,7 +765,7 @@ def main():
         )
         path = save_markdown_report(md, run_at_dt)
         print()
-        print(f"  📄 Saved: {path}")
+        print(f"  [Report] Saved: {path}")
         print(f"     {REPORTS_DIR / 'latest.md'}")
         print()
 
