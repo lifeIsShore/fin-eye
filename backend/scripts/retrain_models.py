@@ -54,8 +54,8 @@ def main(symbol: str):
             logger.error(f"Failed to train {symbol} on {tf}: {e}")
 
 if __name__ == "__main__":
-    # Default to main pair if none provided
-    symbols = ["BTC-USD"]
+    # Default to main pairs if none provided
+    symbols = ["BTC-USD", "AAPL"]
     if len(sys.argv) > 1:
         symbols = sys.argv[1:]
     

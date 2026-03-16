@@ -349,8 +349,12 @@ async def compute_gas_for_symbol(
         component_scores = component_scores,
         technical_signals = technical_signals or [],
         source           = "live",
-        # Pass grade fields — upsert_snapshot will store whatever extra fields it supports
-        # If the DB model doesn't have these columns yet, they appear in the dict only
+        # Pass grade fields (Phase 2D updates)
+        signal_grade         = grade_result["grade"],
+        signal_grade_score   = grade_result["grade_score"],
+        signal_tradeable     = grade_result["tradeable"],
+        signal_grade_desc    = grade_result["description"],
+        signal_grade_reasons = grade_result["reasons"],
     )
 
     snap_dict = snap.to_dict()

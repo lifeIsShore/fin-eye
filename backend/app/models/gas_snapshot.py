@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, Index, Integer, String, JSON
+from sqlalchemy import Column, DateTime, Float, Index, Integer, String, JSON, Boolean
 from sqlalchemy.orm import Mapped
 
 from app.db.database import Base
@@ -61,6 +61,22 @@ class GasSnapshot(Base):
     # Source of data: "live" (fresh inference) | "cache" (served from Redis)
     source: Mapped[str] = Column(String(10), nullable=False, default="live")
 
+    # ── Signal Grade (Phase 2D) ────────────────────────────────────────────
+    # Letter grade: "A+" | "A" | "B" | "C" | "D" | "F"
+    signal_grade: Mapped[str] = Column(String(10), nullable=True)
+
+    # 0–100 quality score for the decision
+    signal_grade_score: Mapped[int] = Column(Integer, nullable=True)
+
+    # Boolean flag for trade execution
+    signal_tradeable: Mapped[bool] = Column(Boolean, nullable=True)
+
+    # Human-readable summary
+    signal_grade_desc: Mapped[str] = Column(String(255), nullable=True)
+
+    # List of reasons [ "GAS 82 — strong tailwind", ... ]
+    signal_grade_reasons: Mapped[list] = Column(JSON, nullable=True)
+
     # ── Composite index: fast lookup by symbol, most recent first ──────────
     __table_args__ = (
         Index("ix_gas_snapshots_symbol_computed", "symbol", "computed_at"),
@@ -76,6 +92,11 @@ class GasSnapshot(Base):
             "technical_signals": self.technical_signals,
             "computed_at":      self.computed_at.isoformat(),
             "source":           self.source,
+            "signal_grade":     self.signal_grade,
+            "signal_grade_score": self.signal_grade_score,
+            "signal_tradeable":   self.signal_tradeable,
+            "signal_grade_desc":  self.signal_grade_desc,
+            "signal_grade_reasons": self.signal_grade_reasons,
         }
 
     def __repr__(self) -> str:
