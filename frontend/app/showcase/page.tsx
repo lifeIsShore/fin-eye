@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import useSWR from "swr";
+import { PageBanner } from "@/components/ui/PageBanner";
 import {
     fetchShowcaseProducts,
     trackShowcaseClick,
@@ -315,8 +316,8 @@ export default function ShowcasePage() {
                             </button>
                         );
                     })}
-                </div> {/* end category filter row */}
-            ) /* end filters block */}
+                </div>
+            )}
 
             {/* ── States ─────────────────────────────────────────────────────── */}
             {isLoading && (
