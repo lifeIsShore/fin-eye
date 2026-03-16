@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import useSWR from "swr";
 import { fetchNewsSentiment, fetchSentimentSources } from "../../lib/api";
 import { SentimentChart } from "../../components/SentimentChart";
@@ -8,14 +8,22 @@ import { ArticleList } from "../../components/ArticleList";
 import { SourceBreakdownTable } from "../../components/SourceBreakdownTable";
 import { PageBanner } from "../../components/ui/PageBanner";
 import { Newspaper } from "lucide-react";
+import { useSymbol } from "../../lib/symbolContext";
 
 const DEFAULT_SYMBOL = "AAPL";
 
 const fetcher = (symbol: string) => fetchNewsSentiment(symbol);
 
 export default function NewsSentimentPage() {
-  const [symbol, setSymbol] = useState<string>(DEFAULT_SYMBOL);
-  const [input, setInput] = useState<string>(DEFAULT_SYMBOL);
+  const { symbol: globalSymbol, setSymbol: setGlobalSymbol } = useSymbol();
+  const [symbol, setSymbol] = useState<string>(globalSymbol);
+  const [input, setInput] = useState<string>(globalSymbol);
+
+  // Keep in sync when global symbol changes (e.g. user changes it in top bar)
+  React.useEffect(() => {
+    setSymbol(globalSymbol);
+    setInput(globalSymbol);
+  }, [globalSymbol]);
 
   const { data, error, isLoading, mutate } = useSWR(
     ["sentiment", symbol],
@@ -35,6 +43,7 @@ export default function NewsSentimentPage() {
     const trimmed = input.trim().toUpperCase();
     if (!trimmed) return;
     setSymbol(trimmed);
+    setGlobalSymbol(trimmed); // sync back to global context
     mutate();
     mutateSources();
   };

@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback, useRef } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { searchTickers } from "../lib/tickers";
+import { useSymbol } from "../lib/symbolContext";
 import {
   fetchTechnicalLatest,
   fetchNewsSentiment,
@@ -394,53 +395,8 @@ function normalizeTicker(raw: string): string {
 }
 
 export default function DashboardPage() {
-  const [tickerInput,  setTickerInput]  = useState("AAPL");
-  const [activeSymbol, setActiveSymbol] = useState("AAPL");
-  const [tickerError,  setTickerError]  = useState<string | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const suggestRef = useRef<HTMLDivElement>(null);
-
-  // Fetch already-trained symbols to badge them in suggestions
-  const { data: trainedSymbols } = useSWR<string[]>(
-    "trained-symbols",
-    async () => {
-      try {
-        const res = await fetch("/api/v1/technical/trained-symbols");
-        if (!res.ok) return [];
-        return res.json();
-      } catch { return []; }
-    },
-    { revalidateOnFocus: false, refreshInterval: 300_000 },
-  );
-
-  const trainedSet = React.useMemo(
-    () => new Set(trainedSymbols ?? []),
-    [trainedSymbols],
-  );
-
-  // Suggestions: static global list filtered by query, trained ones sorted first
-  const suggestions = React.useMemo(() => {
-    const q = normalizeTicker(tickerInput);
-    const matches = searchTickers(q, 20);
-    // Put trained symbols at the top
-    return [
-      ...matches.filter((s) => trainedSet.has(s)),
-      ...matches.filter((s) => !trainedSet.has(s)),
-    ].slice(0, 8);
-  }, [tickerInput, trainedSet]);
-
-  // Close suggestions on outside click
-  React.useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (
-        suggestRef.current && !suggestRef.current.contains(e.target as Node) &&
-        inputRef.current && !inputRef.current.contains(e.target as Node)
-      ) setShowSuggestions(false);
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  // Symbol comes from global context — persists across all pages
+  const { symbol: activeSymbol, setSymbol: setActiveSymbol } = useSymbol();
 
   // ── Explain panel state ─────────────────────────────────────────────────
   const [explainPayload, setExplainPayload] = useState<ExplainPayload | null>(null);
@@ -471,26 +427,7 @@ export default function DashboardPage() {
     { refreshInterval: 300_000, shouldRetryOnError: false, keepPreviousData: true },
   );
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const sym = normalizeTicker(tickerInput);
-    if (!sym) return;
-    if (!TICKER_REGEX.test(sym)) {
-      setTickerError("Invalid format. Use e.g. AAPL, BTC-USD, SPY");
-      return;
-    }
-    setTickerError(null);
-    setShowSuggestions(false);
-    setActiveSymbol(sym);
-    setTickerInput(sym);
-  };
 
-  const handleSelectSuggestion = (sym: string) => {
-    setTickerInput(sym);
-    setActiveSymbol(sym);
-    setTickerError(null);
-    setShowSuggestions(false);
-  };
 
   // ── Score resolution ────────────────────────────────────────────────────
   const gasScore: number = gasSnapshot?.gas_score
@@ -560,78 +497,17 @@ export default function DashboardPage() {
         </aside>
 
         <div className="min-w-0 flex-1 space-y-6">
-          {/* Header ─────────────────────────────────────────────────────── */}
-          <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-slate-800 pb-5">
-            <div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-100">
-                {activeSymbol} Intelligence
-              </h1>
-              <p className="mt-1 text-sm text-slate-400">
-                Real-time GAS, Regime, and Multi-Timeframe layers.
-              </p>
-              <div className="mt-1">
-                <SnapshotMeta snapshot={gasSnapshot} />
-              </div>
+          {/* Header */}
+          <header className="flex flex-col gap-1 border-b border-slate-800 pb-5">
+            <h1 className="text-3xl font-black tracking-tight text-slate-100">
+              {activeSymbol} Intelligence
+            </h1>
+            <p className="text-sm text-slate-400">
+              Real-time GAS, Regime, and Multi-Timeframe layers.
+            </p>
+            <div className="mt-0.5">
+              <SnapshotMeta snapshot={gasSnapshot} />
             </div>
-
-            <form onSubmit={handleSearch} className="flex flex-col gap-1.5 w-full sm:w-auto">
-              <div className="relative flex gap-2">
-                <div className="relative flex-1 sm:w-52">
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={tickerInput}
-                    onChange={(e) => {
-                      setTickerInput(e.target.value.toUpperCase());
-                      setTickerError(null);
-                      setShowSuggestions(true);
-                    }}
-                    onFocus={() => setShowSuggestions(true)}
-                    placeholder="Ticker (e.g. AAPL, BTC-USD)"
-                    maxLength={10}
-                    className={`w-full rounded-md bg-slate-900 border px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 ${
-                      tickerError
-                        ? "border-red-500 focus:ring-red-500"
-                        : "border-slate-700 focus:ring-sky-500"
-                    }`}
-                  />
-
-                  {/* Suggestions dropdown */}
-                  {showSuggestions && suggestions.length > 0 && (
-                    <div ref={suggestRef}
-                      className="absolute left-0 top-full mt-1 z-50 w-full rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
-                      {suggestions.map((sym) => (
-                        <button
-                          key={sym}
-                          type="button"
-                          onMouseDown={() => handleSelectSuggestion(sym)}
-                          className={`flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-slate-800 ${
-                            sym === activeSymbol ? "text-sky-400" : "text-slate-200"
-                          }`}
-                        >
-                          <span className="font-semibold">{sym}</span>
-                          <span className="text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 rounded px-1.5 py-0.5">
-                            trained
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 transition-colors whitespace-nowrap"
-                >
-                  Analyze
-                </button>
-              </div>
-
-              {/* Inline validation error */}
-              {tickerError && (
-                <p className="text-xs text-red-400">{tickerError}</p>
-              )}
-            </form>
           </header>
 
           {/* Mobile watchlist */}

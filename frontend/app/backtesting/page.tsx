@@ -22,6 +22,7 @@ import {
   FlaskConical,
 } from "lucide-react";
 import { PageBanner } from "@/components/ui/PageBanner";
+import { useSymbol } from "@/lib/symbolContext";
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -139,8 +140,9 @@ function StrategyCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BacktestingPage() {
+  const { symbol: globalSymbol } = useSymbol();
   // ── Backtest form state ──
-  const [symbol, setSymbol] = useState("TSLA");
+  const [symbol, setSymbol] = useState(globalSymbol || "TSLA");
   const [initialCapital, setInitialCapital] = useState("10000");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");

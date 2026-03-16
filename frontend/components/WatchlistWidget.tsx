@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import useSWR from "swr";
 import { searchTickers } from "@/lib/tickers";
+import { useSymbol } from "@/lib/symbolContext";
 import { Star, X, Plus, Loader2, BookmarkCheck } from "lucide-react";
 import {
     fetchWatchlist,
@@ -26,6 +27,7 @@ interface WatchlistWidgetProps {
 
 export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidgetProps) {
     const { user } = useAuth();
+    const { setSymbol: setGlobalSymbol } = useSymbol();
     const [input, setInput]     = useState("");
     const [adding, setAdding]   = useState(false);
     const [error, setError]     = useState<string | null>(null);
@@ -234,7 +236,7 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                         return (
                             <li key={item.id}>
                                 <button
-                                    onClick={() => onSelectSymbol(item.symbol)}
+                                    onClick={() => { onSelectSymbol(item.symbol); setGlobalSymbol(item.symbol); }}
                                     className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors ${
                                         isActive
                                             ? "bg-blue-600/20 border border-blue-500/30 text-blue-300"

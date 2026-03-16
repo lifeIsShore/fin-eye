@@ -1,9 +1,13 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import Dict, Any, List
 
-from app.services.technical_service import compute_technical_consensus, TIMEFRAMES
-from app.services.ml_pipeline import run_training_pipeline, REGISTRY_FILE
+from app.services.technical_service import compute_technical_consensus
+from app.services.ml_pipeline import run_training_pipeline, REGISTRY_FILE, TIMEFRAME_HORIZON
+
 from app.services.market_data import OHLCVFetcher
+
+# TIMEFRAMES derived from TIMEFRAME_HORIZON — stays in sync with ml_pipeline automatically
+TIMEFRAMES = list(TIMEFRAME_HORIZON.keys())
 import pandas as pd
 import json
 import os
