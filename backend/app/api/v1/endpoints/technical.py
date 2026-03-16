@@ -1,15 +1,50 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from app.services.technical_service import compute_technical_consensus, TIMEFRAMES
-from app.services.ml_pipeline import run_training_pipeline
+from app.services.ml_pipeline import run_training_pipeline, REGISTRY_FILE
 from app.services.market_data import OHLCVFetcher
 import pandas as pd
+import json
+import os
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/trained-symbols", response_model=List[str])
+async def get_trained_symbols() -> List[str]:
+    """
+    Returns a deduplicated, sorted list of symbols that have at least one
+    trained model in the local model registry (model_registry.jsonl).
+
+    Used by the frontend ticker input and watchlist dropdowns to show
+    symbols that can be analysed immediately without triggering fresh training.
+    """
+    if not os.path.exists(REGISTRY_FILE):
+        return []
+
+    symbols: set[str] = set()
+    try:
+        with open(REGISTRY_FILE, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    sym = entry.get("symbol", "").strip().upper()
+                    if sym:
+                        symbols.add(sym)
+                except json.JSONDecodeError:
+                    continue  # skip malformed lines
+    except OSError as e:
+        logger.warning("Could not read model registry: %s", e)
+        return []
+
+    return sorted(symbols)
 
 
 @router.post("/train/{symbol}")

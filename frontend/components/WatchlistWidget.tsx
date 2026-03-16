@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import useSWR from "swr";
+import { searchTickers } from "@/lib/tickers";
 import { Star, X, Plus, Loader2, BookmarkCheck } from "lucide-react";
 import {
     fetchWatchlist,
@@ -11,17 +12,26 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 
+// Same regex as dashboard — equities + crypto pairs
+const TICKER_REGEX = /^[A-Z]{1,5}(-[A-Z]{2,4})?$/;
+
+function normalizeTicker(raw: string): string {
+    return raw.trim().toUpperCase().replace(/\s+/g, "");
+}
+
 interface WatchlistWidgetProps {
-    /** Called when user clicks a watchlist symbol — parent updates its active ticker */
     onSelectSymbol: (symbol: string) => void;
     activeSymbol: string;
 }
 
 export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidgetProps) {
     const { user } = useAuth();
-    const [input, setInput] = useState("");
-    const [adding, setAdding] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [input, setInput]     = useState("");
+    const [adding, setAdding]   = useState(false);
+    const [error, setError]     = useState<string | null>(null);
+    const [showSuggest, setShowSuggest] = useState(false);
+    const inputRef   = useRef<HTMLInputElement>(null);
+    const suggestRef = useRef<HTMLDivElement>(null);
 
     const {
         data: items,
@@ -33,12 +43,71 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
         { refreshInterval: 0, revalidateOnFocus: false },
     );
 
+    // Fetch trained symbols for suggestions
+    const { data: trainedSymbols } = useSWR<string[]>(
+        "trained-symbols",
+        async () => {
+            try {
+                const res = await fetch("/api/v1/technical/trained-symbols");
+                if (!res.ok) return [];
+                return res.json();
+            } catch { return []; }
+        },
+        { revalidateOnFocus: false, refreshInterval: 300_000 },
+    );
+
+    // Already-in-watchlist set for duplicate guard
+    const watchlistSet = useMemo(
+        () => new Set((items ?? []).map((i) => i.symbol)),
+        [items],
+    );
+
+    const trainedSet = useMemo(
+        () => new Set(trainedSymbols ?? []),
+        [trainedSymbols],
+    );
+
+    // Filtered suggestions — static list, exclude already-watchlisted, trained first
+    const suggestions = useMemo(() => {
+        const q = normalizeTicker(input);
+        const matches = searchTickers(q, 16).filter((s) => !watchlistSet.has(s));
+        return [
+            ...matches.filter((s) => trainedSet.has(s)),
+            ...matches.filter((s) => !trainedSet.has(s)),
+        ].slice(0, 6);
+    }, [input, watchlistSet, trainedSet]);
+
+    // Close suggestions on outside click
+    useEffect(() => {
+        function handler(e: MouseEvent) {
+            if (
+                suggestRef.current && !suggestRef.current.contains(e.target as Node) &&
+                inputRef.current && !inputRef.current.contains(e.target as Node)
+            ) setShowSuggest(false);
+        }
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
-        const sym = input.trim().toUpperCase();
+        const sym = normalizeTicker(input);
+
         if (!sym) return;
+
+        if (!TICKER_REGEX.test(sym)) {
+            setError("Invalid format — use e.g. AAPL or BTC-USD");
+            return;
+        }
+
+        if (watchlistSet.has(sym)) {
+            setError(`${sym} is already in your watchlist`);
+            return;
+        }
+
         setAdding(true);
         setError(null);
+        setShowSuggest(false);
         try {
             await addToWatchlist(sym);
             setInput("");
@@ -50,13 +119,32 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
         }
     };
 
+    const handleSelectSuggestion = async (sym: string) => {
+        setInput(sym);
+        setShowSuggest(false);
+        setError(null);
+        // Immediately add on suggestion click
+        if (!watchlistSet.has(sym)) {
+            setAdding(true);
+            try {
+                await addToWatchlist(sym);
+                setInput("");
+                mutate();
+            } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Failed to add");
+            } finally {
+                setAdding(false);
+            }
+        }
+    };
+
     const handleRemove = async (symbol: string, e: React.MouseEvent) => {
         e.stopPropagation();
         try {
             await removeFromWatchlist(symbol);
             mutate();
         } catch {
-            // Silently ignore — stale UI will be corrected on next refetch
+            // Silently ignore — stale UI corrected on next refetch
         }
     };
 
@@ -76,31 +164,56 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
             </div>
 
             {/* Add form */}
-            <form onSubmit={handleAdd} className="mb-3 flex gap-1.5">
-                <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value.toUpperCase())}
-                    placeholder="Add ticker…"
-                    maxLength={10}
-                    className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                <button
-                    type="submit"
-                    disabled={adding || !input.trim()}
-                    className="flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-                >
-                    {adding ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                        <Plus className="h-3 w-3" />
-                    )}
-                </button>
-            </form>
+            <form onSubmit={handleAdd} className="mb-1 space-y-1.5">
+                <div className="relative flex gap-1.5">
+                    <div className="relative min-w-0 flex-1">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={input}
+                            onChange={(e) => {
+                                setInput(e.target.value.toUpperCase());
+                                setError(null);
+                                setShowSuggest(true);
+                            }}
+                            onFocus={() => setShowSuggest(true)}
+                            placeholder="Add ticker…"
+                            maxLength={10}
+                            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
 
-            {error && (
-                <p className="mb-2 text-xs text-red-400">{error}</p>
-            )}
+                        {/* Suggestions dropdown */}
+                        {showSuggest && suggestions.length > 0 && (
+                            <div ref={suggestRef}
+                                className="absolute left-0 top-full mt-1 z-50 w-full rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
+                                {suggestions.map((sym) => (
+                                    <button
+                                        key={sym}
+                                        type="button"
+                                        onMouseDown={() => handleSelectSuggestion(sym)}
+                                        className="flex w-full items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-slate-800 text-slate-200"
+                                    >
+                                        <span className="font-semibold">{sym}</span>
+                                        <span className="text-[9px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 rounded px-1 py-0.5">
+                                            trained
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <button
+                        type="submit"
+                        disabled={adding || !input.trim()}
+                        className="flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                    >
+                        {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                    </button>
+                </div>
+
+                {error && <p className="text-[11px] text-red-400">{error}</p>}
+            </form>
 
             {/* List */}
             {isLoading ? (
@@ -115,7 +228,7 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                     </p>
                 </div>
             ) : (
-                <ul className="space-y-1">
+                <ul className="mt-2 space-y-1">
                     {items.map((item) => {
                         const isActive = item.symbol === activeSymbol;
                         return (

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import useSWR from "swr";
 import Link from "next/link";
+import { searchTickers } from "../lib/tickers";
 import {
   fetchTechnicalLatest,
   fetchNewsSentiment,
@@ -384,9 +385,62 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
 
 // ─── Page Component ──────────────────────────────────────────────────────────
 
+// ─── Ticker validation ──────────────────────────────────────────────────────
+// Matches: AAPL, TSLA, BTC-USD, ETH-USD, SPY, QQQ (1-5 letters + optional -XX suffix)
+const TICKER_REGEX = /^[A-Z]{1,5}(-[A-Z]{2,4})?$/;
+
+function normalizeTicker(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\s+/g, "");
+}
+
 export default function DashboardPage() {
   const [tickerInput,  setTickerInput]  = useState("AAPL");
   const [activeSymbol, setActiveSymbol] = useState("AAPL");
+  const [tickerError,  setTickerError]  = useState<string | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestRef = useRef<HTMLDivElement>(null);
+
+  // Fetch already-trained symbols to badge them in suggestions
+  const { data: trainedSymbols } = useSWR<string[]>(
+    "trained-symbols",
+    async () => {
+      try {
+        const res = await fetch("/api/v1/technical/trained-symbols");
+        if (!res.ok) return [];
+        return res.json();
+      } catch { return []; }
+    },
+    { revalidateOnFocus: false, refreshInterval: 300_000 },
+  );
+
+  const trainedSet = React.useMemo(
+    () => new Set(trainedSymbols ?? []),
+    [trainedSymbols],
+  );
+
+  // Suggestions: static global list filtered by query, trained ones sorted first
+  const suggestions = React.useMemo(() => {
+    const q = normalizeTicker(tickerInput);
+    const matches = searchTickers(q, 20);
+    // Put trained symbols at the top
+    return [
+      ...matches.filter((s) => trainedSet.has(s)),
+      ...matches.filter((s) => !trainedSet.has(s)),
+    ].slice(0, 8);
+  }, [tickerInput, trainedSet]);
+
+  // Close suggestions on outside click
+  React.useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (
+        suggestRef.current && !suggestRef.current.contains(e.target as Node) &&
+        inputRef.current && !inputRef.current.contains(e.target as Node)
+      ) setShowSuggestions(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   // ── Explain panel state ─────────────────────────────────────────────────
   const [explainPayload, setExplainPayload] = useState<ExplainPayload | null>(null);
@@ -419,8 +473,23 @@ export default function DashboardPage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    const sym = tickerInput.trim().toUpperCase();
-    if (sym) setActiveSymbol(sym);
+    const sym = normalizeTicker(tickerInput);
+    if (!sym) return;
+    if (!TICKER_REGEX.test(sym)) {
+      setTickerError("Invalid format. Use e.g. AAPL, BTC-USD, SPY");
+      return;
+    }
+    setTickerError(null);
+    setShowSuggestions(false);
+    setActiveSymbol(sym);
+    setTickerInput(sym);
+  };
+
+  const handleSelectSuggestion = (sym: string) => {
+    setTickerInput(sym);
+    setActiveSymbol(sym);
+    setTickerError(null);
+    setShowSuggestions(false);
   };
 
   // ── Score resolution ────────────────────────────────────────────────────
@@ -505,31 +574,63 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <form onSubmit={handleSearch} className="flex gap-2 w-full sm:w-auto">
-              <input
-                type="text"
-                value={tickerInput}
-                onChange={(e) => setTickerInput(e.target.value)}
-                placeholder="Enter Ticker..."
-                className="w-full sm:w-48 rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-              />
-              <button
-                type="submit"
-                className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 transition-colors"
-              >
-                Analyze
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (typeof window !== "undefined" && (window as any).restartFinEyeTour) {
-                    (window as any).restartFinEyeTour();
-                  }
-                }}
-                className="rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition-colors"
-              >
-                Tour
-              </button>
+            <form onSubmit={handleSearch} className="flex flex-col gap-1.5 w-full sm:w-auto">
+              <div className="relative flex gap-2">
+                <div className="relative flex-1 sm:w-52">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={tickerInput}
+                    onChange={(e) => {
+                      setTickerInput(e.target.value.toUpperCase());
+                      setTickerError(null);
+                      setShowSuggestions(true);
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    placeholder="Ticker (e.g. AAPL, BTC-USD)"
+                    maxLength={10}
+                    className={`w-full rounded-md bg-slate-900 border px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 ${
+                      tickerError
+                        ? "border-red-500 focus:ring-red-500"
+                        : "border-slate-700 focus:ring-sky-500"
+                    }`}
+                  />
+
+                  {/* Suggestions dropdown */}
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div ref={suggestRef}
+                      className="absolute left-0 top-full mt-1 z-50 w-full rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
+                      {suggestions.map((sym) => (
+                        <button
+                          key={sym}
+                          type="button"
+                          onMouseDown={() => handleSelectSuggestion(sym)}
+                          className={`flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-slate-800 ${
+                            sym === activeSymbol ? "text-sky-400" : "text-slate-200"
+                          }`}
+                        >
+                          <span className="font-semibold">{sym}</span>
+                          <span className="text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 rounded px-1.5 py-0.5">
+                            trained
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 transition-colors whitespace-nowrap"
+                >
+                  Analyze
+                </button>
+              </div>
+
+              {/* Inline validation error */}
+              {tickerError && (
+                <p className="text-xs text-red-400">{tickerError}</p>
+              )}
             </form>
           </header>
 
