@@ -22,7 +22,8 @@ export function GlobalTickerSearch() {
         "trained-symbols",
         async () => {
             try {
-                const res = await fetch("/api/v1/technical/trained-symbols");
+                const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+                const res = await fetch(`${base}/api/v1/technical/trained-symbols`);
                 if (!res.ok) return [];
                 return res.json();
             } catch { return []; }

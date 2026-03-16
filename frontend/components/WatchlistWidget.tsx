@@ -13,8 +13,8 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 
-// Same regex as dashboard — equities + crypto pairs
-const TICKER_REGEX = /^[A-Z]{1,5}(-[A-Z]{2,4})?$/;
+// Matches all Yahoo Finance formats: equities, crypto, futures, indices, forex
+const TICKER_REGEX = /^[\^]?[A-Z0-9]{1,6}([-=][A-Z0-9]{1,4})?$/;
 
 function normalizeTicker(raw: string): string {
     return raw.trim().toUpperCase().replace(/\s+/g, "");
@@ -50,7 +50,8 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
         "trained-symbols",
         async () => {
             try {
-                const res = await fetch("/api/v1/technical/trained-symbols");
+                const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+                const res = await fetch(`${base}/api/v1/technical/trained-symbols`);
                 if (!res.ok) return [];
                 return res.json();
             } catch { return []; }
@@ -196,9 +197,11 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                                         className="flex w-full items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-slate-800 text-slate-200"
                                     >
                                         <span className="font-semibold">{sym}</span>
-                                        <span className="text-[9px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 rounded px-1 py-0.5">
-                                            trained
-                                        </span>
+                                        {trainedSet.has(sym) && (
+                                            <span className="text-[9px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 rounded px-1 py-0.5">
+                                                trained
+                                            </span>
+                                        )}
                                     </button>
                                 ))}
                             </div>

@@ -15,8 +15,13 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 const STORAGE_KEY = "fin-eye-active-symbol";
 const DEFAULT_SYMBOL = "AAPL";
 
-// Matches equities (AAPL, TSLA) and crypto pairs (BTC-USD, ETH-USD)
-const TICKER_REGEX = /^[A-Z]{1,5}(-[A-Z]{2,4})?$/;
+// Matches all Yahoo Finance ticker formats:
+//   Equities:   AAPL, MSFT, BRK-B
+//   Crypto:     BTC-USD, ETH-USD
+//   Futures:    GC=F, CL=F, ZW=F
+//   Indices:    ^GSPC, ^DJI, ^VIX
+//   Forex:      EURUSD=X, GBPUSD=X
+const TICKER_REGEX = /^[\^]?[A-Z0-9]{1,6}([-=][A-Z0-9]{1,4})?$/;
 
 export function normalizeTicker(raw: string): string {
     return raw.trim().toUpperCase().replace(/\s+/g, "");

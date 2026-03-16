@@ -1,7 +1,11 @@
+"""
+app/api/v1/endpoints/portfolios.py
+"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Any
+from sqlalchemy.orm import selectinload
+from typing import List, Any, Optional
 from pydantic import BaseModel
 
 from app.db.database import get_db
@@ -12,7 +16,7 @@ from app.services.portfolio_service import calculate_portfolio_analysis
 
 router = APIRouter()
 
-# --- Pydantic Schemas ---
+# ── Pydantic schemas ──────────────────────────────────────────────────────────
 
 class PortfolioItemBase(BaseModel):
     symbol: str
@@ -21,146 +25,203 @@ class PortfolioItemBase(BaseModel):
 class PortfolioItemResponse(PortfolioItemBase):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PortfolioCreate(BaseModel):
     name: str
-    description: str = None
+    description: str = ""
 
-class PortfolioResponse(PortfolioCreate):
-    id: int
-    items: List[PortfolioItemResponse] = []
+class PortfolioPatch(BaseModel):
+    """All fields optional — only supplied fields are updated."""
+    name:            Optional[str]   = None
+    description:     Optional[str]   = None
+    strategy_tag:    Optional[str]   = None
+    risk_tolerance:  Optional[str]   = None
+    base_currency:   Optional[str]   = None
+    horizon:         Optional[str]   = None
+    notes:           Optional[str]   = None
+    target_return:   Optional[float] = None
+    benchmark:       Optional[str]   = None
+
+class PortfolioResponse(BaseModel):
+    id:              int
+    name:            str
+    description:     Optional[str] = None
+    strategy_tag:    Optional[str] = None
+    risk_tolerance:  Optional[str] = None
+    base_currency:   Optional[str] = "USD"
+    horizon:         Optional[str] = None
+    notes:           Optional[str] = None
+    target_return:   Optional[float] = None
+    benchmark:       Optional[str] = None
+    items:           List[PortfolioItemResponse] = []
     class Config:
-        orm_mode = True
+        from_attributes = True
 
-# --- Endpoints ---
 
-@router.get("/", response_model=List[PortfolioResponse])
-async def get_portfolios(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-) -> Any:
-    """Retrieve all portfolios owned by the current user."""
-    result = await db.execute(select(Portfolio).where(Portfolio.user_id == current_user.id))
-    return result.scalars().all()
+# ── Helper ────────────────────────────────────────────────────────────────────
 
-@router.post("/", response_model=PortfolioResponse)
-async def create_portfolio(
-    portfolio_in: PortfolioCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-) -> Any:
-    """Create a new portfolio container."""
-    portfolio = Portfolio(
-        name=portfolio_in.name,
-        description=portfolio_in.description,
-        user_id=current_user.id
-    )
-    db.add(portfolio)
-    await db.commit()
-    await db.refresh(portfolio)
-    return portfolio
-
-@router.get("/{portfolio_id}", response_model=PortfolioResponse)
-async def get_portfolio(
-    portfolio_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-) -> Any:
-    """Get a specific portfolio by ID, including its holding composition."""
+async def _load_portfolio(db: AsyncSession, portfolio_id: int, user_id) -> Portfolio:
     result = await db.execute(
-        select(Portfolio).where(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
+        select(Portfolio)
+        .options(selectinload(Portfolio.items))
+        .where(Portfolio.id == portfolio_id, Portfolio.user_id == user_id)
     )
     portfolio = result.scalar_one_or_none()
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
     return portfolio
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.get("/", response_model=List[PortfolioResponse])
+async def get_portfolios(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    result = await db.execute(
+        select(Portfolio)
+        .options(selectinload(Portfolio.items))
+        .where(Portfolio.user_id == current_user.id)
+    )
+    return result.scalars().all()
+
+
+@router.post("/", response_model=PortfolioResponse, status_code=status.HTTP_201_CREATED)
+async def create_portfolio(
+    portfolio_in: PortfolioCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    existing = await db.execute(
+        select(Portfolio).where(
+            Portfolio.user_id == current_user.id,
+            Portfolio.name == portfolio_in.name.strip(),
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A portfolio named '{portfolio_in.name.strip()}' already exists.",
+        )
+
+    portfolio = Portfolio(
+        name=portfolio_in.name.strip(),
+        description=portfolio_in.description or "",
+        user_id=current_user.id,
+    )
+    db.add(portfolio)
+    await db.commit()
+
+    result = await db.execute(
+        select(Portfolio)
+        .options(selectinload(Portfolio.items))
+        .where(Portfolio.id == portfolio.id)
+    )
+    return result.scalar_one()
+
+
+@router.get("/{portfolio_id}", response_model=PortfolioResponse)
+async def get_portfolio(
+    portfolio_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    return await _load_portfolio(db, portfolio_id, current_user.id)
+
+
+@router.patch("/{portfolio_id}", response_model=PortfolioResponse)
+async def patch_portfolio(
+    portfolio_id: int,
+    patch: PortfolioPatch,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Partial update — only provided fields are written."""
+    portfolio = await _load_portfolio(db, portfolio_id, current_user.id)
+
+    # Duplicate name check if name is being changed
+    if patch.name is not None:
+        new_name = patch.name.strip()
+        if new_name != portfolio.name:
+            dupe = await db.execute(
+                select(Portfolio).where(
+                    Portfolio.user_id == current_user.id,
+                    Portfolio.name == new_name,
+                )
+            )
+            if dupe.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"A portfolio named '{new_name}' already exists.",
+                )
+        portfolio.name = new_name
+
+    for field in ("description", "strategy_tag", "risk_tolerance",
+                  "base_currency", "horizon", "notes", "target_return", "benchmark"):
+        val = getattr(patch, field)
+        if val is not None:
+            setattr(portfolio, field, val)
+
+    await db.commit()
+    return await _load_portfolio(db, portfolio_id, current_user.id)
+
 
 @router.post("/{portfolio_id}/items", response_model=PortfolioResponse)
 async def add_portfolio_item(
     portfolio_id: int,
     item_in: PortfolioItemBase,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> Any:
-    """Add a new stock or update the weight of an existing stock."""
-    portfolio_result = await db.execute(
-        select(Portfolio).where(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
-    )
-    portfolio = portfolio_result.scalar_one_or_none()
-    if not portfolio:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
-        
-    symbol_upper = item_in.symbol.upper()
-    existing_item_result = await db.execute(
-        select(PortfolioItem).where(
-            PortfolioItem.portfolio_id == portfolio_id, 
-            PortfolioItem.symbol == symbol_upper
-        )
-    )
-    existing_item = existing_item_result.scalar_one_or_none()
-
-    if existing_item:
-        existing_item.weight = item_in.weight
+    portfolio = await _load_portfolio(db, portfolio_id, current_user.id)
+    symbol = item_in.symbol.upper()
+    existing = next((i for i in portfolio.items if i.symbol == symbol), None)
+    if existing:
+        existing.weight = item_in.weight
     else:
-        new_item = PortfolioItem(
-            portfolio_id=portfolio.id,
-            symbol=symbol_upper,
-            weight=item_in.weight
-        )
-        db.add(new_item)
-
+        db.add(PortfolioItem(portfolio_id=portfolio.id, symbol=symbol, weight=item_in.weight))
     await db.commit()
-    await db.refresh(portfolio)
-    return portfolio
+    return await _load_portfolio(db, portfolio_id, current_user.id)
+
 
 @router.delete("/{portfolio_id}/items/{symbol}", response_model=PortfolioResponse)
 async def remove_portfolio_item(
     portfolio_id: int,
     symbol: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> Any:
-    """Remove a stock from a portfolio."""
-    portfolio_result = await db.execute(
-        select(Portfolio).where(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
-    )
-    portfolio = portfolio_result.scalar_one_or_none()
-    if not portfolio:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
-
-    item_result = await db.execute(
-        select(PortfolioItem).where(
-            PortfolioItem.portfolio_id == portfolio_id, 
-            PortfolioItem.symbol == symbol.upper()
-        )
-    )
-    item = item_result.scalar_one_or_none()
-    
+    portfolio = await _load_portfolio(db, portfolio_id, current_user.id)
+    sym_upper = symbol.upper()
+    item = next((i for i in portfolio.items if i.symbol == sym_upper), None)
     if not item:
         raise HTTPException(status_code=404, detail="Symbol not found in portfolio")
-
     await db.delete(item)
     await db.commit()
-    await db.refresh(portfolio)
-    return portfolio
+    return await _load_portfolio(db, portfolio_id, current_user.id)
+
+
+@router.delete("/{portfolio_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_portfolio(
+    portfolio_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    portfolio = await _load_portfolio(db, portfolio_id, current_user.id)
+    await db.delete(portfolio)
+    await db.commit()
+
 
 @router.get("/{portfolio_id}/analysis")
 async def get_portfolio_analysis(
     portfolio_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> Any:
-    """Trigger the complex portfolio aggregation math (GAS, Sectors, Diversification)."""
-    result = await db.execute(
-        select(Portfolio).where(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
-    )
-    portfolio = result.scalar_one_or_none()
-    if not portfolio:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
-        
+    await _load_portfolio(db, portfolio_id, current_user.id)
     metrics = await calculate_portfolio_analysis(db, portfolio_id)
     if "error" in metrics:
         raise HTTPException(status_code=400, detail=metrics["error"])
-        
     return metrics

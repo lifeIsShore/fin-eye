@@ -1,8 +1,8 @@
 """app/models/portfolio.py"""
 from datetime import datetime
 
-from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime, Text
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
@@ -15,6 +15,16 @@ class Portfolio(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(128), index=True, nullable=False)
     description = Column(String(512), nullable=True)
+
+    # Extended metadata fields
+    strategy_tag    = Column(String(32),  nullable=True)   # Growth | Income | Hedge | Speculative | Index | Crypto | Mixed
+    risk_tolerance  = Column(String(16),  nullable=True)   # Conservative | Moderate | Aggressive
+    base_currency   = Column(String(8),   nullable=True, default="USD")
+    horizon         = Column(String(16),  nullable=True)   # Short | Medium | Long
+    notes           = Column(Text,        nullable=True)   # freeform thesis/scratchpad
+    target_return   = Column(Float,       nullable=True)   # annual % target e.g. 15.0
+    benchmark       = Column(String(20),  nullable=True)   # e.g. SPY, QQQ, BTC-USD
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
