@@ -108,21 +108,21 @@ export default function ScoreExplainPanel({ payload, onClose }: ScoreExplainPane
         role="dialog"
         aria-modal="true"
         aria-label={payload?.title ?? "Score Explanation"}
-        className={`fixed top-0 right-0 z-50 h-full w-full max-w-md bg-slate-950 border-l border-slate-800 shadow-2xl flex flex-col transition-transform duration-300 ${
+        className={`fixed top-0 right-0 z-50 h-full w-full sm:max-w-lg lg:max-w-2xl bg-slate-950 border-l border-slate-800 shadow-2xl flex flex-col transition-transform duration-300 ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         {payload && (
           <>
             {/* Header */}
-            <div className="flex items-start justify-between p-6 border-b border-slate-800">
+            <div className="flex items-start justify-between p-6 lg:p-8 border-b border-slate-800">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">
                   Score Breakdown
                 </p>
-                <h2 className="text-xl font-black text-slate-100">{payload.title}</h2>
+                <h2 className="text-2xl lg:text-3xl font-black text-slate-100">{payload.title}</h2>
                 {payload.weight && (
-                  <p className="text-xs text-slate-500 mt-0.5">{payload.weight}</p>
+                  <p className="text-sm text-slate-500 mt-1">{payload.weight}</p>
                 )}
               </div>
               <button
@@ -137,18 +137,18 @@ export default function ScoreExplainPanel({ payload, onClose }: ScoreExplainPane
             </div>
 
             {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-6">
 
               {/* Headline score */}
-              <div className={`rounded-2xl p-5 border ${COLOR_MAP[scoreToColor(payload.score)].bg} border-slate-800`}>
-                <div className="flex items-baseline gap-3 mb-2">
-                  <span className={`text-5xl font-black tracking-tighter ${COLOR_MAP[scoreToColor(payload.score)].text}`}>
+              <div className={`rounded-2xl p-6 lg:p-7 border ${COLOR_MAP[scoreToColor(payload.score)].bg} border-slate-800`}>
+                <div className="flex items-baseline gap-4 mb-3">
+                  <span className={`text-6xl lg:text-7xl font-black tracking-tighter ${COLOR_MAP[scoreToColor(payload.score)].text}`}>
                     {payload.score.toFixed(0)}
                   </span>
-                  <span className="text-lg font-bold text-slate-400">{payload.scoreLabel}</span>
+                  <span className="text-xl font-bold text-slate-400">{payload.scoreLabel}</span>
                 </div>
                 <ScoreBar value={payload.score} color={scoreToColor(payload.score)} />
-                <p className="mt-3 text-sm text-slate-300 leading-relaxed">{payload.summary}</p>
+                <p className="mt-4 text-sm lg:text-base text-slate-300 leading-relaxed">{payload.summary}</p>
               </div>
 
               {/* Sub-component breakdown */}
@@ -160,18 +160,18 @@ export default function ScoreExplainPanel({ payload, onClose }: ScoreExplainPane
                   {payload.subComponents.map((sub) => {
                     const c = COLOR_MAP[sub.color];
                     return (
-                      <div key={sub.label} className="rounded-xl bg-slate-900/60 border border-slate-800 p-4">
-                        <div className="flex justify-between items-baseline mb-2">
-                          <span className="text-sm font-semibold text-slate-200">{sub.label}</span>
-                          <span className={`text-xs font-mono font-bold ${c.text}`}>{sub.rawLabel}</span>
+                      <div key={sub.label} className="rounded-xl bg-slate-900/60 border border-slate-800 p-5">
+                        <div className="flex justify-between items-baseline mb-3">
+                          <span className="text-base font-semibold text-slate-200">{sub.label}</span>
+                          <span className={`text-sm font-mono font-bold ${c.text}`}>{sub.rawLabel}</span>
                         </div>
                         <ScoreBar value={sub.value} color={sub.color} />
-                        <div className="flex justify-between mt-1 text-xs text-slate-600">
+                        <div className="flex justify-between mt-1.5 text-xs text-slate-600">
                           <span>Bearish</span>
                           <span className={`font-semibold ${c.text}`}>{sub.value.toFixed(0)} / 100</span>
                           <span>Bullish</span>
                         </div>
-                        <p className="mt-2 text-xs text-slate-400 leading-relaxed">{sub.description}</p>
+                        <p className="mt-3 text-sm text-slate-400 leading-relaxed">{sub.description}</p>
                       </div>
                     );
                   })}
@@ -179,15 +179,15 @@ export default function ScoreExplainPanel({ payload, onClose }: ScoreExplainPane
               </div>
 
               {/* Methodology */}
-              <div className="rounded-xl bg-slate-900/40 border border-slate-800 p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
+              <div className="rounded-xl bg-slate-900/40 border border-slate-800 p-5">
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">
                   Methodology
                 </h3>
-                <p className="text-xs text-slate-400 leading-relaxed">{payload.methodology}</p>
+                <p className="text-sm text-slate-400 leading-relaxed">{payload.methodology}</p>
               </div>
 
               {/* Disclaimer */}
-              <p className="text-xs text-slate-600 leading-relaxed italic pb-4">
+              <p className="text-xs text-slate-600 leading-relaxed italic pb-6">
                 All scores are model outputs and should not be treated as investment advice. Always conduct independent research before making financial decisions.
               </p>
             </div>

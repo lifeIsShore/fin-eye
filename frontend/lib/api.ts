@@ -222,7 +222,9 @@ export interface TechnicalSignalDto {
   timeframe: string;
   direction: "Bullish" | "Neutral" | "Bearish";
   confidence: number;
-  sharpe_weight: number;
+  sharpe_weight: number;      // validation Sharpe Ratio from training
+  validation_sharpe?: number; // alias — same value, for display
+  model_used?: string;
 }
 
 export interface TechnicalConsensusDto {
