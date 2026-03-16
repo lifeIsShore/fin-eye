@@ -17,7 +17,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import EventTimeline from "../../components/macro/EventTimeline";
-import { AlertTriangle, Info, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertTriangle, Info, ChevronDown, ChevronUp, Globe } from "lucide-react";
+import { PageBanner } from "../../components/ui/PageBanner";
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
@@ -390,6 +391,13 @@ export default function MacroPage() {
 
   return (
     <div className="space-y-6">
+      <PageBanner
+        icon={<Globe className="h-5 w-5" />}
+        title="Macro Intelligence"
+        description="Real-time FRED indicators, yield curve shape, VIX regime, and recession probability."
+        badge="Live"
+        badgeColor="emerald"
+      />
 
       {/* ── Page header ── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

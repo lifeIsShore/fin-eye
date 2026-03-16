@@ -6,6 +6,8 @@ import { fetchNewsSentiment, fetchSentimentSources } from "../../lib/api";
 import { SentimentChart } from "../../components/SentimentChart";
 import { ArticleList } from "../../components/ArticleList";
 import { SourceBreakdownTable } from "../../components/SourceBreakdownTable";
+import { PageBanner } from "../../components/ui/PageBanner";
+import { Newspaper } from "lucide-react";
 
 const DEFAULT_SYMBOL = "AAPL";
 
@@ -45,17 +47,15 @@ export default function NewsSentimentPage() {
 
   return (
     <div className="space-y-6">
+      <PageBanner
+        icon={<Newspaper className="h-5 w-5" />}
+        title="News Sentiment"
+        description="FinBERT-scored headlines and 30-day sentiment trend for any ticker. Educational analysis only."
+        badge="NLP Powered"
+        badgeColor="sky"
+      />
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">
-            News &amp; Sentiment
-          </h2>
-          <p className="mt-1 max-w-xl text-sm text-slate-400">
-            Time-series of FinBERT-scored news sentiment and recent headlines
-            for a selected stock. This view is educational analysis, not
-            investment advice.
-          </p>
-        </div>
+        <div />
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
           <label className="text-xs font-medium text-slate-400" htmlFor="ticker">
             Ticker

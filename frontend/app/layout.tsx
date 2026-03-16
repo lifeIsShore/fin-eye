@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Nav, UserMenu, MobileNav } from "../components/Nav";
+import { Sidebar, UserMenu, MobileNav } from "../components/Nav";
 import { AuthProvider } from "../components/AuthProvider";
 import { ConsentGate } from "../components/ConsentGate";
 
@@ -16,59 +16,68 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <body className="min-h-screen bg-slate-950 text-slate-50 antialiased">
                 <AuthProvider>
                     <ConsentGate>
-                        <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 sm:px-6 py-4 sm:py-6">
+                        {/*
+                         * Layout:
+                         * ┌──────────┬──────────────────────────────────────┐
+                         * │          │  Top bar: logo(mobile) + user menu   │
+                         * │ Sidebar  ├──────────────────────────────────────┤
+                         * │ (lg+)    │  Page content                        │
+                         * │          │                                      │
+                         * └──────────┴──────────────────────────────────────┘
+                         * On < lg: sidebar hidden, hamburger drawer instead.
+                         */}
+                        <div className="flex min-h-screen">
 
-                            {/* ── Header ──────────────────────────────────────── */}
-                            <header className="mb-6 border-b border-slate-800 pb-4">
-                                <div className="flex items-center justify-between gap-4">
+                            {/* ── Left Sidebar (desktop) ──────────────── */}
+                            <Sidebar />
 
-                                    {/* Left — Logo (always fixed width, never squeezed) */}
-                                    <div className="flex-shrink-0">
-                                        <Link href="/" className="block">
-                                            <h1 className="text-xl font-bold tracking-tight text-slate-100 hover:text-white transition-colors">
-                                                Fin-Eye
-                                            </h1>
+                            {/* ── Right: top bar + content + footer ───── */}
+                            <div className="flex flex-1 flex-col min-w-0">
+
+                                {/* Top bar */}
+                                <header className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-slate-800 bg-slate-950/95 backdrop-blur-sm px-4 sm:px-6 py-3">
+                                    {/* Mobile logo — only visible when sidebar is hidden */}
+                                    <div className="lg:hidden flex-shrink-0">
+                                        <Link href="/">
+                                            <span className="text-base font-bold text-slate-100">Fin-Eye</span>
                                         </Link>
-                                        <p className="hidden sm:block text-xs text-slate-500 mt-0.5">
-                                            Market intelligence · not investment advice
-                                        </p>
                                     </div>
 
-                                    {/* Centre — Desktop nav */}
-                                    <div className="flex-1 flex justify-center">
-                                        <Nav />
-                                    </div>
+                                    {/* Spacer — on desktop the logo is in the sidebar */}
+                                    <div className="hidden lg:block flex-1" />
 
-                                    {/* Right — User menu + mobile hamburger */}
-                                    <div className="flex-shrink-0 flex items-center gap-2">
+                                    {/* Right side: user menu + mobile hamburger */}
+                                    <div className="flex items-center gap-2 flex-shrink-0">
                                         <UserMenu />
                                         <MobileNav />
                                     </div>
+                                </header>
 
-                                </div>
-                            </header>
+                                {/* Page content */}
+                                <main className="flex-1 px-4 sm:px-6 py-6">
+                                    {children}
+                                </main>
 
-                            {/* ── Main ────────────────────────────────────────── */}
-                            <main className="flex-1">{children}</main>
+                                {/* Footer */}
+                                <footer className="border-t border-slate-800 px-4 sm:px-6 py-5">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-xs text-slate-500">
+                                            Fin-Eye is for educational purposes only and does not constitute
+                                            investment advice. Trading involves risk of loss.
+                                        </p>
+                                        <nav className="flex flex-wrap gap-3 text-xs text-slate-500">
+                                            <Link href="/legal/terms" className="hover:text-slate-300 transition-colors">Terms of Service</Link>
+                                            <span className="text-slate-700">·</span>
+                                            <Link href="/legal/privacy" className="hover:text-slate-300 transition-colors">Privacy Policy</Link>
+                                            <span className="text-slate-700">·</span>
+                                            <Link href="/legal/disclaimer" className="hover:text-slate-300 transition-colors">Risk Disclaimer</Link>
+                                            <span className="text-slate-700">·</span>
+                                            <Link href="/community" className="hover:text-slate-300 transition-colors">Community</Link>
+                                        </nav>
+                                    </div>
+                                </footer>
+                            </div>
 
-                            {/* ── Footer ──────────────────────────────────────── */}
-                            <footer className="mt-8 border-t border-slate-800 pt-5">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <p className="text-xs text-slate-500">
-                                        Fin-Eye is for educational purposes only and does not constitute
-                                        investment advice. Trading involves risk of loss.
-                                    </p>
-                                    <nav className="flex flex-wrap gap-3 text-xs text-slate-500">
-                                        <Link href="/legal/terms" className="hover:text-slate-300 transition-colors">Terms of Service</Link>
-                                        <span className="text-slate-700">·</span>
-                                        <Link href="/legal/privacy" className="hover:text-slate-300 transition-colors">Privacy Policy</Link>
-                                        <span className="text-slate-700">·</span>
-                                        <Link href="/legal/disclaimer" className="hover:text-slate-300 transition-colors">Risk Disclaimer</Link>
-                                        <span className="text-slate-700">·</span>
-                                        <Link href="/community" className="hover:text-slate-300 transition-colors">Community</Link>
-                                    </nav>
-                                </div>
-                            </footer>
                         </div>
                     </ConsentGate>
                 </AuthProvider>

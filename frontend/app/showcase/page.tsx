@@ -20,10 +20,15 @@ import {
 // ─── Category colours ────────────────────────────────────────────────────────
 
 const CATEGORY_STYLES: Record<string, string> = {
-    "Portfolio Tools": "bg-sky-900/30 text-sky-300 border-sky-700/30",
+    "Templates":       "bg-sky-900/30 text-sky-300 border-sky-700/30",
+    "Portfolio Tools": "bg-violet-900/30 text-violet-300 border-violet-700/30",
+    "Education":       "bg-emerald-900/30 text-emerald-300 border-emerald-700/30",
+    "Workflow":        "bg-amber-900/30 text-amber-300 border-amber-700/30",
+    "Integrations":    "bg-rose-900/30 text-rose-300 border-rose-700/30",
+    "General":         "bg-slate-800 text-slate-300 border-slate-700",
+    // legacy support
     "Planning Tools":  "bg-violet-900/30 text-violet-300 border-violet-700/30",
     "Educational":     "bg-emerald-900/30 text-emerald-300 border-emerald-700/30",
-    "General":         "bg-slate-800 text-slate-300 border-slate-700",
 };
 
 function categoryStyle(cat: string): string {
@@ -31,10 +36,15 @@ function categoryStyle(cat: string): string {
 }
 
 const CATEGORY_FILTER_ACTIVE: Record<string, string> = {
-    "Portfolio Tools": "bg-sky-600 text-white",
+    "Templates":       "bg-sky-600 text-white",
+    "Portfolio Tools": "bg-violet-600 text-white",
+    "Education":       "bg-emerald-600 text-white",
+    "Workflow":        "bg-amber-600 text-white",
+    "Integrations":    "bg-rose-600 text-white",
+    "All":             "bg-slate-600 text-white",
+    // legacy
     "Planning Tools":  "bg-violet-600 text-white",
     "Educational":     "bg-emerald-600 text-white",
-    "All":             "bg-slate-600 text-white",
 };
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
@@ -215,7 +225,7 @@ function ProductCard({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const CATEGORY_ORDER = ["All", "Portfolio Tools", "Planning Tools", "Educational", "General"];
+const CATEGORY_ORDER = ["All", "Templates", "Portfolio Tools", "Education", "Workflow", "Integrations", "General", "Planning Tools", "Educational"];
 
 export default function ShowcasePage() {
     const { data: products, error, isLoading } = useSWR<ShowcaseProductDto[]>(
@@ -225,6 +235,7 @@ export default function ShowcasePage() {
     );
 
     const [activeCategory, setActiveCategory] = useState("All");
+    const [priceFilter, setPriceFilter] = useState<"all" | "free" | "paid">("all");
     const [selectedProduct, setSelectedProduct] = useState<ShowcaseProductDto | null>(null);
 
     // Build category list from data
@@ -241,33 +252,43 @@ export default function ShowcasePage() {
 
     const filtered = useMemo(() => {
         if (!products) return [];
-        if (activeCategory === "All") return products;
-        return products.filter((p) => p.category === activeCategory);
-    }, [products, activeCategory]);
+        let list = activeCategory === "All" ? products : products.filter((p) => p.category === activeCategory);
+        if (priceFilter === "free") list = list.filter((p) => p.price_label.toLowerCase() === "free");
+        if (priceFilter === "paid") list = list.filter((p) => p.price_label.toLowerCase() !== "free");
+        return list;
+    }, [products, activeCategory, priceFilter]);
 
     return (
         <div className="space-y-8">
-            {/* ── Header ─────────────────────────────────────────────────────── */}
-            <header className="border-b border-slate-800 pb-6">
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-900/40 border border-sky-700/30">
-                        <ShoppingBag className="h-5 w-5 text-sky-400" />
-                    </div>
-                    <h1 className="text-3xl font-black tracking-tight text-slate-100">
-                        Pro Tools
-                    </h1>
-                </div>
-                <p className="text-sm text-slate-400 max-w-xl">
-                    Curated digital tools and templates to complement your Fin-Eye workflow —
-                    from portfolio risk trackers to macro reference guides. All for educational
-                    use; none constitute investment advice.
-                </p>
-            </header>
+            <PageBanner
+                icon={<ShoppingBag className="h-5 w-5" />}
+                title="Pro Tools"
+                description="Curated templates, calculators, and guides to complement your Fin-Eye workflow. Educational use only."
+                badge={products ? `${products.length} Products` : undefined}
+                badgeColor="sky"
+            />
 
-            {/* ── Category filter ─────────────────────────────────────────────── */}
-            {!isLoading && !error && categories.length > 1 && (
-                <div className="flex flex-wrap gap-2">
-                    {categories.map((cat) => {
+            {/* ── Filters ─────────────────────────────────────────────────── */}
+            {!isLoading && !error && (
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Price filter */}
+                    <div className="flex gap-1 rounded-lg bg-slate-900 border border-slate-800 p-1">
+                        {(["all", "free", "paid"] as const).map((f) => (
+                            <button key={f} onClick={() => setPriceFilter(f)}
+                                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                                    priceFilter === f
+                                        ? "bg-slate-700 text-slate-100"
+                                        : "text-slate-500 hover:text-slate-300"
+                                }`}>
+                                {f === "all" ? "All prices" : f === "free" ? "Free" : "Paid"}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+
+                    {/* Category filter */}
+                    {categories.length > 1 && categories.map((cat) => {
                         const isActive = activeCategory === cat;
                         const activeClass = CATEGORY_FILTER_ACTIVE[cat] ?? "bg-slate-600 text-white";
                         return (
@@ -294,8 +315,8 @@ export default function ShowcasePage() {
                             </button>
                         );
                     })}
-                </div>
-            )}
+                </div> {/* end category filter row */}
+            ) /* end filters block */}
 
             {/* ── States ─────────────────────────────────────────────────────── */}
             {isLoading && (

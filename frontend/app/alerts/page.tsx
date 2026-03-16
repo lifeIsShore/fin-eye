@@ -11,6 +11,8 @@ import {
   TriggeredAlertDto,
   AlertCreatePayload,
 } from "@/lib/api";
+import { PageBanner } from "@/components/ui/PageBanner";
+import { Bell } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -112,16 +114,15 @@ export default function AlertsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
-      <div className="max-w-3xl mx-auto space-y-8">
-
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-white">Alerts & Notifications</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Get notified when a price or GAS score crosses your threshold.
-          </p>
-        </div>
+    <div className="space-y-6">
+      <PageBanner
+        icon={<Bell className="h-5 w-5" />}
+        title="Alerts & Notifications"
+        description="Get notified when a price or GAS score crosses your threshold. Evaluated every 5 minutes."
+        badge="Live Monitoring"
+        badgeColor="amber"
+      />
+      <div className="max-w-3xl space-y-8">
 
         {/* Triggered banner */}
         {triggered.length > 0 && (

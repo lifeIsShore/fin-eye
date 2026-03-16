@@ -19,7 +19,9 @@ import {
 import {
   AlertTriangle, Info, TrendingUp, Activity,
   BookOpen, Save, Trash2, Globe, Lock, ChevronDown, ChevronUp,
+  FlaskConical,
 } from "lucide-react";
+import { PageBanner } from "@/components/ui/PageBanner";
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -277,14 +279,13 @@ export default function BacktestingPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight">Strategy Backtester</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Simulate historical strategy performance — for learning only.
-          </p>
-        </div>
-      </div>
+      <PageBanner
+        icon={<FlaskConical className="h-5 w-5" />}
+        title="Strategy Backtester"
+        description="Simulate momentum strategies on historical OHLCV data and measure risk-adjusted returns."
+        badge="Educational"
+        badgeColor="violet"
+      />
 
       <OverfittingWarning triggered={triggered} />
 

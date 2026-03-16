@@ -4,6 +4,8 @@ import { useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { useAuth } from "../../components/AuthProvider";
+import { PageBanner } from "../../components/ui/PageBanner";
+import { Briefcase } from "lucide-react";
 
 const fetcher = async (url: string) => {
     const token = localStorage.getItem("access_token") || "";
@@ -56,11 +58,15 @@ export default function PortfoliosOverview() {
 
     return (
         <div className="space-y-6">
+            <PageBanner
+                icon={<Briefcase className="h-5 w-5" />}
+                title="Portfolio Builder"
+                description="Create custom baskets, track weighted GAS scores, and manage grade-based allocations."
+                badge="Grade-Based"
+                badgeColor="emerald"
+            />
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-50 tracking-tight">Your Portfolios</h2>
-                    <p className="text-sm text-slate-400">Track aggregate exposure and algorithmic risk across your custom baskets.</p>
-                </div>
+                <div />
 
                 <form onSubmit={handleCreate} className="flex gap-2 w-full sm:w-auto">
                     <input

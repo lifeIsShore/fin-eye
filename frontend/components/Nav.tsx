@@ -2,41 +2,81 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
+import { useRef } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import {
     Settings, CreditCard, LogOut, ChevronDown, User,
-    Activity, BarChart2, FlaskConical, Menu, X
+    Activity, BarChart2, FlaskConical, Menu, X,
+    LayoutDashboard, Globe, Newspaper, Users, Zap,
+    TrendingDown, Calendar, PieChart, Landmark, BarChart,
+    Shield, FlaskConical as Backtest, Briefcase, Bell,
+    ShoppingBag, BookOpen, MessageCircle, Eye, ChevronLeft,
+    ChevronRight,
 } from "lucide-react";
 
-// ── Nav item definitions ──────────────────────────────────────────────────────
+// ── Sidebar nav structure ─────────────────────────────────────────────────────
 
-const PRIMARY_NAV = [
-    { href: "/",              label: "Dashboard" },
-    { href: "/macro",         label: "Macro" },
-    { href: "/news-sentiment",label: "Sentiment" },
-    { href: "/backtesting",   label: "Backtest" },
-    { href: "/portfolios",    label: "Portfolio" },
+interface NavItem {
+    href: string;
+    label: string;
+    icon: React.ReactNode;
+}
+
+interface NavSection {
+    title: string;
+    items: NavItem[];
+}
+
+const SIDEBAR_SECTIONS: NavSection[] = [
+    {
+        title: "Core Analysis",
+        items: [
+            { href: "/",               label: "Dashboard",    icon: <LayoutDashboard className="h-4 w-4" /> },
+            { href: "/macro",          label: "Macro",        icon: <Globe className="h-4 w-4" /> },
+            { href: "/news-sentiment", label: "Sentiment",    icon: <Newspaper className="h-4 w-4" /> },
+        ],
+    },
+    {
+        title: "Deep Signals",
+        items: [
+            { href: "/sentiment",      label: "Retail Mood",     icon: <Users className="h-4 w-4" /> },
+            { href: "/sentiment-adv",  label: "Adv. Sentiment",  icon: <Zap className="h-4 w-4" /> },
+            { href: "/options",        label: "Options Flow",    icon: <Activity className="h-4 w-4" /> },
+            { href: "/insiders",       label: "Insider Activity",icon: <Eye className="h-4 w-4" /> },
+            { href: "/shorts",         label: "Short Interest",  icon: <TrendingDown className="h-4 w-4" /> },
+            { href: "/earnings",       label: "Earnings",        icon: <Calendar className="h-4 w-4" /> },
+        ],
+    },
+    {
+        title: "Market Context",
+        items: [
+            { href: "/sectors",        label: "Sectors",         icon: <PieChart className="h-4 w-4" /> },
+            { href: "/fed-policy",     label: "Fed Policy",      icon: <Landmark className="h-4 w-4" /> },
+            { href: "/indicators",     label: "Indicators",      icon: <BarChart className="h-4 w-4" /> },
+            { href: "/hedge",          label: "Hedge",           icon: <Shield className="h-4 w-4" /> },
+        ],
+    },
+    {
+        title: "Tools",
+        items: [
+            { href: "/backtesting",    label: "Backtesting",     icon: <Backtest className="h-4 w-4" /> },
+            { href: "/portfolios",     label: "Portfolio",       icon: <Briefcase className="h-4 w-4" /> },
+            { href: "/alerts",         label: "Alerts",          icon: <Bell className="h-4 w-4" /> },
+            { href: "/showcase",       label: "Pro Tools",       icon: <ShoppingBag className="h-4 w-4" /> },
+        ],
+    },
+    {
+        title: "Learn",
+        items: [
+            { href: "/learn",          label: "Learn Hub",       icon: <BookOpen className="h-4 w-4" /> },
+            { href: "/community",      label: "Community",       icon: <MessageCircle className="h-4 w-4" /> },
+        ],
+    },
 ];
 
-const MORE_NAV = [
-    { href: "/sentiment",     label: "Retail Sentiment" },
-    { href: "/sentiment-adv", label: "Adv. Sentiment" },
-    { href: "/options",       label: "Options" },
-    { href: "/sectors",       label: "Sectors" },
-    { href: "/insiders",      label: "Insiders" },
-    { href: "/earnings",      label: "Earnings" },
-    { href: "/shorts",        label: "Shorts" },
-    { href: "/fed-policy",    label: "Fed Policy" },
-    { href: "/indicators",    label: "Indicators" },
-    { href: "/hedge",         label: "Hedge" },
-    { href: "/alerts",        label: "Alerts" },
-    { href: "/learn",         label: "Learn" },
-    { href: "/showcase",      label: "Pro Tools" },
-    { href: "/community",     label: "Community" },
-];
-
-const ALL_NAV = [...PRIMARY_NAV, ...MORE_NAV];
+// Flat list for mobile drawer
+const ALL_NAV_FLAT = SIDEBAR_SECTIONS.flatMap((s) => s.items);
 
 // ── UserMenu ──────────────────────────────────────────────────────────────────
 
@@ -121,66 +161,104 @@ export function UserMenu() {
     );
 }
 
-// ── Desktop Nav ───────────────────────────────────────────────────────────────
+// ── Desktop Sidebar ───────────────────────────────────────────────────────────
 
-export function Nav() {
+export function Sidebar() {
     const pathname = usePathname();
-    const [moreOpen, setMoreOpen] = useState(false);
-    const moreRef = useRef<HTMLDivElement>(null);
+    const [collapsed, setCollapsed] = useState(false);
 
+    // Persist collapse state
     useEffect(() => {
-        function handler(e: MouseEvent) {
-            if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
-        }
-        document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
+        const stored = localStorage.getItem("fin-eye-sidebar-collapsed");
+        if (stored === "true") setCollapsed(true);
     }, []);
 
-    const isMoreActive = MORE_NAV.some((item) => pathname === item.href);
+    const toggleCollapse = () => {
+        setCollapsed((c) => {
+            localStorage.setItem("fin-eye-sidebar-collapsed", String(!c));
+            return !c;
+        });
+    };
 
     return (
-        <nav className="hidden md:flex items-center gap-1">
-            {PRIMARY_NAV.map((item) => {
-                const active = pathname === item.href;
-                return (
-                    <Link key={item.href} href={item.href}
-                        className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                            active ? "bg-slate-800 text-slate-50" : "text-slate-400 hover:bg-slate-900 hover:text-slate-100"
-                        }`}>
-                        {item.label}
+        <aside
+            className={`hidden lg:flex flex-col flex-shrink-0 border-r border-slate-800 bg-slate-950 transition-all duration-300 ${
+                collapsed ? "w-14" : "w-56"
+            }`}
+            style={{ minHeight: "100vh" }}
+        >
+            {/* Logo area */}
+            <div className={`flex items-center border-b border-slate-800 px-3 py-4 ${collapsed ? "justify-center" : "justify-between"}`}>
+                {!collapsed && (
+                    <Link href="/" className="flex flex-col">
+                        <span className="text-base font-bold text-slate-100 leading-tight hover:text-white transition-colors">
+                            Fin-Eye
+                        </span>
+                        <span className="text-[10px] text-slate-500 leading-tight">Market Intelligence</span>
                     </Link>
-                );
-            })}
-
-            {/* More dropdown */}
-            <div className="relative" ref={moreRef}>
+                )}
                 <button
-                    onClick={() => setMoreOpen((o) => !o)}
-                    className={`flex items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                        isMoreActive || moreOpen ? "bg-slate-800 text-slate-50" : "text-slate-400 hover:bg-slate-900 hover:text-slate-100"
+                    onClick={toggleCollapse}
+                    className="rounded-md p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300 transition-colors flex-shrink-0"
+                    title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                    {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                </button>
+            </div>
+
+            {/* Nav sections */}
+            <nav className="flex-1 overflow-y-auto py-3 space-y-4 px-2">
+                {SIDEBAR_SECTIONS.map((section) => (
+                    <div key={section.title}>
+                        {/* Section header — hidden when collapsed */}
+                        {!collapsed && (
+                            <p className="px-2 pb-1 text-[10px] font-semibold tracking-widest text-slate-600 uppercase">
+                                {section.title}
+                            </p>
+                        )}
+                        {collapsed && <div className="border-t border-slate-800/60 mx-1 mb-1" />}
+
+                        <ul className="space-y-0.5">
+                            {section.items.map((item) => {
+                                const active = pathname === item.href;
+                                return (
+                                    <li key={item.href}>
+                                        <Link
+                                            href={item.href}
+                                            title={collapsed ? item.label : undefined}
+                                            className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
+                                                active
+                                                    ? "bg-slate-800 text-sky-400 border-l-2 border-sky-500"
+                                                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-100 border-l-2 border-transparent"
+                                            } ${collapsed ? "justify-center px-0" : ""}`}
+                                        >
+                                            <span className={`flex-shrink-0 ${active ? "text-sky-400" : "text-slate-500"}`}>
+                                                {item.icon}
+                                            </span>
+                                            {!collapsed && <span className="truncate">{item.label}</span>}
+                                        </Link>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                ))}
+            </nav>
+
+            {/* Sidebar footer — Settings */}
+            <div className={`border-t border-slate-800 py-3 px-2`}>
+                <Link
+                    href="/settings"
+                    title={collapsed ? "Settings" : undefined}
+                    className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-slate-400 hover:bg-slate-900 hover:text-slate-100 transition-colors ${
+                        collapsed ? "justify-center px-0" : ""
                     }`}
                 >
-                    More
-                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${moreOpen ? "rotate-180" : ""}`} />
-                </button>
-
-                {moreOpen && (
-                    <div className="absolute left-0 top-10 z-50 w-52 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl py-1.5">
-                        {MORE_NAV.map((item) => {
-                            const active = pathname === item.href;
-                            return (
-                                <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)}
-                                    className={`block px-4 py-2 text-sm transition-colors ${
-                                        active ? "text-sky-400 bg-slate-800" : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-                                    }`}>
-                                    {item.label}
-                                </Link>
-                            );
-                        })}
-                    </div>
-                )}
+                    <Settings className="h-4 w-4 flex-shrink-0 text-slate-500" />
+                    {!collapsed && <span>Settings</span>}
+                </Link>
             </div>
-        </nav>
+        </aside>
     );
 }
 
@@ -190,55 +268,65 @@ export function MobileNav() {
     const pathname = usePathname();
     const [open, setOpen] = useState(false);
 
-    // Close drawer on route change
     useEffect(() => { setOpen(false); }, [pathname]);
 
     return (
         <>
-            {/* Hamburger trigger */}
             <button
                 onClick={() => setOpen(true)}
-                className="md:hidden flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 hover:text-slate-100 transition-colors"
+                className="lg:hidden flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 hover:text-slate-100 transition-colors"
                 aria-label="Open menu"
             >
                 <Menu className="h-5 w-5" />
             </button>
 
-            {/* Overlay */}
             {open && (
-                <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+                <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
                     onClick={() => setOpen(false)} />
             )}
 
-            {/* Drawer */}
-            <div className={`fixed top-0 left-0 z-50 h-full w-72 bg-slate-950 border-r border-slate-800 flex flex-col transition-transform duration-300 md:hidden ${
+            <div className={`fixed top-0 left-0 z-50 h-full w-72 bg-slate-950 border-r border-slate-800 flex flex-col transition-transform duration-300 lg:hidden ${
                 open ? "translate-x-0" : "-translate-x-full"
             }`}>
-                {/* Drawer header */}
                 <div className="flex items-center justify-between px-4 py-4 border-b border-slate-800">
-                    <span className="text-lg font-semibold text-slate-100">Fin-Eye</span>
+                    <div>
+                        <span className="text-base font-bold text-slate-100">Fin-Eye</span>
+                        <p className="text-[10px] text-slate-500">Market Intelligence</p>
+                    </div>
                     <button onClick={() => setOpen(false)}
                         className="rounded-lg p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors">
                         <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                {/* Drawer links */}
-                <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-                    {ALL_NAV.map((item) => {
-                        const active = pathname === item.href;
-                        return (
-                            <Link key={item.href} href={item.href}
-                                className={`flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                                    active ? "bg-slate-800 text-sky-400" : "text-slate-300 hover:bg-slate-800/60 hover:text-slate-100"
-                                }`}>
-                                {item.label}
-                            </Link>
-                        );
-                    })}
+                <nav className="flex-1 overflow-y-auto py-3 px-2">
+                    {SIDEBAR_SECTIONS.map((section) => (
+                        <div key={section.title} className="mb-4">
+                            <p className="px-3 pb-1 text-[10px] font-semibold tracking-widest text-slate-600 uppercase">
+                                {section.title}
+                            </p>
+                            <ul className="space-y-0.5">
+                                {section.items.map((item) => {
+                                    const active = pathname === item.href;
+                                    return (
+                                        <li key={item.href}>
+                                            <Link href={item.href}
+                                                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                                                    active ? "bg-slate-800 text-sky-400" : "text-slate-300 hover:bg-slate-800/60 hover:text-slate-100"
+                                                }`}>
+                                                <span className={active ? "text-sky-400" : "text-slate-500"}>
+                                                    {item.icon}
+                                                </span>
+                                                {item.label}
+                                            </Link>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </div>
+                    ))}
                 </nav>
 
-                {/* Drawer footer */}
                 <div className="border-t border-slate-800 px-4 py-3">
                     <Link href="/settings"
                         className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors">
@@ -249,3 +337,6 @@ export function MobileNav() {
         </>
     );
 }
+
+// Nav export kept for backward compat — no longer used in layout but safe to keep
+export function Nav() { return null; }
