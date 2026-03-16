@@ -22,7 +22,6 @@ BUG-003 RESOLUTION:
 """
 
 import os
-import json
 import logging
 import joblib
 
@@ -38,33 +37,48 @@ from app.services.ml_pipeline import (
     TIMEFRAME_HORIZON,
     DEFAULT_HORIZON,
 )
+from app.services.model_registry import JsonlFileModelRegistry
+from app.services.technical_models import Timeframe
 
 logger = logging.getLogger(__name__)
+
+# Shared registry instance for this module (reads the same JSONL file as the pipeline)
+_registry = JsonlFileModelRegistry(REGISTRY_FILE)
 
 
 # ── Registry helpers ──────────────────────────────────────────────────────────
 
 def get_latest_model_metadata(symbol: str, timeframe: str) -> dict:
     """
-    Reads the JSONL registry and returns the most recent record for the given
-    symbol + timeframe combination. Returns {} if nothing found.
+    Returns a metadata dict for the current champion model for (symbol, timeframe).
+    Uses the versioned registry — only 'champion' records are returned.
+    Returns {} if no champion exists.
     """
-    if not os.path.exists(REGISTRY_FILE):
+    try:
+        record = _registry.get_latest_for_timeframe(
+            Timeframe(timeframe), symbol=symbol
+        )
+    except Exception as e:
+        logger.error("Error reading model registry for %s/%s: %s", symbol, timeframe, e)
         return {}
 
-    latest = {}
-    try:
-        with open(REGISTRY_FILE, "r") as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                record = json.loads(line)
-                if record.get("symbol") == symbol and record.get("timeframe") == timeframe:
-                    latest = record   # last entry wins
-    except Exception as e:
-        logger.error(f"Error reading model registry: {e}")
+    if record is None:
+        return {}
 
-    return latest
+    # Return a dict that is backwards-compatible with the rest of this module
+    return {
+        "symbol":            record.symbol,
+        "timeframe":         record.timeframe.value,
+        "model_name":        record.model_kind.value,
+        "artifact_file":     os.path.basename(record.artifact_path) if record.artifact_path else "",
+        "validation_sharpe": record.sharpe_ratio,
+        "horizon_periods":   record.extra_metrics.get("horizon_periods", DEFAULT_HORIZON),
+        "mlflow_run_id":     record.mlflow_run_id,
+        "trained_at":        record.trained_at.isoformat(),
+        "version":           record.version,
+        "status":            record.status,
+        "quality_gate":      record.quality_gate,
+    }
 
 
 def get_trained_timeframes(symbol: str) -> list[str]:
@@ -72,52 +86,49 @@ def get_trained_timeframes(symbol: str) -> list[str]:
     BUG-003 FIX: Derive the active timeframe list from the registry + disk.
 
     A timeframe is considered active only when ALL of these are true:
-      1. A registry entry exists for (symbol, timeframe)
-      2. The artifact file referenced in the registry exists on disk
-      3. The recorded validation_sharpe is > 0 (not a known-bad fallback)
+      1. A 'champion' record exists in the registry for (symbol, timeframe)
+      2. The artifact file referenced in the record exists on disk
+      3. The recorded sharpe_ratio is > 0 (not a known-bad fallback)
 
-    This replaces the hardcoded TIMEFRAMES list that was the root of BUG-003.
+    Uses the versioned ModelRegistry — retired / candidate records are ignored.
     """
-    if not os.path.exists(REGISTRY_FILE):
-        return []
-
-    # Collect latest record per timeframe (last entry in registry wins)
-    latest_per_tf: dict[str, dict] = {}
     try:
-        with open(REGISTRY_FILE, "r") as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                record = json.loads(line)
-                if record.get("symbol") == symbol:
-                    tf = record.get("timeframe", "")
-                    if tf:
-                        latest_per_tf[tf] = record
+        all_champions = _registry.all_champions()
     except Exception as e:
-        logger.error(f"Error scanning registry for {symbol}: {e}")
+        logger.error("Error reading registry champions for %s: %s", symbol, e)
         return []
 
     active = []
-    for tf, record in latest_per_tf.items():
-        artifact_file = record.get("artifact_file", "")
-        artifact_path = os.path.join(ARTIFACT_DIR, artifact_file)
-        sharpe        = record.get("validation_sharpe", -99)
+    for record in all_champions:
+        if record.symbol != symbol:
+            continue
 
-        if not artifact_file:
-            logger.debug("Skipping %s/%s — no artifact_file in registry", symbol, tf)
-            continue
+        artifact_path = record.artifact_path or ""
+        if not artifact_path:
+            # Fall back to the conventional filename if not stored
+            artifact_path = os.path.join(
+                ARTIFACT_DIR, f"{symbol}_{record.timeframe.value}_winner.joblib"
+            )
+
         if not os.path.exists(artifact_path):
-            logger.debug("Skipping %s/%s — artifact missing: %s", symbol, tf, artifact_path)
+            logger.debug(
+                "Skipping %s/%s — artifact missing: %s",
+                symbol, record.timeframe.value, artifact_path,
+            )
             continue
-        if sharpe <= 0:
+        if record.sharpe_ratio <= 0:
             logger.debug(
                 "Skipping %s/%s — Sharpe=%.3f (non-positive, model not trusted)",
-                symbol, tf, sharpe
+                symbol, record.timeframe.value, record.sharpe_ratio,
             )
             continue
 
-        active.append(tf)
-        logger.debug("Active timeframe: %s/%s  Sharpe=%.3f", symbol, tf, sharpe)
+        active.append(record.timeframe.value)
+        logger.debug(
+            "Active timeframe: %s/%s  v%d  Sharpe=%.3f  gate=%s",
+            symbol, record.timeframe.value, record.version,
+            record.sharpe_ratio, "✓" if record.quality_gate else "✗",
+        )
 
     logger.info("Active trained timeframes for %s: %s", symbol, active or "none")
     return active

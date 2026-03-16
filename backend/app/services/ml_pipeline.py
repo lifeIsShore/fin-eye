@@ -39,6 +39,9 @@ from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 from prophet import Prophet
 
+from app.services.technical_models import Timeframe, ModelKind, TimeframeWinner
+from app.services.model_registry import JsonlFileModelRegistry, record_winners
+
 logger = logging.getLogger(__name__)
 
 ARTIFACT_DIR  = os.path.join(os.path.dirname(__file__), "..", "..", "data", "models")
@@ -519,8 +522,31 @@ def run_training_pipeline(
             "mlflow_run_id":     mlflow_run_id,
         }
 
-        with open(REGISTRY_FILE, "a") as f:
-            f.write(json.dumps(metadata) + "\n")
+        # Save to versioned model registry
+        registry = JsonlFileModelRegistry(REGISTRY_FILE)
+        winner_tf = TimeframeWinner(
+            timeframe    = Timeframe(timeframe),
+            model_kind   = ModelKind(best_name),
+            sharpe_ratio = best_sharpe,
+            accuracy     = results.get(best_name, {}).get("accuracy", 0.0),
+        )
+        record_winners(
+            registry      = registry,
+            winners       = [winner_tf],
+            symbol        = symbol,
+            trained_at    = datetime.utcnow(),
+            artifact_path = artifact_path,
+            mlflow_run_id = mlflow_run_id,
+            quality_gate  = quality_gate_passed,
+            notes         = f"horizon={horizon} val_rows={diagnostics['val_rows']}",
+            extra_metrics = {
+                "horizon_periods":   horizon,
+                "val_rows":          diagnostics["val_rows"],
+                "train_rows":        diagnostics["train_rows"],
+                "total_return":      results.get(best_name, {}).get("total_return", 0.0),
+                "all_model_metrics": results,
+            },
+        )
 
         logger.info(
             f"Winner {symbol}/{timeframe}: {best_name}  "
