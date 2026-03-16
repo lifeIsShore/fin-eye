@@ -127,18 +127,47 @@ def _log_model_metrics(mlflow, model_name: str, metrics: dict):
 
 
 def _log_winner_artifact(mlflow, artifact_path: str):
+    """Log the raw .joblib as a plain artifact (for download/reference)."""
     try:
-        mlflow.log_artifact(artifact_path, artifact_path="model")
+        mlflow.log_artifact(artifact_path, artifact_path="joblib")
     except Exception as e:
         logger.debug("MLflow artifact log failed: %s", e)
 
 
-def _register_model_in_mlflow(mlflow, run_id: str, symbol: str,
-                               timeframe: str, artifact_path: str):
+def _log_and_register_model(mlflow, winner_obj, run_id: str,
+                             symbol: str, timeframe: str, artifact_path: str):
+    """
+    Log the winner as a proper MLflow sklearn model (creates MLmodel manifest),
+    then register it in the Model Registry. This replaces the old
+    log_artifact + register_model split which failed because register_model
+    requires a logged MLflow model, not a raw file artifact.
+    """
     try:
-        model_name = f"fin-eye-{symbol}-{timeframe}".replace("/", "-")
-        model_uri  = f"runs:/{run_id}/model/{os.path.basename(artifact_path)}"
-        result     = mlflow.register_model(model_uri, model_name)
+        import mlflow.sklearn  # noqa: PLC0415
+        model_name   = f"fin-eye-{symbol}-{timeframe}".replace("/", "-")
+        artifact_dir = "model"
+
+        # Unwrap wrapper classes so mlflow.sklearn gets a real sklearn estimator.
+        # For XGBoostWrapper we log the inner XGBClassifier;
+        # for LogisticWrapper we log the pipeline as a dict artifact instead
+        # (sklearn log_model works best with a single estimator or Pipeline).
+        from sklearn.pipeline import Pipeline  # noqa: PLC0415
+
+        if hasattr(winner_obj, "model") and hasattr(winner_obj, "scaler"):
+            # LogisticWrapper — build a proper sklearn Pipeline
+            sk_model = Pipeline([
+                ("scaler", winner_obj.scaler),
+                ("clf",    winner_obj.model),
+            ])
+        elif hasattr(winner_obj, "model"):
+            # XGBoostWrapper or ProphetWrapper — log inner model
+            sk_model = winner_obj.model
+        else:
+            sk_model = winner_obj
+
+        mlflow.sklearn.log_model(sk_model, artifact_path=artifact_dir)
+        model_uri = f"runs:/{run_id}/{artifact_dir}"
+        result    = mlflow.register_model(model_uri, model_name)
         logger.info("MLflow: registered '%s' version %s", model_name, result.version)
         return result
     except Exception as e:
@@ -158,9 +187,9 @@ def engineer_features(df: pd.DataFrame, horizon: int = DEFAULT_HORIZON) -> pd.Da
     high   = d["high"]   if "high"   in d.columns else close
     low    = d["low"]    if "low"    in d.columns else close
 
-    d["ret_1"] = close.pct_change(1)
-    d["ret_3"] = close.pct_change(3)
-    d["ret_5"] = close.pct_change(5)
+    d["ret_1"] = close.pct_change(1, fill_method=None)
+    d["ret_3"] = close.pct_change(3, fill_method=None)
+    d["ret_5"] = close.pct_change(5, fill_method=None)
 
     d["sma_10"] = close.rolling(10).mean()
     d["sma_20"] = close.rolling(20).mean()
@@ -189,8 +218,8 @@ def engineer_features(df: pd.DataFrame, horizon: int = DEFAULT_HORIZON) -> pd.Da
         (d["bb_upper"] - d["bb_lower"]).replace(0, 1e-9)
     )
 
-    d["mom_10"] = close.pct_change(10)
-    d["mom_20"] = close.pct_change(20)
+    d["mom_10"] = close.pct_change(10, fill_method=None)
+    d["mom_20"] = close.pct_change(20, fill_method=None)
 
     prev_close = close.shift(1)
     tr = pd.concat([
@@ -470,8 +499,8 @@ def run_training_pipeline(
                     "artifact_file": artifact_name,
                 })
                 _log_winner_artifact(mlflow, artifact_path)
-                _register_model_in_mlflow(
-                    mlflow, mlflow_run_id, symbol, timeframe, artifact_path
+                _log_and_register_model(
+                    mlflow, best_obj, mlflow_run_id, symbol, timeframe, artifact_path
                 )
             except Exception as e:
                 logger.warning("MLflow winner logging failed: %s", e)
