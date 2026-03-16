@@ -299,7 +299,6 @@ function buildMacroPayload(
     },
   ];
 
-  // Add yield curve if available
   const yc = macroData?.data?.yield_curve;
   if (yc) {
     const ycScore = yc.shape === "Normal" ? 65 : yc.shape === "Inverted" ? 30 : 50;
@@ -386,8 +385,6 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
 
 // ─── Page Component ──────────────────────────────────────────────────────────
 
-// ─── Ticker validation ──────────────────────────────────────────────────────
-// Matches: AAPL, TSLA, BTC-USD, ETH-USD, SPY, QQQ (1-5 letters + optional -XX suffix)
 const TICKER_REGEX = /^[A-Z]{1,5}(-[A-Z]{2,4})?$/;
 
 function normalizeTicker(raw: string): string {
@@ -395,14 +392,24 @@ function normalizeTicker(raw: string): string {
 }
 
 export default function DashboardPage() {
-  // Symbol comes from global context — persists across all pages
   const { symbol: activeSymbol, setSymbol: setActiveSymbol } = useSymbol();
 
-  // ── Explain panel state ─────────────────────────────────────────────────
+  // Collapsible tech explanation — collapsed by default for experienced users
+  const [techExplainOpen, setTechExplainOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('fin-eye-tech-explain-open') === 'true';
+  });
+  const toggleTechExplain = useCallback(() => {
+    setTechExplainOpen((v) => {
+      const next = !v;
+      localStorage.setItem('fin-eye-tech-explain-open', String(next));
+      return next;
+    });
+  }, []);
+
   const [explainPayload, setExplainPayload] = useState<ExplainPayload | null>(null);
   const closeExplain = useCallback(() => setExplainPayload(null), []);
 
-  // ── SWR data fetching ───────────────────────────────────────────────────
   const { data: gasSnapshot, error: gasError, isLoading: gasLoading } = useSWR(
     `gas-snapshot-${activeSymbol}`,
     () => fetchGasSnapshot(activeSymbol),
@@ -427,9 +434,6 @@ export default function DashboardPage() {
     { refreshInterval: 300_000, shouldRetryOnError: false, keepPreviousData: true },
   );
 
-
-
-  // ── Score resolution ────────────────────────────────────────────────────
   const gasScore: number = gasSnapshot?.gas_score
     ?? (() => {
       const ts = techData?.technical_confidence_score ?? 50;
@@ -449,20 +453,17 @@ export default function DashboardPage() {
   const signals    = techData?.signals ?? [];
   const isLoading  = gasLoading && !gasSnapshot && !gasError;
 
-  // ── Explanation bullets ─────────────────────────────────────────────────
   const whyBullets = useMemo(
     () => buildWhyBullets(techScore, signals, sent30d, macroScore, macroLabel),
     [techScore, signals, sent30d, macroScore, macroLabel],
   );
 
-  // ── Conflict detection ──────────────────────────────────────────────────
   const sentScore0100 = ((sent30d ?? 0) + 1) / 2 * 100;
   const conflictData  = useMemo(
     () => detectConflicts(techScore, sentScore0100, macroScore, signals),
     [techScore, sentScore0100, macroScore, signals],
   );
 
-  // ── Explain panel handlers ──────────────────────────────────────────────
   const openGasExplain = useCallback(() =>
     setExplainPayload(buildGasPayload(gasScore, techScore, sent30d, macroScore, macroLabel)),
     [gasScore, techScore, sent30d, macroScore, macroLabel],
@@ -484,20 +485,17 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <GuidedTour />
 
-      {/* ── Score Explain Panel (slide-over) ─────────────────────────── */}
       <ScoreExplainPanel payload={explainPayload} onClose={closeExplain} />
 
-      {/* Watchlist sidebar + main content */}
       <div className="flex gap-6">
         <aside className="hidden xl:block w-48 flex-shrink-0">
           <WatchlistWidget
             activeSymbol={activeSymbol}
-            onSelectSymbol={(sym) => { setActiveSymbol(sym); setTickerInput(sym); }}
+            onSelectSymbol={(sym) => setActiveSymbol(sym)}
           />
         </aside>
 
         <div className="min-w-0 flex-1 space-y-6">
-          {/* Header */}
           <header className="flex flex-col gap-1 border-b border-slate-800 pb-5">
             <h1 className="text-3xl font-black tracking-tight text-slate-100">
               {activeSymbol} Intelligence
@@ -510,11 +508,10 @@ export default function DashboardPage() {
             </div>
           </header>
 
-          {/* Mobile watchlist */}
           <div className="xl:hidden">
             <WatchlistWidget
               activeSymbol={activeSymbol}
-              onSelectSymbol={(sym) => { setActiveSymbol(sym); setTickerInput(sym); }}
+              onSelectSymbol={(sym) => setActiveSymbol(sym)}
             />
           </div>
 
@@ -524,49 +521,160 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Row 1 – GAS + Regime + Timeframe Grid ───────────────────── */}
+
+              {/* Row 1 – GAS + Regime */}
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="tour-gas-score">
-                  <MarketWeatherWidget
-                    gasScore={gasScore}
-                    onExplain={openGasExplain}
-                  />
+                  <MarketWeatherWidget gasScore={gasScore} onExplain={openGasExplain} />
                 </div>
-
-                <div className="flex flex-col space-y-4">
-                  <div className="tour-regime">
-                    <RegimeWidget
-                      technicalScore={techScore}
-                      vixLevel={vixLevel}
-                      regimeOverride={regimeFromSnapshot}
-                      onExplainTechnical={openTechnicalExplain}
-                      onExplainVolatility={openVolatilityExplain}
-                    />
-                  </div>
-
-                  <div className="tour-timeframes p-5 rounded-2xl border border-slate-800 bg-slate-900/40">
-                    <div className="flex justify-between items-center mb-1">
-                      <h3 className="text-sm font-semibold text-slate-100">
-                        Technical Consensus
-                      </h3>
-                      <div className="flex items-center gap-1">
-                        <span className="text-sky-400 font-bold text-sm">
-                          {techScore.toFixed(1)} / 100
-                        </span>
-                      </div>
-                    </div>
-                    {signals.length > 0 ? (
-                      <TimeframeGrid signals={signals} />
-                    ) : (
-                      <p className="text-xs text-rose-400 mt-4 px-3 py-2 bg-rose-950/20 rounded border border-rose-900">
-                        {techError?.message || "Technical models are not trained for this symbol."}
-                      </p>
-                    )}
-                  </div>
+                <div className="tour-regime">
+                  <RegimeWidget
+                    technicalScore={techScore}
+                    vixLevel={vixLevel}
+                    regimeOverride={regimeFromSnapshot}
+                    onExplainTechnical={openTechnicalExplain}
+                    onExplainVolatility={openVolatilityExplain}
+                  />
                 </div>
               </section>
 
-              {/* Row 2 – Why moving + Conflicts ──────────────────────────── */}
+              {/* Row 2 – Technical Consensus (full width) */}
+              <section className="tour-timeframes p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
+
+                {/* Score header */}
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-100">Technical Consensus</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Sharpe-weighted ML signal across all trained timeframes</p>
+                  </div>
+                  <div className="flex items-baseline gap-2 flex-shrink-0">
+                    <span className={`text-4xl font-black tabular-nums ${
+                      techScore >= 60 ? 'text-emerald-400' :
+                      techScore >= 40 ? 'text-amber-400' : 'text-rose-400'
+                    }`}>{techScore.toFixed(1)}</span>
+                    <span className="text-slate-500 text-base">/ 100</span>
+                    <span className={`ml-1 text-xs font-bold px-2 py-0.5 rounded-full border ${
+                      techScore >= 60 ? 'text-emerald-400 bg-emerald-950/40 border-emerald-800/50' :
+                      techScore >= 40 ? 'text-amber-400 bg-amber-950/40 border-amber-800/50' :
+                                        'text-rose-400 bg-rose-950/40 border-rose-800/50'
+                    }`}>
+                      {techScore >= 80 ? 'Strong Bullish' : techScore >= 60 ? 'Bullish Lean' :
+                       techScore >= 40 ? 'Mixed / Neutral' : techScore >= 20 ? 'Bearish Lean' : 'Strong Bearish'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Collapsible explanation — collapsed by default, toggle persisted */}
+                {signals.length > 0 && (
+                  <div>
+                    <button
+                      onClick={toggleTechExplain}
+                      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors group"
+                    >
+                      <svg
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${techExplainOpen ? 'rotate-90' : 'rotate-0'}`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="group-hover:underline">
+                        {techExplainOpen ? 'Hide explanation' : 'How is this score calculated?'}
+                      </span>
+                    </button>
+
+                    {techExplainOpen && (
+                      <div className="mt-3 rounded-xl bg-slate-800/50 border border-slate-700/60 px-4 py-3 space-y-3">
+
+                        {/* Progress bar */}
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-slate-600 w-12 flex-shrink-0">0 Bear</span>
+                          <div className="relative flex-1 h-2.5 rounded-full bg-slate-700 overflow-hidden">
+                            <div className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${
+                              techScore >= 60 ? 'bg-emerald-500' : techScore >= 40 ? 'bg-amber-500' : 'bg-rose-500'
+                            }`} style={{ width: `${techScore}%` }} />
+                            <div className="absolute inset-y-0 left-1/2 w-px bg-slate-400/50" title="50 = neutral" />
+                          </div>
+                          <span className="text-[10px] text-slate-600 w-14 flex-shrink-0 text-right">100 Bull</span>
+                        </div>
+
+                        {/* 3 stat cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                          <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 px-3 py-2">
+                            <p className="text-slate-500 mb-0.5">Scale</p>
+                            <p className="text-slate-200 font-semibold">0 &ndash; 100</p>
+                            <p className="text-slate-500 text-[10px] mt-0.5">50 = perfectly neutral</p>
+                          </div>
+                          <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 px-3 py-2">
+                            <p className="text-slate-500 mb-0.5">Score {techScore.toFixed(1)}</p>
+                            <p className={`font-semibold ${
+                              techScore >= 60 ? 'text-emerald-400' : techScore >= 40 ? 'text-amber-400' : 'text-rose-400'
+                            }`}>
+                              {techScore < 40 ? `${(50 - techScore).toFixed(0)} pts below neutral` :
+                               techScore > 60 ? `${(techScore - 50).toFixed(0)} pts above neutral` : 'Near neutral (50)'}
+                            </p>
+                            <p className="text-slate-500 text-[10px] mt-0.5">vs midpoint of 50</p>
+                          </div>
+                          <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 px-3 py-2">
+                            <p className="text-slate-500 mb-0.5">Method</p>
+                            <p className="text-slate-200 font-semibold">Sharpe-weighted avg</p>
+                            <p className="text-slate-500 text-[10px] mt-0.5">better models count more</p>
+                          </div>
+                        </div>
+
+                        {/* Plain-English formula */}
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Each timeframe outputs a signal from{' '}
+                          <span className="text-rose-400 font-medium">-1 (bearish)</span> to{' '}
+                          <span className="text-emerald-400 font-medium">+1 (bullish)</span>,
+                          averaged weighted by each model&apos;s{' '}
+                          <span className="text-sky-400 font-medium">Sharpe Ratio</span>{' '}
+                          (better historical performance = more weight),
+                          then mapped to 0&ndash;100 where 50 = neutral.
+                          A score of{' '}
+                          <span className={`font-bold ${
+                            techScore >= 60 ? 'text-emerald-400' : techScore >= 40 ? 'text-amber-400' : 'text-rose-400'
+                          }`}>{techScore.toFixed(1)}</span>{' '}
+                          means the models are net{' '}
+                          <span className={`font-medium ${
+                            techScore >= 60 ? 'text-emerald-400' : techScore >= 40 ? 'text-amber-400' : 'text-rose-400'
+                          }`}>{techScore >= 60 ? 'bullish' : techScore >= 40 ? 'roughly neutral' : 'bearish'}</span>.
+                        </p>
+
+                        {/* Per-signal chips */}
+                        <div>
+                          <p className="text-[10px] text-slate-500 mb-1.5 font-medium uppercase tracking-wider">Inputs</p>
+                          <div className="flex flex-wrap gap-2">
+                            {signals.map((s) => (
+                              <div key={s.timeframe} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${
+                                s.direction === 'Bullish' ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-400' :
+                                s.direction === 'Bearish' ? 'bg-rose-950/40 border-rose-800/50 text-rose-400' :
+                                                            'bg-amber-950/30 border-amber-800/40 text-amber-400'
+                              }`}>
+                                <span className="text-slate-300 font-mono font-bold">{s.timeframe}</span>
+                                <span>{s.direction === 'Bullish' ? '▲' : s.direction === 'Bearish' ? '▼' : '—'}</span>
+                                <span className="text-slate-400">{s.confidence.toFixed(0)}%</span>
+                                <span className="text-slate-600 text-[10px]">Sharpe {s.sharpe_weight?.toFixed(2) ?? '?'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Tiles */}
+                {signals.length > 0 ? (
+                  <TimeframeGrid signals={signals} />
+                ) : (
+                  <p className="text-xs text-rose-400 px-3 py-2 bg-rose-950/20 rounded border border-rose-900">
+                    {techError?.message || 'Technical models are not trained for this symbol.'}
+                  </p>
+                )}
+              </section>
+
+              {/* Row 3 – Why moving + Conflicts */}
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="tour-why-moving">
                   <WhyMovingPanel
@@ -582,21 +690,16 @@ export default function DashboardPage() {
                 />
               </section>
 
-              {/* Row 3 – Quick links ──────────────────────────────────────── */}
+              {/* Row 4 – Quick links */}
               <section className="flex flex-wrap gap-4 pt-4 border-t border-slate-800/50">
-                <Link
-                  href="/macro"
-                  className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors"
-                >
+                <Link href="/macro" className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors">
                   View Full Macro Intel &rarr;
                 </Link>
-                <Link
-                  href="/news-sentiment"
-                  className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors"
-                >
+                <Link href="/news-sentiment" className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors">
                   View Full Sentiment Intel &rarr;
                 </Link>
               </section>
+
             </div>
           )}
         </div>

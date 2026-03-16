@@ -50,6 +50,137 @@ function scoreToColor(score: number): SubComponent["color"] {
   return "rose";
 }
 
+// ── Score interpretation ──────────────────────────────────────────────────────
+// Describes market CONDITIONS — never recommends actions.
+// Framing is always "the signal environment is X", never "you should do Y".
+
+interface ScoreInterpretation {
+  label: string;
+  labelColor: string;
+  labelBg: string;
+  guidanceText: string;
+  guidanceColor: string;
+}
+
+function interpretScore(
+  score: number,
+  target: ExplainTarget,
+): ScoreInterpretation {
+  // GAS-specific labels
+  if (target === "gas") {
+    if (score >= 80) return {
+      label: "Strong Tailwind",
+      labelColor: "text-emerald-400",
+      labelBg: "bg-emerald-950/40 border-emerald-700/50",
+      guidanceText: "All three layers — technical, sentiment, and macro — are broadly aligned in a bullish direction. Historically, this combination has been associated with continued near-term momentum. Conditions can shift — always verify with your own research.",
+      guidanceColor: "text-emerald-300",
+    };
+    if (score >= 60) return {
+      label: "Mild Support",
+      labelColor: "text-sky-400",
+      labelBg: "bg-sky-950/40 border-sky-700/50",
+      guidanceText: "Most signals lean positive, though some disagreement exists between layers. The data environment is moderately supportive. Mixed signals across components warrant some caution.",
+      guidanceColor: "text-sky-300",
+    };
+    if (score >= 40) return {
+      label: "Mixed Signals",
+      labelColor: "text-amber-400",
+      labelBg: "bg-amber-950/40 border-amber-700/50",
+      guidanceText: "Technical, sentiment, and macro signals are not in agreement. The picture is unclear. Historically, mixed-signal environments have been associated with elevated uncertainty and choppy price action.",
+      guidanceColor: "text-amber-300",
+    };
+    if (score >= 20) return {
+      label: "Headwind",
+      labelColor: "text-orange-400",
+      labelBg: "bg-orange-950/40 border-orange-700/50",
+      guidanceText: "Signals lean bearish across multiple layers. The data environment is not broadly supportive at this time. Historically, sub-40 GAS readings have coincided with continued downward pressure rather than recoveries.",
+      guidanceColor: "text-orange-300",
+    };
+    return {
+      label: "High Instability",
+      labelColor: "text-rose-400",
+      labelBg: "bg-rose-950/40 border-rose-700/50",
+      guidanceText: "Strong bearish alignment across all layers simultaneously. This combination is historically associated with elevated volatility and unfavourable conditions. Patience is typically rewarded over activity in low-GAS environments like this.",
+      guidanceColor: "text-rose-300",
+    };
+  }
+
+  // Technical-specific labels
+  if (target === "technical") {
+    if (score >= 80) return {
+      label: "Strong Bullish Momentum", labelColor: "text-emerald-400", labelBg: "bg-emerald-950/40 border-emerald-700/50",
+      guidanceText: "Most timeframes agree — models see upward pressure across the board. Cross-timeframe agreement is the strongest form of technical signal.",
+      guidanceColor: "text-emerald-300",
+    };
+    if (score >= 60) return {
+      label: "Bullish Lean", labelColor: "text-sky-400", labelBg: "bg-sky-950/40 border-sky-700/50",
+      guidanceText: "Majority of timeframes lean bullish with some disagreement. Signals are positive but not exceptional — shorter timeframes may diverge from the broader trend.",
+      guidanceColor: "text-sky-300",
+    };
+    if (score >= 40) return {
+      label: "No Clear Direction", labelColor: "text-amber-400", labelBg: "bg-amber-950/40 border-amber-700/50",
+      guidanceText: "Timeframes are split with no dominant direction. Models see no strong edge in either direction. Historically, low-consensus periods are associated with range-bound or choppy price action.",
+      guidanceColor: "text-amber-300",
+    };
+    if (score >= 20) return {
+      label: "Bearish Lean", labelColor: "text-orange-400", labelBg: "bg-orange-950/40 border-orange-700/50",
+      guidanceText: "Majority of timeframes lean bearish. Signals are negative but not at an extreme — some timeframes may still offer divergence.",
+      guidanceColor: "text-orange-300",
+    };
+    return {
+      label: "Strong Bearish Momentum", labelColor: "text-rose-400", labelBg: "bg-rose-950/40 border-rose-700/50",
+      guidanceText: "Most timeframes agree — models see downward pressure across the board. High cross-timeframe agreement on the bearish side is historically a strong signal.",
+      guidanceColor: "text-rose-300",
+    };
+  }
+
+  // Sentiment-specific labels
+  if (target === "sentiment") {
+    if (score >= 70) return {
+      label: "Very Positive Coverage", labelColor: "text-emerald-400", labelBg: "bg-emerald-950/40 border-emerald-700/50",
+      guidanceText: "News coverage over the past 30 days has been predominantly positive. Strong sentiment has historically preceded or accompanied upward momentum — though news narratives can reverse sharply.",
+      guidanceColor: "text-emerald-300",
+    };
+    if (score >= 55) return {
+      label: "Mildly Positive", labelColor: "text-sky-400", labelBg: "bg-sky-950/40 border-sky-700/50",
+      guidanceText: "More positive than negative coverage over the past 30 days. Sentiment is constructive but not extreme.",
+      guidanceColor: "text-sky-300",
+    };
+    if (score >= 45) return {
+      label: "Neutral Coverage", labelColor: "text-amber-400", labelBg: "bg-amber-950/40 border-amber-700/50",
+      guidanceText: "Coverage is broadly balanced with no strong directional lean. Neutral sentiment provides no additional tailwind or headwind from the news cycle.",
+      guidanceColor: "text-amber-300",
+    };
+    if (score >= 30) return {
+      label: "Mildly Negative", labelColor: "text-orange-400", labelBg: "bg-orange-950/40 border-orange-700/50",
+      guidanceText: "News coverage leans negative over the past 30 days. Negative sentiment can persist and reinforce price weakness, though it can also represent a contrarian signal near extremes.",
+      guidanceColor: "text-orange-300",
+    };
+    return {
+      label: "Strongly Negative", labelColor: "text-rose-400", labelBg: "bg-rose-950/40 border-rose-700/50",
+      guidanceText: "News coverage has been predominantly negative. Extreme negative sentiment historically marks both continued downtrends and eventual contrarian reversals — context matters.",
+      guidanceColor: "text-rose-300",
+    };
+  }
+
+  // Macro / Volatility
+  if (score >= 70) return {
+    label: "Supportive", labelColor: "text-emerald-400", labelBg: "bg-emerald-950/40 border-emerald-700/50",
+    guidanceText: "Macro environment is broadly favourable for risk assets. Low volatility, accommodative conditions, and stable indicators historically support equity momentum.",
+    guidanceColor: "text-emerald-300",
+  };
+  if (score >= 40) return {
+    label: "Neutral", labelColor: "text-amber-400", labelBg: "bg-amber-950/40 border-amber-700/50",
+    guidanceText: "Mixed macro signals — neither clearly supportive nor restrictive. The macro environment adds neither tailwind nor headwind to risk assets at this time.",
+    guidanceColor: "text-amber-300",
+  };
+  return {
+    label: "Stressed", labelColor: "text-rose-400", labelBg: "bg-rose-950/40 border-rose-700/50",
+    guidanceText: "Macro indicators are unfavourable. Historically, stressed macro environments have added headwinds to equity risk-taking. Elevated caution is typically warranted.",
+    guidanceColor: "text-rose-300",
+  };
+}
+
 function ScoreBar({ value, color }: { value: number; color: SubComponent["color"] }) {
   const { bar } = COLOR_MAP[color];
   const clamped = Math.min(100, Math.max(0, value));
@@ -140,16 +271,44 @@ export default function ScoreExplainPanel({ payload, onClose }: ScoreExplainPane
             <div className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-6">
 
               {/* Headline score */}
-              <div className={`rounded-2xl p-6 lg:p-7 border ${COLOR_MAP[scoreToColor(payload.score)].bg} border-slate-800`}>
-                <div className="flex items-baseline gap-4 mb-3">
-                  <span className={`text-6xl lg:text-7xl font-black tracking-tighter ${COLOR_MAP[scoreToColor(payload.score)].text}`}>
-                    {payload.score.toFixed(0)}
-                  </span>
-                  <span className="text-xl font-bold text-slate-400">{payload.scoreLabel}</span>
-                </div>
-                <ScoreBar value={payload.score} color={scoreToColor(payload.score)} />
-                <p className="mt-4 text-sm lg:text-base text-slate-300 leading-relaxed">{payload.summary}</p>
-              </div>
+              {(() => {
+                const interp = interpretScore(payload.score, payload.target);
+                return (
+                  <div className={`rounded-2xl p-6 lg:p-7 border ${COLOR_MAP[scoreToColor(payload.score)].bg} border-slate-800`}>
+                    {/* Score number + label badge */}
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-baseline gap-3">
+                        <span className={`text-6xl lg:text-7xl font-black tracking-tighter ${COLOR_MAP[scoreToColor(payload.score)].text}`}>
+                          {payload.score.toFixed(0)}
+                        </span>
+                        <span className="text-xl font-bold text-slate-400">{payload.scoreLabel}</span>
+                      </div>
+                      {/* Condition label badge */}
+                      <span className={`flex-shrink-0 mt-2 inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${interp.labelBg} ${interp.labelColor}`}>
+                        {interp.label}
+                      </span>
+                    </div>
+
+                    <ScoreBar value={payload.score} color={scoreToColor(payload.score)} />
+
+                    {/* Technical description */}
+                    <p className="mt-4 text-sm lg:text-base text-slate-300 leading-relaxed">{payload.summary}</p>
+
+                    {/* Condition guidance — environment description */}
+                    <div className={`mt-4 rounded-xl border px-4 py-3 ${interp.labelBg}`}>
+                      <p className={`text-xs font-semibold uppercase tracking-wider mb-1.5 ${interp.labelColor}`}>
+                        Signal Environment
+                      </p>
+                      <p className={`text-sm leading-relaxed ${interp.guidanceColor}`}>
+                        {interp.guidanceText}
+                      </p>
+                      <p className="mt-2 text-[10px] text-slate-600 italic">
+                        This describes market conditions based on data signals — not personalised investment advice.
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Sub-component breakdown */}
               <div>
