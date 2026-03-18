@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from typing import Dict
 
 from app.db.database import test_db_connection
-from app.db.redis_client import redis_client
+from app.db import redis_client as rc
 
 router = APIRouter()
 
@@ -15,8 +15,14 @@ async def health_check() -> Dict[str, str]:
     
     redis_ok = False
     try:
-        redis_ok = await redis_client.ping()
-    except Exception:
+        print(f"DEBUG HEALTH: rc.redis_client is {rc.redis_client}")
+        if rc.redis_client:
+            redis_ok = await rc.redis_client.ping()
+            print(f"DEBUG HEALTH: ping result is {redis_ok}")
+        else:
+            print("DEBUG HEALTH: rc.redis_client is NONE")
+    except Exception as e:
+        print(f"DEBUG HEALTH: ping error {type(e).__name__}: {e}")
         pass
         
     return {
