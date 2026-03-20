@@ -125,7 +125,10 @@ class ModelRecord:
             accuracy      = float(d["accuracy"]),
             trained_at    = datetime.fromisoformat(d["trained_at"]),
             version       = int(d.get("version", 1)),
-            status        = d.get("status", "candidate"),
+            # Legacy records written before the status field existed have no
+            # "status" key. Treat them as "champion" so existing trained models
+            # are not silently ignored by all_champions().
+            status        = d.get("status", "champion"),
             record_id     = d.get("record_id", ""),
             artifact_path = d.get("artifact_path"),
             mlflow_run_id = d.get("mlflow_run_id"),

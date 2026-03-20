@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
+from app.services.llm_service import get_ollama_service
 router = APIRouter()
 
 
@@ -45,6 +46,7 @@ class ExplanationResponse(BaseModel):
     has_conflict: bool
     conflicts: list[ConflictItem]
     conflict_summary: str  # "No major conflicts detected." or description
+    ai_summary: Optional[str] = None  # Natural language summary from Ollama
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
@@ -266,4 +268,11 @@ async def get_explanation_summary(
         has_conflict=has_conflict,
         conflicts=conflicts,
         conflict_summary=conflict_summary,
+        ai_summary=await get_ollama_service().get_explanation(
+            symbol=sym,
+            tech_score=tech_score,
+            sent_score=sent_30d,
+            macro_score=macro_score,
+            gas_score=gas_score,
+        )
     )

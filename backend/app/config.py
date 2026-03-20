@@ -145,6 +145,8 @@ class Settings(BaseSettings):
     rate_limit_auth: int = Field(default=120, alias="RATE_LIMIT_AUTH")
     rate_limit_api_key: int = Field(default=300, alias="RATE_LIMIT_API_KEY")
     feature_flags: str = Field(default="", alias="FEATURE_FLAGS")
+    ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
+    ollama_model: str = Field(default="llama3:8b", alias="OLLAMA_MODEL")
 
     # ── Helper properties ─────────────────────────────────────────────────────
 
