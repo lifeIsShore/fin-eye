@@ -10,6 +10,8 @@ from app.config import get_settings
 from app.db.database import init_db, test_db_connection
 from app.db.redis_client import init_redis, close_redis
 from app.services.scheduler import setup_scheduler
+# BUG-FIX-4: cleanly close the Ollama HTTP client on shutdown
+from app.services.llm_service import close_ollama_service
 
 # Import versioned routers
 # Observability middleware
@@ -86,6 +88,7 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Shutting down Fin-Eye Backend...")
     scheduler.shutdown(wait=False)
     await close_redis()
+    await close_ollama_service()  # BUG-FIX-4: close httpx client cleanly
     logger.info("👋 Shutdown complete.")
 
 app = FastAPI(

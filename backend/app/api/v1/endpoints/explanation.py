@@ -2,10 +2,8 @@
 MVP-EXPL-01: "Why Is This Moving?" explanation panel
 MVP-EXPL-02: Conflict Detector between layers
 
-GET /api/v1/explanation/{symbol}/summary
-Returns:
-  - bullet-point explanation of current drivers (EXPL-01)
-  - conflict detection between layers (EXPL-02)
+GET  /api/v1/explanation/{symbol}/summary
+POST /api/v1/explanation/{symbol}/generate-ai  (requires authenticated user)
 """
 
 from __future__ import annotations
@@ -17,7 +15,9 @@ from datetime import date
 import redis.asyncio as redis
 
 from app.services.llm_service import get_ollama_service
+from app.services.auth import get_current_active_user  # BUG-FIX-3: auth guard
 from app.db.redis_client import get_redis
+
 router = APIRouter()
 
 
@@ -25,14 +25,14 @@ router = APIRouter()
 
 
 class LayerSummary(BaseModel):
-    score: float  # 0–100
-    direction: str  # "Bullish", "Neutral", "Bearish"
-    detail: str  # human-readable text
+    score: float
+    direction: str
+    detail: str
 
 
 class ConflictItem(BaseModel):
-    layers: str  # e.g. "Technicals vs Macro"
-    magnitude: str  # e.g. "31 points apart"
+    layers: str
+    magnitude: str
     message: str
 
 
@@ -40,16 +40,12 @@ class ExplanationResponse(BaseModel):
     symbol: str
     gas_score: float
     gas_label: str
-
-    # EXPL-01 – "Why is this stock moving?"
-    why_moving: list[str]  # bullet points
+    why_moving: list[str]
     disclaimer: str
-
-    # EXPL-02 – Conflict detector
     has_conflict: bool
     conflicts: list[ConflictItem]
-    conflict_summary: str  # "No major conflicts detected." or description
-    ai_summary: Optional[str] = None  # Natural language summary from Ollama
+    conflict_summary: str
+    ai_summary: Optional[str] = None
 
 
 class GenerateAIRequest(BaseModel):
@@ -58,6 +54,7 @@ class GenerateAIRequest(BaseModel):
     macro_score: float = 50.0
     gas_score: float = 50.0
     ml_output: Optional[str] = None
+
 
 class GenerateAIResponse(BaseModel):
     symbol: str
@@ -69,7 +66,7 @@ class GenerateAIResponse(BaseModel):
 
 DISCLAIMER = (
     "This is educational analysis, not investment advice. "
-    "Fin-Eye surfaces data-driven signals to inform your thinking—"
+    "Fin-Eye surfaces data-driven signals to inform your thinking — "
     "always conduct your own research before making any financial decisions."
 )
 
@@ -103,11 +100,10 @@ def _build_why_bullets(
 ) -> list[str]:
     bullets: list[str] = []
 
-    # Technical contribution
     bullish_tfs = [s for s in tech_signals if s.get("direction") == "Bullish"]
     bearish_tfs = [s for s in tech_signals if s.get("direction") == "Bearish"]
-    tf_count = len(tech_signals)
-    tech_dir = _direction_label(tech_score)
+    tf_count    = len(tech_signals)
+    tech_dir    = _direction_label(tech_score)
 
     if tf_count > 0:
         bullets.append(
@@ -121,18 +117,13 @@ def _build_why_bullets(
             "technical signals are unavailable."
         )
 
-    # Sentiment contribution
     if sent_30d is not None:
         sent_label = (
-            "strongly positive"
-            if sent_30d > 0.3
-            else "mildly positive"
-            if sent_30d > 0.05
-            else "neutral"
-            if sent_30d > -0.05
-            else "mildly negative"
-            if sent_30d > -0.3
-            else "strongly negative"
+            "strongly positive"  if sent_30d >  0.3  else
+            "mildly positive"    if sent_30d >  0.05 else
+            "neutral"            if sent_30d > -0.05 else
+            "mildly negative"    if sent_30d > -0.3  else
+            "strongly negative"
         )
         bullets.append(
             f"📰 News sentiment over the past 30 days is {sent_label} "
@@ -143,10 +134,13 @@ def _build_why_bullets(
             "📰 News sentiment data is not available for this symbol currently."
         )
 
-    # Macro contribution
+    macro_comment = (
+        "This provides a supportive environment for equities." if macro_score >= 60
+        else "Macro conditions add headwinds to risk assets."  if macro_score < 40
+        else "Macro conditions are broadly neutral."
+    )
     bullets.append(
-        f"🌐 Macro backdrop is '{macro_label}' (score: {macro_score:.0f}/100). "
-        f"{'This provides a supportive environment for equities.' if macro_score >= 60 else 'Macro conditions add headwinds to risk assets.' if macro_score < 40 else 'Macro conditions are broadly neutral.'}"
+        f"🌐 Macro backdrop is '{macro_label}' (score: {macro_score:.0f}/100). {macro_comment}"
     )
 
     return bullets
@@ -157,7 +151,6 @@ def _detect_conflicts(
     sent_score_0_100: float,
     macro_score: float,
     tech_signals: list[dict],
-    conflict_threshold: float = 30.0,
     tf_agreement_threshold: float = 0.4,
 ) -> tuple[bool, list[ConflictItem]]:
     conflicts: list[ConflictItem] = []
@@ -165,41 +158,29 @@ def _detect_conflicts(
     scores = {
         "Technical": tech_score,
         "Sentiment": sent_score_0_100,
-        "Macro": macro_score,
+        "Macro":     macro_score,
     }
-
-    # Pairwise conflict check between layers
-    layer_pairs = [
-        ("Technical", "Sentiment"),
-        ("Technical", "Macro"),
-        ("Sentiment", "Macro"),
-    ]
-    for a, b in layer_pairs:
+    for a, b in [("Technical", "Sentiment"), ("Technical", "Macro"), ("Sentiment", "Macro")]:
         sa, sb = scores[a], scores[b]
-        diff = abs(sa - sb)
-        # Conflict if one is strongly bullish (>65) and other strongly bearish (<35)
         if (sa > 65 and sb < 35) or (sb > 65 and sa < 35):
-            dir_a = _direction_label(sa)
-            dir_b = _direction_label(sb)
             conflicts.append(
                 ConflictItem(
                     layers=f"{a} vs {b}",
-                    magnitude=f"{diff:.0f} points apart ({sa:.0f} vs {sb:.0f})",
+                    magnitude=f"{abs(sa - sb):.0f} points apart ({sa:.0f} vs {sb:.0f})",
                     message=(
-                        f"{a} is {dir_a.lower()} while {b} is {dir_b.lower()}. "
-                        f"This divergence suggests elevated uncertainty — "
-                        f"exercise extra caution."
+                        f"{a} is {_direction_label(sa).lower()} while {b} is "
+                        f"{_direction_label(sb).lower()}. "
+                        "This divergence suggests elevated uncertainty — exercise extra caution."
                     ),
                 )
             )
 
-    # Timeframe agreement conflict
     if tech_signals:
         bullish_count = sum(1 for s in tech_signals if s.get("direction") == "Bullish")
         bearish_count = sum(1 for s in tech_signals if s.get("direction") == "Bearish")
-        total = len(tech_signals)
-        dominant = max(bullish_count, bearish_count)
-        agreement = dominant / total if total > 0 else 1.0
+        total         = len(tech_signals)
+        dominant      = max(bullish_count, bearish_count)
+        agreement     = dominant / total if total > 0 else 1.0
         if agreement < tf_agreement_threshold:
             conflicts.append(
                 ConflictItem(
@@ -207,7 +188,7 @@ def _detect_conflicts(
                     magnitude=f"{agreement * 100:.0f}% agreement across {total} timeframes",
                     message=(
                         f"Only {dominant} of {total} timeframes agree on direction. "
-                        f"Low cross-timeframe consensus increases signal uncertainty."
+                        "Low cross-timeframe consensus increases signal uncertainty."
                     ),
                 )
             )
@@ -215,7 +196,7 @@ def _detect_conflicts(
     return len(conflicts) > 0, conflicts
 
 
-# ─── Endpoint ───────────────────────────────────────────────────────────────
+# ─── Endpoints ───────────────────────────────────────────────────────────────
 
 
 @router.get("/{symbol}/summary", response_model=ExplanationResponse)
@@ -226,23 +207,18 @@ async def get_explanation_summary(
     macro_score: float = 50.0,
     macro_label: str = "Neutral",
     gas_score: float = 50.0,
-    tech_signals: str = "",  # JSON-encoded list of {timeframe, direction, confidence}
-    redis_client: redis.Redis = Depends(get_redis)
+    tech_signals: str = "",
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> ExplanationResponse:
     """
-    Derives the EXPL-01 'Why is this moving?' explanation and the EXPL-02
-    conflict detector from pre-computed layer scores passed as query params.
-
-    The frontend passes the already-fetched tech/sentiment/macro data to this
-    endpoint so it acts as a pure computation layer without needing its own DB
-    queries. This keeps latency low (no extra round-trips) and the endpoint
-    stateless.
+    Stateless EXPL-01/02 computation from query-param scores.
+    No auth required — the data returned is purely derived from the inputs,
+    with no sensitive user data involved.
     """
     import json
 
     sym = symbol.upper()
 
-    # Parse tech_signals if provided
     signals: list[dict] = []
     if tech_signals:
         try:
@@ -250,10 +226,8 @@ async def get_explanation_summary(
         except Exception:
             signals = []
 
-    # Normalise sentiment to 0–100
     sent_normalised = ((sent_30d + 1) / 2) * 100 if sent_30d is not None else 50.0
 
-    # EXPL-01 – bullet points
     why_bullets = _build_why_bullets(
         tech_score=tech_score,
         tech_signals=signals,
@@ -262,7 +236,6 @@ async def get_explanation_summary(
         macro_label=macro_label,
     )
 
-    # EXPL-02 – conflict detection
     has_conflict, conflicts = _detect_conflicts(
         tech_score=tech_score,
         sent_score_0_100=sent_normalised,
@@ -276,13 +249,13 @@ async def get_explanation_summary(
         else f"{len(conflicts)} conflict(s) detected. Review the signals below carefully."
     )
 
-    # AI Summary Cache Lookup
-    today_str = date.today().isoformat()
-    cache_key = f"ai_summary:{sym}:{today_str}"
+    today_str   = date.today().isoformat()
+    cache_key   = f"ai_summary:{sym}:{today_str}"
+    cached_summary: Optional[str] = None
     try:
         cached_summary = await redis_client.get(cache_key)
     except Exception:
-        cached_summary = None
+        pass
 
     return ExplanationResponse(
         symbol=sym,
@@ -293,48 +266,57 @@ async def get_explanation_summary(
         has_conflict=has_conflict,
         conflicts=conflicts,
         conflict_summary=conflict_summary,
-        ai_summary=cached_summary
+        ai_summary=cached_summary,
     )
 
 
 @router.post("/{symbol}/generate-ai", response_model=GenerateAIResponse)
 async def generate_ai_summary(
-    symbol: str, 
+    symbol: str,
     request: GenerateAIRequest,
-    redis_client: redis.Redis = Depends(get_redis)
-):
+    redis_client: redis.Redis = Depends(get_redis),
+    # BUG-FIX-3: Require a logged-in user so anonymous callers cannot spam
+    # the local Ollama instance.  The endpoint is effectively rate-limited
+    # to the authenticated user pool.
+    _current_user: object = Depends(get_current_active_user),
+) -> GenerateAIResponse:
     """
-    On-demand AI summary generation.
-    Checks cache first, then calls Ollama LLM service.
+    On-demand AI summary generation via Ollama.
+    Requires authentication to prevent anonymous abuse of the LLM endpoint.
+    Checks Redis cache first (24-hour TTL per symbol per day).
     """
-    sym = symbol.upper()
+    sym       = symbol.upper()
     today_str = date.today().isoformat()
     cache_key = f"ai_summary:{sym}:{today_str}"
-    
+
     try:
-        cached_summary = await redis_client.get(cache_key)
-        if cached_summary:
-            return GenerateAIResponse(symbol=sym, ai_summary=cached_summary, cached=True)
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return GenerateAIResponse(symbol=sym, ai_summary=cached, cached=True)
     except Exception:
-        pass  # proceed to generate if cache fails
-    
-    # Not in cache, generate
+        pass
+
     summary = await get_ollama_service().get_explanation(
         symbol=sym,
         tech_score=request.tech_score,
         sent_score=request.sent_30d,
         macro_score=request.macro_score,
         gas_score=request.gas_score,
-        ml_output=request.ml_output
+        ml_output=request.ml_output,
     )
-    
-    if summary:
-        try:
-            # Cache it for 24 hours
-            await redis_client.setex(cache_key, 86400, summary)
-        except Exception as e:
-            # Cache failure should not fail the request
-            pass
-        return GenerateAIResponse(symbol=sym, ai_summary=summary, cached=False)
-    else:
-        raise HTTPException(status_code=503, detail="Failed to generate AI summary from Ollama.")
+
+    if not summary:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI summary unavailable — Ollama is not running or returned no response. "
+                "Start Ollama with: ollama serve"
+            ),
+        )
+
+    try:
+        await redis_client.setex(cache_key, 86400, summary)
+    except Exception:
+        pass  # Cache failure must never break the response
+
+    return GenerateAIResponse(symbol=sym, ai_summary=summary, cached=False)

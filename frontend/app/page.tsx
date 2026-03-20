@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { searchTickers } from "../lib/tickers";
 import { useSymbol } from "../lib/symbolContext";
 import {
   fetchTechnicalLatest,
@@ -12,6 +11,7 @@ import {
   fetchGasSnapshot,
   fetchExplanationSummary,
   type GasSnapshotDto,
+  type TechnicalSignalDto,
 } from "../lib/api";
 import MarketWeatherWidget from "../components/MarketWeatherWidget";
 import RegimeWidget from "../components/RegimeWidget";
@@ -75,9 +75,9 @@ function buildWhyBullets(
 
   if (sent30d !== null) {
     const sentLabel =
-      sent30d > 0.3  ? "strongly positive" :
-      sent30d > 0.05 ? "mildly positive"   :
-      sent30d > -0.05 ? "neutral"           :
+      sent30d > 0.3   ? "strongly positive" :
+      sent30d > 0.05  ? "mildly positive"   :
+      sent30d > -0.05 ? "neutral"            :
       sent30d > -0.3  ? "mildly negative"   : "strongly negative";
     bullets.push(
       `📰 News sentiment over the past 30 days is ${sentLabel} ` +
@@ -111,8 +111,16 @@ function detectConflicts(
   signals: { direction: string }[],
 ): { hasConflict: boolean; conflicts: ConflictItem[]; summary: string } {
   const conflicts: ConflictItem[] = [];
-  const scores: Record<string, number> = { Technical: techScore, Sentiment: sentScore0100, Macro: macroScore };
-  const pairs: [string, string][] = [["Technical", "Sentiment"], ["Technical", "Macro"], ["Sentiment", "Macro"]];
+  const scores: Record<string, number> = {
+    Technical: techScore,
+    Sentiment: sentScore0100,
+    Macro: macroScore,
+  };
+  const pairs: [string, string][] = [
+    ["Technical", "Sentiment"],
+    ["Technical", "Macro"],
+    ["Sentiment", "Macro"],
+  ];
 
   for (const [a, b] of pairs) {
     const sa = scores[a]; const sb = scores[b];
@@ -126,9 +134,9 @@ function detectConflicts(
   }
 
   if (signals.length > 0) {
-    const bullish  = signals.filter((s) => s.direction === "Bullish").length;
-    const bearish  = signals.filter((s) => s.direction === "Bearish").length;
-    const dominant = Math.max(bullish, bearish);
+    const bullish   = signals.filter((s) => s.direction === "Bullish").length;
+    const bearish   = signals.filter((s) => s.direction === "Bearish").length;
+    const dominant  = Math.max(bullish, bearish);
     const agreement = dominant / signals.length;
     if (agreement < 0.4) {
       conflicts.push({
@@ -147,6 +155,41 @@ function detectConflicts(
       ? `${conflicts.length} conflict(s) detected. Review the signals below carefully.`
       : "No major conflicts detected — layers are broadly aligned.",
   };
+}
+
+// ─── ML output builder ───────────────────────────────────────────────────────
+// BUG-FIX-5: mlOutput was always passed as null, so the LLM always received
+// "No specific ML anomalies detected." Now we build a real signal summary
+// from the trained model data so the AI insight is actually grounded in the
+// model outputs.
+function buildMlOutput(
+  signals: TechnicalSignalDto[],
+  techScore: number,
+): string | null {
+  if (signals.length === 0) return null;
+
+  const bestSignal = [...signals].sort(
+    (a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0),
+  )[0];
+
+  const bullish = signals.filter((s) => s.direction === "Bullish").length;
+  const bearish = signals.filter((s) => s.direction === "Bearish").length;
+
+  const parts: string[] = [
+    `Technical consensus: ${techScore.toFixed(1)}/100 (${directionLabel(techScore)}).`,
+    `${bullish}/${signals.length} timeframes bullish, ${bearish} bearish.`,
+  ];
+
+  if (bestSignal) {
+    parts.push(
+      `Strongest signal: ${bestSignal.timeframe} ${bestSignal.direction} ` +
+      `(${bestSignal.confidence.toFixed(0)}% conf, ` +
+      `Sharpe ${(bestSignal.sharpe_weight ?? 0).toFixed(2)}, ` +
+      `model: ${bestSignal.model_used ?? "unknown"}).`,
+    );
+  }
+
+  return parts.join(" ");
 }
 
 // ─── Explain payload builders ─────────────────────────────────────────────────
@@ -199,7 +242,7 @@ function buildGasPayload(
 
 function buildTechnicalPayload(
   techScore: number,
-  signals: { direction: string; timeframe: string }[],
+  signals: TechnicalSignalDto[],
 ): ExplainPayload {
   const bullish = signals.filter((s) => s.direction === "Bullish").length;
   const bearish = signals.filter((s) => s.direction === "Bearish").length;
@@ -363,8 +406,8 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
   const isStale = ageMin !== null && ageMin * 60_000 > STALE_THRESHOLD_MS;
   const ageLabel = ageMin === null ? "age unknown" : ageMin < 1 ? "just now" : `${ageMin}m ago`;
   const sourceColor =
-    snapshot.source === "cache" ? "text-emerald-400" :
-    snapshot.source === "db_snapshot" ? "text-sky-400" : "text-amber-400";
+    snapshot.source === "cache"       ? "text-emerald-400" :
+    snapshot.source === "db_snapshot" ? "text-sky-400"     : "text-amber-400";
 
   return (
     <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -386,24 +429,17 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
 
 // ─── Page Component ──────────────────────────────────────────────────────────
 
-const TICKER_REGEX = /^[A-Z]{1,5}(-[A-Z]{2,4})?$/;
-
-function normalizeTicker(raw: string): string {
-  return raw.trim().toUpperCase().replace(/\s+/g, "");
-}
-
 export default function DashboardPage() {
   const { symbol: activeSymbol, setSymbol: setActiveSymbol } = useSymbol();
 
-  // Collapsible tech explanation — collapsed by default for experienced users
   const [techExplainOpen, setTechExplainOpen] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('fin-eye-tech-explain-open') === 'true';
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("fin-eye-tech-explain-open") === "true";
   });
   const toggleTechExplain = useCallback(() => {
     setTechExplainOpen((v) => {
       const next = !v;
-      localStorage.setItem('fin-eye-tech-explain-open', String(next));
+      localStorage.setItem("fin-eye-tech-explain-open", String(next));
       return next;
     });
   }, []);
@@ -454,6 +490,13 @@ export default function DashboardPage() {
   const signals    = techData?.signals ?? [];
   const isLoading  = gasLoading && !gasSnapshot && !gasError;
 
+  // BUG-FIX-5: Build a real ML signal summary from trained model data instead
+  // of always passing null. This gives the LLM meaningful model context.
+  const mlOutput = useMemo(
+    () => buildMlOutput(signals, techScore),
+    [signals, techScore],
+  );
+
   const explainParamsStr = !isLoading ? JSON.stringify({
     tech_score: techScore,
     sent_30d: sent30d,
@@ -465,28 +508,38 @@ export default function DashboardPage() {
 
   const { data: explanationData } = useSWR(
     explainParamsStr ? [`explanation-${activeSymbol}`, explainParamsStr] : null,
-    ([_, paramsStr]) => {
-      const p = JSON.parse(paramsStr);
+    ([, paramsStr]) => {
+      const p = JSON.parse(paramsStr as string);
       return fetchExplanationSummary(activeSymbol, p as any);
     },
     { refreshInterval: 60_000, shouldRetryOnError: false, keepPreviousData: true },
   );
 
-  const whyBullets = explanationData?.why_moving ?? useMemo(
+  // BUG-FIX-2: useMemo must be called unconditionally at the top level.
+  // Previously both fallback useMemo calls were inside ternary expressions,
+  // violating React's Rules of Hooks and causing potential runtime crashes.
+  // Now we always compute the fallback values and choose between them after.
+  const fallbackWhyBullets = useMemo(
     () => buildWhyBullets(techScore, signals, sent30d, macroScore, macroLabel),
     [techScore, signals, sent30d, macroScore, macroLabel],
   );
 
   const sentScore0100 = ((sent30d ?? 0) + 1) / 2 * 100;
-  const conflictData  = explanationData ? {
-    hasConflict: explanationData.has_conflict,
-    conflicts: explanationData.conflicts,
-    summary: explanationData.conflict_summary,
-  } : useMemo(
+  const fallbackConflictData = useMemo(
     () => detectConflicts(techScore, sentScore0100, macroScore, signals),
     [techScore, sentScore0100, macroScore, signals],
   );
-  
+
+  // Now safely choose: backend data when available, local fallback otherwise
+  const whyBullets   = explanationData?.why_moving ?? fallbackWhyBullets;
+  const conflictData = explanationData
+    ? {
+        hasConflict: explanationData.has_conflict,
+        conflicts:   explanationData.conflicts,
+        summary:     explanationData.conflict_summary,
+      }
+    : fallbackConflictData;
+
   const initialAiSummary = explanationData?.ai_summary ?? null;
 
   const openGasExplain = useCallback(() =>
@@ -566,7 +619,6 @@ export default function DashboardPage() {
               {/* Row 2 – Technical Consensus (full width) */}
               <section className="tour-timeframes p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
 
-                {/* Score header */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-slate-100">Technical Consensus</h3>
@@ -574,22 +626,21 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-baseline gap-2 flex-shrink-0">
                     <span className={`text-4xl font-black tabular-nums ${
-                      techScore >= 60 ? 'text-emerald-400' :
-                      techScore >= 40 ? 'text-amber-400' : 'text-rose-400'
+                      techScore >= 60 ? "text-emerald-400" :
+                      techScore >= 40 ? "text-amber-400"   : "text-rose-400"
                     }`}>{techScore.toFixed(1)}</span>
                     <span className="text-slate-500 text-base">/ 100</span>
                     <span className={`ml-1 text-xs font-bold px-2 py-0.5 rounded-full border ${
-                      techScore >= 60 ? 'text-emerald-400 bg-emerald-950/40 border-emerald-800/50' :
-                      techScore >= 40 ? 'text-amber-400 bg-amber-950/40 border-amber-800/50' :
-                                        'text-rose-400 bg-rose-950/40 border-rose-800/50'
+                      techScore >= 60 ? "text-emerald-400 bg-emerald-950/40 border-emerald-800/50" :
+                      techScore >= 40 ? "text-amber-400 bg-amber-950/40 border-amber-800/50"       :
+                                        "text-rose-400 bg-rose-950/40 border-rose-800/50"
                     }`}>
-                      {techScore >= 80 ? 'Strong Bullish' : techScore >= 60 ? 'Bullish Lean' :
-                       techScore >= 40 ? 'Mixed / Neutral' : techScore >= 20 ? 'Bearish Lean' : 'Strong Bearish'}
+                      {techScore >= 80 ? "Strong Bullish" : techScore >= 60 ? "Bullish Lean" :
+                       techScore >= 40 ? "Mixed / Neutral" : techScore >= 20 ? "Bearish Lean" : "Strong Bearish"}
                     </span>
                   </div>
                 </div>
 
-                {/* Collapsible explanation — collapsed by default, toggle persisted */}
                 {signals.length > 0 && (
                   <div>
                     <button
@@ -597,32 +648,30 @@ export default function DashboardPage() {
                       className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors group"
                     >
                       <svg
-                        className={`h-3.5 w-3.5 transition-transform duration-200 ${techExplainOpen ? 'rotate-90' : 'rotate-0'}`}
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${techExplainOpen ? "rotate-90" : "rotate-0"}`}
                         fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                       </svg>
                       <span className="group-hover:underline">
-                        {techExplainOpen ? 'Hide explanation' : 'How is this score calculated?'}
+                        {techExplainOpen ? "Hide explanation" : "How is this score calculated?"}
                       </span>
                     </button>
 
                     {techExplainOpen && (
                       <div className="mt-3 rounded-xl bg-slate-800/50 border border-slate-700/60 px-4 py-3 space-y-3">
 
-                        {/* Progress bar */}
                         <div className="flex items-center gap-3">
                           <span className="text-[10px] text-slate-600 w-12 flex-shrink-0">0 Bear</span>
                           <div className="relative flex-1 h-2.5 rounded-full bg-slate-700 overflow-hidden">
                             <div className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${
-                              techScore >= 60 ? 'bg-emerald-500' : techScore >= 40 ? 'bg-amber-500' : 'bg-rose-500'
+                              techScore >= 60 ? "bg-emerald-500" : techScore >= 40 ? "bg-amber-500" : "bg-rose-500"
                             }`} style={{ width: `${techScore}%` }} />
                             <div className="absolute inset-y-0 left-1/2 w-px bg-slate-400/50" title="50 = neutral" />
                           </div>
                           <span className="text-[10px] text-slate-600 w-14 flex-shrink-0 text-right">100 Bull</span>
                         </div>
 
-                        {/* 3 stat cards */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                           <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 px-3 py-2">
                             <p className="text-slate-500 mb-0.5">Scale</p>
@@ -632,10 +681,10 @@ export default function DashboardPage() {
                           <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 px-3 py-2">
                             <p className="text-slate-500 mb-0.5">Score {techScore.toFixed(1)}</p>
                             <p className={`font-semibold ${
-                              techScore >= 60 ? 'text-emerald-400' : techScore >= 40 ? 'text-amber-400' : 'text-rose-400'
+                              techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"
                             }`}>
                               {techScore < 40 ? `${(50 - techScore).toFixed(0)} pts below neutral` :
-                               techScore > 60 ? `${(techScore - 50).toFixed(0)} pts above neutral` : 'Near neutral (50)'}
+                               techScore > 60 ? `${(techScore - 50).toFixed(0)} pts above neutral` : "Near neutral (50)"}
                             </p>
                             <p className="text-slate-500 text-[10px] mt-0.5">vs midpoint of 50</p>
                           </div>
@@ -646,39 +695,37 @@ export default function DashboardPage() {
                           </div>
                         </div>
 
-                        {/* Plain-English formula */}
                         <p className="text-[11px] text-slate-500 leading-relaxed">
-                          Each timeframe outputs a signal from{' '}
-                          <span className="text-rose-400 font-medium">-1 (bearish)</span> to{' '}
+                          Each timeframe outputs a signal from{" "}
+                          <span className="text-rose-400 font-medium">-1 (bearish)</span> to{" "}
                           <span className="text-emerald-400 font-medium">+1 (bullish)</span>,
-                          averaged weighted by each model&apos;s{' '}
-                          <span className="text-sky-400 font-medium">Sharpe Ratio</span>{' '}
+                          averaged weighted by each model&apos;s{" "}
+                          <span className="text-sky-400 font-medium">Sharpe Ratio</span>{" "}
                           (better historical performance = more weight),
                           then mapped to 0&ndash;100 where 50 = neutral.
-                          A score of{' '}
+                          A score of{" "}
                           <span className={`font-bold ${
-                            techScore >= 60 ? 'text-emerald-400' : techScore >= 40 ? 'text-amber-400' : 'text-rose-400'
-                          }`}>{techScore.toFixed(1)}</span>{' '}
-                          means the models are net{' '}
+                            techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"
+                          }`}>{techScore.toFixed(1)}</span>{" "}
+                          means the models are net{" "}
                           <span className={`font-medium ${
-                            techScore >= 60 ? 'text-emerald-400' : techScore >= 40 ? 'text-amber-400' : 'text-rose-400'
-                          }`}>{techScore >= 60 ? 'bullish' : techScore >= 40 ? 'roughly neutral' : 'bearish'}</span>.
+                            techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"
+                          }`}>{techScore >= 60 ? "bullish" : techScore >= 40 ? "roughly neutral" : "bearish"}</span>.
                         </p>
 
-                        {/* Per-signal chips */}
                         <div>
                           <p className="text-[10px] text-slate-500 mb-1.5 font-medium uppercase tracking-wider">Inputs</p>
                           <div className="flex flex-wrap gap-2">
                             {signals.map((s) => (
                               <div key={s.timeframe} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${
-                                s.direction === 'Bullish' ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-400' :
-                                s.direction === 'Bearish' ? 'bg-rose-950/40 border-rose-800/50 text-rose-400' :
-                                                            'bg-amber-950/30 border-amber-800/40 text-amber-400'
+                                s.direction === "Bullish" ? "bg-emerald-950/40 border-emerald-800/50 text-emerald-400" :
+                                s.direction === "Bearish" ? "bg-rose-950/40 border-rose-800/50 text-rose-400"         :
+                                                            "bg-amber-950/30 border-amber-800/40 text-amber-400"
                               }`}>
                                 <span className="text-slate-300 font-mono font-bold">{s.timeframe}</span>
-                                <span>{s.direction === 'Bullish' ? '▲' : s.direction === 'Bearish' ? '▼' : '—'}</span>
+                                <span>{s.direction === "Bullish" ? "▲" : s.direction === "Bearish" ? "▼" : "—"}</span>
                                 <span className="text-slate-400">{s.confidence.toFixed(0)}%</span>
-                                <span className="text-slate-600 text-[10px]">Sharpe {s.sharpe_weight?.toFixed(2) ?? '?'}</span>
+                                <span className="text-slate-600 text-[10px]">Sharpe {s.sharpe_weight?.toFixed(2) ?? "?"}</span>
                               </div>
                             ))}
                           </div>
@@ -689,12 +736,11 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* Tiles */}
                 {signals.length > 0 ? (
                   <TimeframeGrid signals={signals} />
                 ) : (
                   <p className="text-xs text-rose-400 px-3 py-2 bg-rose-950/20 rounded border border-rose-900">
-                    {techError?.message || 'Technical models are not trained for this symbol.'}
+                    {techError?.message || "Technical models are not trained for this symbol."}
                   </p>
                 )}
               </section>
@@ -710,7 +756,7 @@ export default function DashboardPage() {
                     sentScore={sent30d}
                     macroScore={macroScore}
                     gasScore={gasScore}
-                    mlOutput={null} /* Placeholder for future ML signals */
+                    mlOutput={mlOutput}
                     initialAiSummary={initialAiSummary}
                   />
                 </div>
