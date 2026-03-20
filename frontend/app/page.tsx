@@ -10,6 +10,7 @@ import {
   fetchNewsSentiment,
   fetchMacroLatest,
   fetchGasSnapshot,
+  fetchExplanationSummary,
   type GasSnapshotDto,
 } from "../lib/api";
 import MarketWeatherWidget from "../components/MarketWeatherWidget";
@@ -453,16 +454,40 @@ export default function DashboardPage() {
   const signals    = techData?.signals ?? [];
   const isLoading  = gasLoading && !gasSnapshot && !gasError;
 
-  const whyBullets = useMemo(
+  const explainParamsStr = !isLoading ? JSON.stringify({
+    tech_score: techScore,
+    sent_30d: sent30d,
+    macro_score: macroScore,
+    macro_label: macroLabel,
+    gas_score: gasScore,
+    tech_signals: JSON.stringify(signals),
+  }) : null;
+
+  const { data: explanationData } = useSWR(
+    explainParamsStr ? [`explanation-${activeSymbol}`, explainParamsStr] : null,
+    ([_, paramsStr]) => {
+      const p = JSON.parse(paramsStr);
+      return fetchExplanationSummary(activeSymbol, p as any);
+    },
+    { refreshInterval: 60_000, shouldRetryOnError: false, keepPreviousData: true },
+  );
+
+  const whyBullets = explanationData?.why_moving ?? useMemo(
     () => buildWhyBullets(techScore, signals, sent30d, macroScore, macroLabel),
     [techScore, signals, sent30d, macroScore, macroLabel],
   );
 
   const sentScore0100 = ((sent30d ?? 0) + 1) / 2 * 100;
-  const conflictData  = useMemo(
+  const conflictData  = explanationData ? {
+    hasConflict: explanationData.has_conflict,
+    conflicts: explanationData.conflicts,
+    summary: explanationData.conflict_summary,
+  } : useMemo(
     () => detectConflicts(techScore, sentScore0100, macroScore, signals),
     [techScore, sentScore0100, macroScore, signals],
   );
+  
+  const initialAiSummary = explanationData?.ai_summary ?? null;
 
   const openGasExplain = useCallback(() =>
     setExplainPayload(buildGasPayload(gasScore, techScore, sent30d, macroScore, macroLabel)),
@@ -681,6 +706,12 @@ export default function DashboardPage() {
                     symbol={activeSymbol}
                     bullets={whyBullets}
                     disclaimer={DISCLAIMER}
+                    techScore={techScore}
+                    sentScore={sent30d}
+                    macroScore={macroScore}
+                    gasScore={gasScore}
+                    mlOutput={null} /* Placeholder for future ML signals */
+                    initialAiSummary={initialAiSummary}
                   />
                 </div>
                 <ConflictDetector

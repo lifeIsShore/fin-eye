@@ -1,17 +1,30 @@
 "use client";
 
 import React from "react";
+import AIGenerateButton from "./AIGenerateButton";
 
 interface WhyMovingPanelProps {
     symbol: string;
     bullets: string[];
     disclaimer: string;
+    techScore: number;
+    sentScore?: number | null;
+    macroScore: number;
+    gasScore: number;
+    mlOutput?: string | null;
+    initialAiSummary?: string | null;
 }
 
 export default function WhyMovingPanel({
     symbol,
     bullets,
     disclaimer,
+    techScore,
+    sentScore,
+    macroScore,
+    gasScore,
+    mlOutput,
+    initialAiSummary,
 }: WhyMovingPanelProps) {
     return (
         <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
@@ -36,6 +49,16 @@ export default function WhyMovingPanel({
             <p className="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-500 italic leading-relaxed">
                 ⚠️ {disclaimer}
             </p>
+
+            <AIGenerateButton 
+                symbol={symbol}
+                techScore={techScore}
+                sentScore={sentScore}
+                macroScore={macroScore}
+                gasScore={gasScore}
+                mlOutput={mlOutput}
+                initialSummary={initialAiSummary}
+            />
         </div>
     );
 }

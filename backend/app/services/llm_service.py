@@ -52,26 +52,29 @@ class OllamaService:
         tech_score: float, 
         sent_score: Optional[float], 
         macro_score: float,
-        gas_score: float
+        gas_score: float,
+        ml_output: Optional[str] = None
     ) -> Optional[str]:
         """
         Generate a natural language explanation for a symbol's movement.
         """
         sent_str = f"{sent_score:+.2f}" if sent_score is not None else "N/A"
+        ml_str = ml_output if ml_output else "No specific ML anomalies detected."
         
         system_prompt = (
             "You are Fin-Eye AI, a professional financial analyst. "
             "Your task is to provide a concise, insightful explanation of a stock's current movement "
             "based on provided data points: Technical Score (0-100), Sentiment Score (-1 to +1), "
-            "Macro Score (0-100), and a combined 'GAS' Score (0-100)."
+            "Macro Score (0-100), ML Signals, and a combined 'GAS' Score (0-100)."
         )
         
         prompt = (
             f"Symbol: {symbol}\n"
             f"Technical Score: {tech_score}/100\n"
-            f"Sentiment Score: {sent_str}\n"
+            f"Sentiment (News) Score: {sent_str}\n"
             f"Macro Score: {macro_score}/100\n"
-            f"Combined GAS Score: {gas_score}/100\n\n"
+            f"Combined GAS Score: {gas_score}/100\n"
+            f"ML Predictive Signals: {ml_str}\n\n"
             "Provide a human-readable summary (2-3 sentences) explaining what these signals suggest "
             "about the stock's current direction and key drivers. Be professional and objective."
         )

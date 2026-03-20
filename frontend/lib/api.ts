@@ -799,6 +799,72 @@ export interface AlertListDto {
   total: number;
 }
 
+// ── Explanation Summary ──────────────────────────────────────────────────────
+
+export interface ConflictItem {
+  layers: string;
+  magnitude: string;
+  message: string;
+}
+
+export interface ExplanationResponse {
+  symbol: string;
+  gas_score: number;
+  gas_label: string;
+  why_moving: string[];
+  disclaimer: string;
+  has_conflict: boolean;
+  conflicts: ConflictItem[];
+  conflict_summary: string;
+  ai_summary: string | null;
+}
+
+export async function fetchExplanationSummary(
+  symbol: string,
+  params: {
+    tech_score: number;
+    sent_30d?: number | null;
+    macro_score: number;
+    macro_label: string;
+    gas_score: number;
+    tech_signals: string;
+  },
+  init?: RequestInit,
+): Promise<ExplanationResponse> {
+  const query = new URLSearchParams({
+    tech_score: params.tech_score.toString(),
+    macro_score: params.macro_score.toString(),
+    macro_label: params.macro_label,
+    gas_score: params.gas_score.toString(),
+    tech_signals: params.tech_signals,
+  });
+  if (params.sent_30d !== undefined && params.sent_30d !== null) {
+    query.append("sent_30d", params.sent_30d.toString());
+  }
+
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/explanation/${encodeURIComponent(
+      symbol.toUpperCase(),
+    )}/summary?${query.toString()}`,
+    {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to load explanation summary for ${symbol}: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  return (await res.json()) as ExplanationResponse;
+}
+
 export interface TriggeredAlertDto {
   id: number;
   symbol: string;

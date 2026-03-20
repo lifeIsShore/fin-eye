@@ -10,11 +10,14 @@ Returns:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
+from datetime import date
+import redis.asyncio as redis
 
 from app.services.llm_service import get_ollama_service
+from app.db.redis_client import get_redis
 router = APIRouter()
 
 
@@ -47,6 +50,19 @@ class ExplanationResponse(BaseModel):
     conflicts: list[ConflictItem]
     conflict_summary: str  # "No major conflicts detected." or description
     ai_summary: Optional[str] = None  # Natural language summary from Ollama
+
+
+class GenerateAIRequest(BaseModel):
+    tech_score: float = 50.0
+    sent_30d: Optional[float] = None
+    macro_score: float = 50.0
+    gas_score: float = 50.0
+    ml_output: Optional[str] = None
+
+class GenerateAIResponse(BaseModel):
+    symbol: str
+    ai_summary: str
+    cached: bool
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
@@ -211,6 +227,7 @@ async def get_explanation_summary(
     macro_label: str = "Neutral",
     gas_score: float = 50.0,
     tech_signals: str = "",  # JSON-encoded list of {timeframe, direction, confidence}
+    redis_client: redis.Redis = Depends(get_redis)
 ) -> ExplanationResponse:
     """
     Derives the EXPL-01 'Why is this moving?' explanation and the EXPL-02
@@ -259,6 +276,14 @@ async def get_explanation_summary(
         else f"{len(conflicts)} conflict(s) detected. Review the signals below carefully."
     )
 
+    # AI Summary Cache Lookup
+    today_str = date.today().isoformat()
+    cache_key = f"ai_summary:{sym}:{today_str}"
+    try:
+        cached_summary = await redis_client.get(cache_key)
+    except Exception:
+        cached_summary = None
+
     return ExplanationResponse(
         symbol=sym,
         gas_score=round(gas_score, 1),
@@ -268,11 +293,48 @@ async def get_explanation_summary(
         has_conflict=has_conflict,
         conflicts=conflicts,
         conflict_summary=conflict_summary,
-        ai_summary=await get_ollama_service().get_explanation(
-            symbol=sym,
-            tech_score=tech_score,
-            sent_score=sent_30d,
-            macro_score=macro_score,
-            gas_score=gas_score,
-        )
+        ai_summary=cached_summary
     )
+
+
+@router.post("/{symbol}/generate-ai", response_model=GenerateAIResponse)
+async def generate_ai_summary(
+    symbol: str, 
+    request: GenerateAIRequest,
+    redis_client: redis.Redis = Depends(get_redis)
+):
+    """
+    On-demand AI summary generation.
+    Checks cache first, then calls Ollama LLM service.
+    """
+    sym = symbol.upper()
+    today_str = date.today().isoformat()
+    cache_key = f"ai_summary:{sym}:{today_str}"
+    
+    try:
+        cached_summary = await redis_client.get(cache_key)
+        if cached_summary:
+            return GenerateAIResponse(symbol=sym, ai_summary=cached_summary, cached=True)
+    except Exception:
+        pass  # proceed to generate if cache fails
+    
+    # Not in cache, generate
+    summary = await get_ollama_service().get_explanation(
+        symbol=sym,
+        tech_score=request.tech_score,
+        sent_score=request.sent_30d,
+        macro_score=request.macro_score,
+        gas_score=request.gas_score,
+        ml_output=request.ml_output
+    )
+    
+    if summary:
+        try:
+            # Cache it for 24 hours
+            await redis_client.setex(cache_key, 86400, summary)
+        except Exception as e:
+            # Cache failure should not fail the request
+            pass
+        return GenerateAIResponse(symbol=sym, ai_summary=summary, cached=False)
+    else:
+        raise HTTPException(status_code=503, detail="Failed to generate AI summary from Ollama.")
