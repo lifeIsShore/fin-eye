@@ -16,3 +16,5 @@ from app.models.api_key import ApiKey, ApiKeyUsageLog
 from app.models.gas_snapshot import GasSnapshot
 from app.models.custom_indicator import CustomIndicator
 from app.models.showcase import ShowcaseProduct, ShowcaseClick
+# todos-v4.md — bulk pipeline models
+from app.models.bulk_ops import TickerUniverse, BulkJobRun

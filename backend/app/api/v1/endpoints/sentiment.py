@@ -66,6 +66,7 @@ async def get_news_sentiment_timeseries(
             source=row.source,
             published_at=row.published_at,
             sentiment_score=row.sentiment_score,
+            url=getattr(row, "url", None),   # Phase 5.1 — include URL for click-through
         )
         for row in article_rows
     ]
@@ -132,6 +133,7 @@ async def get_news_sentiment_sources(
         breakdown=breakdown_entries,
     )
 
+
 @router.get(
     "/retail/{ticker}",
     response_model=SentimentResponse,
@@ -141,8 +143,6 @@ async def get_retail_sentiment(
 ) -> Any:
     """
     Get recent retail sentiment from StockTwits for a specific ticker.
-    Returns aggregated stats and top bullish/bearish messages.
-    StockTwits users self-tag each post as Bullish or Bearish — no NLP needed.
     """
     ticker = ticker.upper()
     try:

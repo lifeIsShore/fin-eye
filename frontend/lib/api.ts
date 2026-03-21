@@ -10,11 +10,17 @@ export interface SentimentAggregatePoint {
 }
 
 export interface NewsArticleDto {
-  symbol: string;
-  title: string;
+  symbol:          string;
+  title:           string;
   sentiment_score: number | null;
-  source: string | null;
-  published_at: string;
+  // Phase 5.1 — FinBERT label ('bullish' | 'bearish' | 'neutral'), null if not scored
+  sentiment_label: string | null;
+  // Phase 5.1 — raw FinBERT confidence (0–1), null if not scored
+  finbert_score:   number | null;
+  source:          string | null;
+  published_at:    string;
+  // Phase 5.7 — clickable article URL (always present for Finnhub articles)
+  url:             string | null;
 }
 
 export interface SentimentTimeseriesDto {
@@ -255,9 +261,6 @@ export async function fetchTechnicalLatest(
 
   if (!res.ok) {
     if (res.status === 404) {
-      // It's possible for there to be no models trained yet.
-      // We can return a default empty consensus or throw a specific error depending on how we want the UI to handle it.
-      // We'll throw an error for now and let the SWR hook or UI catch it.
       throw new Error(`Technical models not trained or found for ${symbol}`);
     }
     throw new Error(
@@ -1175,12 +1178,7 @@ export async function trackShowcaseClick(
 
 // ── Product Analytics (CORE-ANALYTICS-01) ───────────────────────────────────
 
-/**
- * Canonical analytics event names — must match the backend EventName enum.
- * Defined here as a const object so tree-shaking removes unused names.
- */
 export const AnalyticsEvent = {
-  // Acquisition & Activation
   USER_SIGNED_UP: "user_signed_up",
   USER_LOGGED_IN: "user_logged_in",
   USER_LOGGED_OUT: "user_logged_out",
@@ -1188,13 +1186,11 @@ export const AnalyticsEvent = {
   ONBOARDING_TOUR_STARTED: "onboarding_tour_started",
   ONBOARDING_TOUR_COMPLETED: "onboarding_tour_completed",
   ONBOARDING_TOUR_SKIPPED: "onboarding_tour_skipped",
-  // Dashboard & Core
   DASHBOARD_VIEWED: "dashboard_viewed",
   SYMBOL_SEARCHED: "symbol_searched",
   SYMBOL_CHANGED: "symbol_changed",
   WATCHLIST_SYMBOL_ADDED: "watchlist_symbol_added",
   WATCHLIST_SYMBOL_REMOVED: "watchlist_symbol_removed",
-  // Features
   TECHNICAL_CONSENSUS_VIEWED: "technical_consensus_viewed",
   MACRO_DASHBOARD_VIEWED: "macro_dashboard_viewed",
   MACRO_ADVANCED_VIEWED: "macro_advanced_viewed",
@@ -1235,7 +1231,6 @@ export interface TrackEventPayload {
   properties?: Record<string, string | number | boolean | null>;
 }
 
-// Module-level session ID — generated once per page load, persisted in memory only
 let _sessionId: string | null = null;
 function getSessionId(): string {
   if (!_sessionId) {
@@ -1246,12 +1241,6 @@ function getSessionId(): string {
   return _sessionId;
 }
 
-/**
- * Fire-and-forget analytics beacon.
- * - Never throws — analytics must not break the UI.
- * - Automatically injects session_id and current page path.
- * - Sends Bearer token if present in localStorage.
- */
 export async function track(
   event_name: AnalyticsEventName,
   options?: {
@@ -1260,7 +1249,7 @@ export async function track(
     page?: string;
   },
 ): Promise<void> {
-  if (typeof window === "undefined") return; // SSR guard
+  if (typeof window === "undefined") return;
 
   const payload: TrackEventPayload = {
     event_name,
@@ -1275,17 +1264,15 @@ export async function track(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // Include auth token if available (best-effort — no throw if missing)
         ...(localStorage.getItem("access_token")
           ? { Authorization: `Bearer ${localStorage.getItem("access_token")}` }
           : {}),
       },
       body: JSON.stringify(payload),
-      // keepalive ensures the request completes even during page unload
       keepalive: true,
     });
   } catch {
-    // Silently swallow — analytics must never break UX
+    // Silently swallow
   }
 }
 
@@ -1360,8 +1347,8 @@ export async function fetchAnalyticsRawEvents(
 // ── Two-Factor Authentication (CORE-SEC-01) ─────────────────────────────────────
 
 export interface TotpSetupDto {
-  secret: string;   // base32 plaintext — show as manual entry fallback
-  uri: string;      // otpauth:// URI — encode as QR code
+  secret: string;
+  uri: string;
 }
 
 export interface TotpStatusDto {
@@ -1376,7 +1363,6 @@ export interface LoginResponseDto {
   pending_token: string;
 }
 
-/** POST /auth/login — returns either full tokens or a 2FA pending state */
 export async function loginWithTotp(email: string, password: string): Promise<LoginResponseDto> {
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
     method: "POST",
@@ -1390,7 +1376,6 @@ export async function loginWithTotp(email: string, password: string): Promise<Lo
   return res.json();
 }
 
-/** POST /auth/2fa/verify — exchange pending_token + TOTP code for full tokens */
 export async function verify2faLogin(pendingToken: string, code: string): Promise<{ access_token: string; refresh_token: string }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/verify`, {
     method: "POST",
@@ -1404,7 +1389,6 @@ export async function verify2faLogin(pendingToken: string, code: string): Promis
   return res.json();
 }
 
-/** POST /auth/2fa/setup — generate TOTP secret + QR URI */
 export async function setup2fa(): Promise<TotpSetupDto> {
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/setup`, {
     method: "POST",
@@ -1414,7 +1398,6 @@ export async function setup2fa(): Promise<TotpSetupDto> {
   return res.json();
 }
 
-/** POST /auth/2fa/enable — confirm first TOTP code to activate 2FA */
 export async function enable2fa(code: string): Promise<TotpStatusDto> {
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/enable`, {
     method: "POST",
@@ -1428,7 +1411,6 @@ export async function enable2fa(code: string): Promise<TotpStatusDto> {
   return res.json();
 }
 
-/** POST /auth/2fa/disable — verify TOTP code then disable 2FA */
 export async function disable2fa(code: string): Promise<TotpStatusDto> {
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/disable`, {
     method: "POST",
@@ -1442,7 +1424,6 @@ export async function disable2fa(code: string): Promise<TotpStatusDto> {
   return res.json();
 }
 
-/** GET /auth/2fa/status */
 export async function get2faStatus(): Promise<TotpStatusDto> {
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/2fa/status`, {
     headers: authHeaders(),
@@ -1516,7 +1497,6 @@ export interface ExperimentCreatePayload {
   notes?: string;
 }
 
-/** Get (or create) variant assignment — call once per running experiment on app boot */
 export async function assignVariant(
   experimentKey: string,
   anonId?: string,
@@ -1530,7 +1510,6 @@ export async function assignVariant(
   return res.json();
 }
 
-/** Admin: list all experiments */
 export async function fetchExperiments(
   status?: string,
 ): Promise<ExperimentDto[]> {
@@ -1543,7 +1522,6 @@ export async function fetchExperiments(
   return res.json();
 }
 
-/** Admin: create experiment */
 export async function createExperiment(
   payload: ExperimentCreatePayload,
 ): Promise<ExperimentDto> {
@@ -1559,7 +1537,6 @@ export async function createExperiment(
   return res.json();
 }
 
-/** Admin: update experiment */
 export async function updateExperiment(
   key: string,
   payload: Partial<ExperimentCreatePayload> & { status?: string },
@@ -1573,7 +1550,6 @@ export async function updateExperiment(
   return res.json();
 }
 
-/** Admin: delete experiment */
 export async function deleteExperiment(key: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/api/v1/experiments/${key}`, {
     method: "DELETE",
@@ -1582,7 +1558,6 @@ export async function deleteExperiment(key: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error("Failed to delete experiment");
 }
 
-/** Admin: launch / pause / conclude */
 export async function transitionExperiment(
   key: string,
   action: "launch" | "pause" | "conclude",
@@ -1595,7 +1570,6 @@ export async function transitionExperiment(
   return res.json();
 }
 
-/** Admin: get results for an experiment */
 export async function fetchExperimentResults(
   key: string,
   goalEvent: string,
@@ -1897,7 +1871,7 @@ export interface SectorDto {
   rs_1w: number | null;
   rs_1m: number | null;
   rs_3m: number | null;
-  rs_score: number;      // 0–100; 50 = SPY parity
+  rs_score: number;
   momentum: number | null;
   rrg_quadrant: "Leading" | "Weakening" | "Lagging" | "Improving" | string;
   last_price: number | null;
@@ -1969,24 +1943,19 @@ export interface OptionsExpiryBreakdownDto {
 export interface OptionsAnalysisDto {
   symbol: string;
   spot_price: number;
-  // Aggregate PCR
   total_calls_oi: number;
   total_puts_oi: number;
   aggregate_pcr: number;
   pcr_label: "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed" | string;
   pcr_interpretation: string;
-  // IV skew
   iv_skew: number | null;
   iv_skew_label: string;
   near_put_iv: number | null;
   near_call_iv: number | null;
-  // Max pain
   max_pain_strike: number | null;
   max_pain_distance_pct: number | null;
-  // Composite
-  fear_greed_score: number;   // 0–100
+  fear_greed_score: number;
   fear_greed_label: "Fear" | "Mild Fear" | "Neutral" | "Mild Greed" | "Greed" | string;
-  // Detail
   expiry_breakdown: OptionsExpiryBreakdownDto[];
   disclaimer: string;
 }
@@ -2057,10 +2026,6 @@ export interface GasSnapshotDto {
   source: "live" | "cache" | "db_snapshot" | string;
 }
 
-/**
- * Fetch the latest pre-computed GAS snapshot for a symbol.
- * Falls back to live compute (slow) if no snapshot is cached yet.
- */
 export async function fetchGasSnapshot(symbol: string): Promise<GasSnapshotDto> {
   const res = await fetch(
     `${API_BASE_URL}/api/v1/admin/gas/snapshots/${symbol.toUpperCase()}`,
@@ -2070,9 +2035,6 @@ export async function fetchGasSnapshot(symbol: string): Promise<GasSnapshotDto> 
   return res.json();
 }
 
-/**
- * Admin: trigger a full GAS pre-compute batch (fire-and-forget).
- */
 export async function triggerGasPrecompute(): Promise<{ status: string; message: string }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/admin/gas/precompute`, {
     method: "POST",
