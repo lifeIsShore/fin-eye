@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.crud.gas_snapshot import get_latest, get_latest_batch
 from app.db.database import get_db
-from app.services.auth import require_admin
+from app.api.v1.deps import require_admin
 from app.services.gas_precompute import (
     DEFAULT_SYMBOLS,
     compute_gas_for_symbol,

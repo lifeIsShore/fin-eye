@@ -39,7 +39,8 @@ from app.schemas.experiment_models import (
     ExperimentResults,
     ExperimentUpdate,
 )
-from app.services.auth import optional_current_user, require_admin
+from app.services.auth import optional_current_user
+from app.api.v1.deps import require_admin
 from app.services.experiment_service import (
     compute_results,
     create_experiment,

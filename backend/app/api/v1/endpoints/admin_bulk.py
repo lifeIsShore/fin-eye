@@ -41,7 +41,7 @@ from app.db.database import get_db, AsyncSessionLocal
 from app.models.bulk_ops import BulkJobRun, TickerUniverse
 from app.models.market import OHLCVDaily, OHLCVIntraday
 from app.models.sentiment import NewsArticle
-from app.services.auth import require_admin
+from app.api.v1.deps import require_admin
 from app.services.bulk_seed_service import seed_symbol_incremental
 
 # Two separate routers — different URL prefixes
@@ -165,7 +165,7 @@ async def list_tickers_universe(
 )
 async def seed_single_symbol(
     symbol: str,
-    background_tasks: BackgroundTasks,  # injected by FastAPI — no default
+    background_tasks: BackgroundTasks,
 ) -> Dict[str, Any]:
     sym = symbol.upper()
 
@@ -310,8 +310,8 @@ async def get_ticker_status(
     summary="Seed OHLCV for all tickers (fire-and-forget)",
 )
 async def run_bulk_seed(
+    background_tasks: BackgroundTasks,
     scope: str = "missing_only",
-    background_tasks: BackgroundTasks = BackgroundTasks(),  # FastAPI injects regardless of default
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     if _active_jobs["seeding"]:
@@ -400,8 +400,8 @@ async def get_bulk_seed_status(db: AsyncSession = Depends(get_db)) -> Dict[str, 
     summary="Train ML models for all seeded tickers (fire-and-forget, sequential)",
 )
 async def run_bulk_train(
+    background_tasks: BackgroundTasks,
     scope: str = "untrained_only",
-    background_tasks: BackgroundTasks = BackgroundTasks(),  # FastAPI injects regardless of default
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     if _active_jobs["training"]:
@@ -452,7 +452,6 @@ async def run_bulk_train(
                              "low": r.low, "close": r.close, "volume": r.volume}
                             for r in records
                         ]).set_index("date").sort_index()
-                        # run_training_pipeline is CPU-bound — use executor
                         meta = await loop.run_in_executor(
                             None, run_training_pipeline, sym, tf, df
                         )
@@ -520,8 +519,8 @@ async def get_bulk_train_status() -> Dict[str, Any]:
     summary="Bulk fetch + score news for all active tickers",
 )
 async def run_bulk_news_seed(
+    background_tasks: BackgroundTasks,
     lookback_days: int = 7,
-    background_tasks: BackgroundTasks = BackgroundTasks(),  # FastAPI injects regardless of default
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     if _active_jobs["news"]:
@@ -615,8 +614,6 @@ async def get_pipeline_overview(db: AsyncSession = Depends(get_db)) -> Dict[str,
         select(func.count(func.distinct(OHLCVDaily.symbol)))
     )).scalar_one()
 
-    # Get the latest status per symbol — window function CTE to avoid showing
-    # stale historical failures for symbols that were later successfully seeded.
     latest_seed_cte = (
         select(
             BulkJobRun.symbol,

@@ -18,7 +18,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends
 
 from app.services.metrics import get_metrics
-from app.services.auth import require_admin
+from app.api.v1.deps import require_admin
 
 router = APIRouter()
 

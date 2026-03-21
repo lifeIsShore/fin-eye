@@ -5,7 +5,7 @@ New models for todos-v4.md implementation:
 """
 
 from sqlalchemy import (
-    Column, Integer, BigInteger, String, Float, Boolean,
+    Column, Integer, String, Boolean,
     DateTime, Text, Index, UniqueConstraint,
 )
 from sqlalchemy.sql import func
@@ -20,7 +20,7 @@ class TickerUniverse(Base):
     __tablename__ = "tickers_universe"
 
     id          = Column(Integer, primary_key=True, index=True)
-    symbol      = Column(String(20), nullable=False, unique=True, index=True)
+    symbol      = Column(String(20), nullable=False, index=True)
     name        = Column(String(200), nullable=True)
     asset_class = Column(String(20), nullable=True)   # 'stock','etf','crypto','commodity','forex'
     tr_rank     = Column(Integer, nullable=True)       # popularity rank on Trade Republic DE
@@ -29,6 +29,12 @@ class TickerUniverse(Base):
     # NULL = not yet validated; True = yfinance resolves OK; False = invalid
     yf_valid    = Column(Boolean, nullable=True)
     added_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Explicit name used by seed_ticker_universe.py on_conflict_do_update()
+        # and admin_bulk.py upserts. Must match exactly.
+        UniqueConstraint("symbol", name="uq_ticker_universe_symbol"),
+    )
 
 
 class BulkJobRun(Base):
@@ -54,7 +60,7 @@ class BulkJobRun(Base):
     created_at   = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        Index("idx_bulk_job_symbol",   "symbol"),
-        Index("idx_bulk_job_status",   "status"),
-        Index("idx_bulk_job_type_ts",  "job_type", "created_at"),
+        Index("idx_bulk_job_symbol",  "symbol"),
+        Index("idx_bulk_job_status",  "status"),
+        Index("idx_bulk_job_type_ts", "job_type", "created_at"),
     )

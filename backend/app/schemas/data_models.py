@@ -40,3 +40,15 @@ class SentimentTimeseriesResponse(BaseModel):
     series: List[SentimentAggregateData]
     sentiment_1d: Optional[float] = Field(default=None)
     sentiment_7d: Optional[float] = Field(default=None)
+    sentiment_30d: Optional[float] = Field(default=None)
+
+class SentimentSourceBreakdownEntry(BaseModel):
+    source: str
+    positive: int
+    negative: int
+    neutral: int
+
+class SentimentSourceBreakdownResponse(BaseModel):
+    symbol: str
+    days: int
+    breakdown: List[SentimentSourceBreakdownEntry]

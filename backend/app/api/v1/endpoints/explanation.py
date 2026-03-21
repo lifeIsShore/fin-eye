@@ -15,7 +15,7 @@ from datetime import date
 import redis.asyncio as redis
 
 from app.services.llm_service import get_ollama_service
-from app.services.auth import get_current_active_user  # BUG-FIX-3: auth guard
+from app.api.v1.deps import get_current_user  # BUG-FIX-3: auth guard
 from app.db.redis_client import get_redis
 
 router = APIRouter()
@@ -278,7 +278,7 @@ async def generate_ai_summary(
     # BUG-FIX-3: Require a logged-in user so anonymous callers cannot spam
     # the local Ollama instance.  The endpoint is effectively rate-limited
     # to the authenticated user pool.
-    _current_user: object = Depends(get_current_active_user),
+    _current_user: object = Depends(get_current_user),
 ) -> GenerateAIResponse:
     """
     On-demand AI summary generation via Ollama.

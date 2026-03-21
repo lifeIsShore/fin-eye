@@ -37,7 +37,7 @@ from app.schemas.analytics_models import (
     TrackEventRequest,
 )
 from app.services.analytics_service import build_analytics_summary, record_event
-from app.services.auth import require_admin
+from app.api.v1.deps import require_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
