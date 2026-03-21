@@ -3,11 +3,12 @@ app/api/v1/endpoints/admin_gas.py
 ─────────────────────────────────────────────────────────────────────────────
 Admin endpoints for EXP-PERF-01 GAS pre-computation.
 
-Routes (all admin-only):
+Routes (all admin-only except /snapshots/{symbol} and /history/{symbol}):
   POST /api/v1/admin/gas/precompute          — trigger a full batch now
   POST /api/v1/admin/gas/precompute/{symbol} — trigger for one symbol
   GET  /api/v1/admin/gas/snapshots           — list latest snapshot per symbol
   GET  /api/v1/admin/gas/snapshots/{symbol}  — get latest snapshot for one symbol
+  GET  /api/v1/admin/gas/history/{symbol}    — last N snapshots (sparkline data)
 """
 from __future__ import annotations
 
@@ -15,13 +16,15 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.crud.gas_snapshot import get_latest, get_latest_batch
 from app.db.database import get_db
 from app.api.v1.deps import require_admin
+from app.models.gas_snapshot import GasSnapshot
 from app.services.gas_precompute import (
     DEFAULT_SYMBOLS,
     compute_gas_for_symbol,
@@ -33,14 +36,13 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-# ─── Schemas (inline — small enough to not warrant a separate file) ────────
+# ─── Schemas (inline) ────────────────────────────────────────────────────────
 
 def _snap_response(snap_dict: dict) -> dict:
-    """Ensure every field is JSON-serialisable."""
     return snap_dict
 
 
-# ─── Endpoints ────────────────────────────────────────────────────────────────
+# ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.post(
     "/precompute",
@@ -51,10 +53,6 @@ async def trigger_full_precompute(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Fire-and-forget: starts the GAS batch in the background and returns
-    immediately.  Check /snapshots to see results once complete.
-    """
     async def _run() -> None:
         try:
             from app.db.database import AsyncSessionLocal  # noqa: PLC0415
@@ -81,10 +79,6 @@ async def trigger_symbol_precompute(
     symbol: str,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Synchronous single-symbol compute — returns the snapshot immediately.
-    Useful for manual investigation or re-warming after a model retrain.
-    """
     sym = symbol.upper()
     try:
         snap = await compute_gas_for_symbol(sym, db)
@@ -106,31 +100,18 @@ async def trigger_symbol_precompute(
 async def list_snapshots(
     db: AsyncSession = Depends(get_db),
 ) -> List[Dict[str, Any]]:
-    """
-    Returns the most-recent DB snapshot for every default symbol.
-    Symbols with no snapshot yet will be absent from the list.
-    """
     batch = await get_latest_batch(db, DEFAULT_SYMBOLS)
     return [_snap_response(snap.to_dict()) for snap in batch.values()]
 
 
 @router.get(
     "/snapshots/{symbol}",
-    summary="Get latest GAS snapshot for a single symbol (public-facing read path)",
+    summary="Get latest GAS snapshot for a single symbol (public read path)",
 )
 async def get_snapshot(
     symbol: str,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Public read endpoint — no admin auth required.
-    Used by the dashboard to get a fast pre-computed GAS score.
-
-    Response includes a `source` field:
-      - "cache"       — served from Redis (fastest)
-      - "db_snapshot" — served from DB snapshot (fast)
-      - "live"        — freshly computed (cold start only)
-    """
     from app.services.gas_precompute import get_snapshot_cached  # noqa: PLC0415
 
     sym = symbol.upper()
@@ -142,3 +123,46 @@ async def get_snapshot(
                    "Ensure models are trained and the pre-compute job has run.",
         )
     return _snap_response(snap)
+
+
+@router.get(
+    "/history/{symbol}",
+    summary="Get last N GAS snapshots for a symbol (sparkline / trend data)",
+)
+async def get_gas_history(
+    symbol: str,
+    limit: int = Query(default=7, ge=1, le=90, description="Number of snapshots to return"),
+    db: AsyncSession = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """
+    Returns the last `limit` GAS snapshots for a symbol ordered oldest-first,
+    so the frontend can render a sparkline showing the 7-day GAS trend.
+
+    Public endpoint — no auth required (data is already shown on dashboard).
+    Default: last 7 snapshots (one per daily compute run = 7-day sparkline).
+    Max: 90 (for longer trend charts).
+    """
+    sym = symbol.upper()
+    result = await db.execute(
+        select(GasSnapshot)
+        .where(GasSnapshot.symbol == sym)
+        .order_by(GasSnapshot.computed_at.desc())
+        .limit(limit)
+    )
+    rows = result.scalars().all()
+
+    if not rows:
+        return []
+
+    # Return oldest-first so frontend can render left→right chronologically
+    rows_asc = list(reversed(rows))
+    return [
+        {
+            "computed_at": row.computed_at.isoformat(),
+            "gas_score":   round(row.gas_score, 1),
+            "weather_label": row.weather_label,
+            "regime":        row.regime,
+            "component_scores": row.component_scores,
+        }
+        for row in rows_asc
+    ]

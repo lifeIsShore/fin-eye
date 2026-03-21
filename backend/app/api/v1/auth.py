@@ -1,35 +1,36 @@
 """
 app/api/v1/auth.py
 
-Authentication endpoints:
-  POST /auth/register          — create account
-  POST /auth/login             — get tokens (or 2fa_pending if 2FA enabled)
-  POST /auth/refresh           — exchange refresh token for new access token
-  GET  /auth/me                — return current user profile
+Authentication endpoints (Sprint 7 security hardening — SEC-03, SEC-04, SEC-05):
+
+  POST /auth/register          — create account        [rate-limited: 5/min/IP]
+  POST /auth/login             — get tokens            [rate-limited: 10/min/IP + lockout]
+  POST /auth/logout            — revoke refresh token  [blacklists JTI in Redis]
+  POST /auth/refresh           — rotate refresh token  [validates + rotates JTI]
+  GET  /auth/me                — current user profile
   PATCH /auth/me               — update display name
-  POST /auth/change-password   — change password (requires current password)
+  POST /auth/change-password   — change password
 
 Two-Factor Authentication (CORE-SEC-01):
   POST /auth/2fa/setup         — generate TOTP secret + QR code URI
   POST /auth/2fa/enable        — confirm first TOTP code → activates 2FA
   POST /auth/2fa/disable       — verify TOTP code → disables 2FA
-  POST /auth/2fa/verify        — exchange (pending_token + code) for full tokens
-  GET  /auth/2fa/status        — check if 2FA is enabled for current user
+  POST /auth/2fa/verify        — exchange (pending_token + code) for full tokens  [rate-limited: 5/min/IP]
+  GET  /auth/2fa/status        — check if 2FA is enabled
 
-Login flow with 2FA:
-  1. Client POST /auth/login with email + password.
-  2a. If 2FA not enabled: response has access_token + refresh_token (no change).
-  2b. If 2FA enabled: response has totp_required=true + pending_token (5min TTL).
-  3. Client prompts for 6-digit TOTP code.
-  4. Client POST /auth/2fa/verify with { pending_token, code }.
-  5. On success: response has access_token + refresh_token.
+Security additions (todos-v3.md SEC-03, SEC-04, SEC-05):
+  - Rate limiting on register/login/2fa-verify via Redis sliding-window counters
+  - Account lockout after 10 failed logins in 15 min → 30-min lockout
+  - Refresh tokens carry a JTI; /auth/logout blacklists the JTI
+  - /auth/refresh rotates the JTI (old blacklisted, new issued)
 """
 
 import logging
 import uuid
+from datetime import datetime, timezone, timedelta
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user
@@ -40,6 +41,7 @@ from app.core.security import (
     decode_token,
 )
 from app.db.database import get_db
+from app.db.redis_client import get_redis
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -62,6 +64,16 @@ from app.services.auth_service import (
     get_user_by_id,
     update_user_name,
 )
+from app.services.auth_security import (
+    check_login_rate_limit,
+    check_register_rate_limit,
+    check_totp_rate_limit,
+    check_account_lockout,
+    record_failed_login,
+    clear_failed_logins,
+    blacklist_jti,
+    is_jti_blacklisted,
+)
 from app.services.totp_service import (
     begin_totp_setup,
     check_totp_for_login,
@@ -73,6 +85,13 @@ from app.schemas.analytics_models import EventName
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth"])
 
+# ── JTI TTL helper ────────────────────────────────────────────────────────────
+
+def _refresh_ttl_seconds() -> int:
+    from app.config import get_settings  # noqa: PLC0415
+    s = get_settings()
+    return int(timedelta(days=s.refresh_token_expire_days).total_seconds())
+
 
 # ─── Register ─────────────────────────────────────────────────────────────────
 
@@ -83,9 +102,19 @@ router = APIRouter(tags=["Auth"])
     summary="Register a new user account",
 )
 async def register(
+    request: Request,
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    # SEC-03: rate limit registrations per IP
+    try:
+        redis = get_redis()
+        await check_register_rate_limit(request, redis)
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Redis unavailable — fail-open
+
     try:
         user = await create_user(db, email=body.email, password=body.password, name=body.name)
     except ValueError as exc:
@@ -103,7 +132,6 @@ async def register(
     except Exception:
         logger.warning("Analytics: failed to record user_signed_up", exc_info=True)
 
-    # ── Trigger onboarding email sequence (CORE-EMAIL-01) ──────────────────
     try:
         from app.services.onboarding_email_service import trigger_onboarding_welcome  # noqa: PLC0415
         await trigger_onboarding_welcome(db, user)
@@ -122,21 +150,39 @@ async def register(
     summary="Login — returns tokens, or a pending_token if 2FA is enabled",
 )
 async def login(
+    request: Request,
     body: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> LoginResponse:
+    redis = None
+    try:
+        redis = get_redis()
+        # SEC-03: rate limit per IP
+        await check_login_rate_limit(request, redis)
+        # SEC-05: check if account is locked out before even touching DB
+        await check_account_lockout(body.email, redis)
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Redis unavailable — fail-open
+
     user = await authenticate_user(db, email=body.email, password=body.password)
     if not user:
+        # SEC-05: record failed attempt
+        if redis:
+            await record_failed_login(body.email, redis)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Successful auth — clear fail counter
+    if redis:
+        await clear_failed_logins(body.email, redis)
+
     # ── 2FA gate ──────────────────────────────────────────────────────────────
     if user.totp_enabled:
-        # Credentials are valid but 2FA is required.
-        # Return a short-lived pending token — no access token yet.
         pending = create_2fa_pending_token(str(user.id))
         logger.info("Login step 1 (2FA required) for user_id=%s", user.id)
         return LoginResponse(
@@ -146,7 +192,9 @@ async def login(
             pending_token=pending,
         )
 
-    # ── No 2FA — issue full tokens immediately ────────────────────────────────
+    # ── No 2FA — issue full tokens ────────────────────────────────────────────
+    refresh_token, jti = create_refresh_token(str(user.id))
+
     try:
         from app.services.analytics_service import record_event  # noqa: PLC0415
         await record_event(
@@ -161,8 +209,36 @@ async def login(
 
     return LoginResponse(
         access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
+        refresh_token=refresh_token,
     )
+
+
+# ─── Logout ───────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Logout — revoke the refresh token (blacklists its JTI)",
+)
+async def logout(body: RefreshRequest) -> None:
+    """
+    SEC-04: Blacklist the JTI of the provided refresh token.
+    The access token expires on its own (short TTL).
+    After calling this, the refresh token can no longer be used to get new tokens.
+    """
+    payload = decode_token(body.refresh_token)
+    if payload and payload.get("type") == "refresh":
+        jti = payload.get("jti")
+        if jti:
+            try:
+                redis = get_redis()
+                exp = payload.get("exp", 0)
+                remaining = max(0, int(exp - datetime.now(timezone.utc).timestamp()))
+                await blacklist_jti(jti, remaining, redis)
+                logger.info("Refresh token revoked (logout) — jti=%s", jti)
+            except Exception as exc:
+                logger.warning("Logout blacklist failed (non-fatal): %s", exc)
+    # Always return 204 — don't leak whether the token was valid
 
 
 # ─── Refresh ──────────────────────────────────────────────────────────────────
@@ -170,7 +246,7 @@ async def login(
 @router.post(
     "/refresh",
     response_model=TokenResponse,
-    summary="Get a new access token using a refresh token",
+    summary="Rotate refresh token — validates JTI, issues new token pair",
 )
 async def refresh(body: RefreshRequest) -> TokenResponse:
     payload = decode_token(body.refresh_token)
@@ -179,10 +255,39 @@ async def refresh(body: RefreshRequest) -> TokenResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token.",
         )
+
+    jti = payload.get("jti")
+
+    # SEC-04: reject blacklisted tokens (logged out or already rotated)
+    if jti:
+        try:
+            redis = get_redis()
+            if await is_jti_blacklisted(jti, redis):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Refresh token has been revoked. Please log in again.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # Redis unavailable — fail-open
+
     user_id: str = payload["sub"]
+
+    # SEC-04: blacklist the old JTI and issue a new token with a fresh JTI
+    if jti:
+        try:
+            redis = get_redis()
+            exp = payload.get("exp", 0)
+            remaining = max(0, int(exp - datetime.now(timezone.utc).timestamp()))
+            await blacklist_jti(jti, remaining, redis)
+        except Exception:
+            pass
+
+    new_refresh_token, _new_jti = create_refresh_token(user_id)
     return TokenResponse(
         access_token=create_access_token(user_id),
-        refresh_token=create_refresh_token(user_id),
+        refresh_token=new_refresh_token,
     )
 
 
@@ -225,8 +330,7 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     ok = await change_user_password(
-        db,
-        current_user,
+        db, current_user,
         current_password=body.current_password,
         new_password=body.new_password,
     )
@@ -243,11 +347,6 @@ async def change_password(
     "/2fa/setup",
     response_model=TotpSetupResponse,
     summary="Phase 1: Generate a new TOTP secret and QR code URI",
-    description=(
-        "Generates a TOTP secret and returns an otpauth:// URI for QR code rendering. "
-        "The secret is stored (encrypted) but 2FA is NOT enabled yet. "
-        "The user must scan the QR code and then call POST /auth/2fa/enable with a valid code."
-    ),
 )
 async def setup_2fa(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -269,11 +368,6 @@ async def setup_2fa(
     "/2fa/enable",
     response_model=TotpStatusResponse,
     summary="Phase 2: Confirm TOTP code to activate 2FA",
-    description=(
-        "Submit the 6-digit code from your authenticator app. "
-        "If valid, 2FA is activated on your account. "
-        "Future logins will require your password AND a TOTP code."
-    ),
 )
 async def enable_2fa(
     body: TotpVerifyRequest,
@@ -281,10 +375,7 @@ async def enable_2fa(
     db: AsyncSession = Depends(get_db),
 ) -> TotpStatusResponse:
     if current_user.totp_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="2FA is already enabled.",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="2FA is already enabled.")
     ok = await complete_totp_setup(db, current_user, code=body.code)
     if not ok:
         raise HTTPException(
@@ -302,11 +393,6 @@ async def enable_2fa(
     "/2fa/disable",
     response_model=TotpStatusResponse,
     summary="Disable 2FA — requires a valid TOTP code",
-    description=(
-        "Disables 2FA after verifying a valid TOTP code. "
-        "Requiring a code (not just a password) prevents an attacker with a stolen "
-        "password from silently disabling 2FA."
-    ),
 )
 async def disable_2fa(
     body: TotpVerifyRequest,
@@ -314,16 +400,10 @@ async def disable_2fa(
     db: AsyncSession = Depends(get_db),
 ) -> TotpStatusResponse:
     if not current_user.totp_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="2FA is not enabled on this account.",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="2FA is not enabled on this account.")
     ok = await disable_totp(db, current_user, code=body.code)
     if not ok:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid TOTP code.",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid TOTP code.")
     await db.commit()
     logger.info("2FA deactivated for user_id=%s", current_user.id)
     return TotpStatusResponse(totp_enabled=False)
@@ -335,17 +415,21 @@ async def disable_2fa(
     "/2fa/verify",
     response_model=TokenResponse,
     summary="Login step 2: exchange pending_token + TOTP code for full tokens",
-    description=(
-        "Called after POST /auth/login returns totp_required=true. "
-        "Submit the pending_token from the login response and the 6-digit "
-        "code from your authenticator app. Returns full access + refresh tokens."
-    ),
 )
 async def verify_2fa_login(
+    request: Request,
     body: TotpLoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    # Validate the pending token
+    # SEC-03: rate limit 2FA verify per IP
+    try:
+        redis = get_redis()
+        await check_totp_rate_limit(request, redis)
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
     payload = decode_token(body.pending_token)
     if payload is None or payload.get("type") != "2fa_pending":
         raise HTTPException(
@@ -365,14 +449,11 @@ async def verify_2fa_login(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
 
-    # Verify the TOTP code
     if not check_totp_for_login(user, body.code):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid TOTP code.",
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid TOTP code.")
 
-    # Issue full tokens
+    refresh_token, _jti = create_refresh_token(str(user.id))
+
     try:
         from app.services.analytics_service import record_event  # noqa: PLC0415
         await record_event(
@@ -388,7 +469,7 @@ async def verify_2fa_login(
     logger.info("2FA login complete for user_id=%s", user.id)
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
+        refresh_token=refresh_token,
     )
 
 

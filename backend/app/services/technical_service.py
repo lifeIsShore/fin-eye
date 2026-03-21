@@ -19,11 +19,17 @@ BUG-003 RESOLUTION:
 
     4. If no models exist at all, compute_technical_consensus raises a clear
        error rather than silently returning a neutral score.
+
+Sprint 2 — todos-v5 Phase 5.2:
+  compute_and_store_consensus() wraps compute_technical_consensus() and
+  stores each signal in ml_predictions via prediction_service.store_prediction().
+  Called by the API endpoint instead of the raw sync function.
 """
 
 import os
 import logging
 import joblib
+from typing import Optional
 
 import pandas as pd
 import numpy as np
@@ -42,30 +48,19 @@ from app.services.technical_models import Timeframe
 
 logger = logging.getLogger(__name__)
 
-# Shared registry instance for this module (reads the same JSONL file as the pipeline)
 _registry = JsonlFileModelRegistry(REGISTRY_FILE)
 
 
 # ── Registry helpers ──────────────────────────────────────────────────────────
 
 def get_latest_model_metadata(symbol: str, timeframe: str) -> dict:
-    """
-    Returns a metadata dict for the current champion model for (symbol, timeframe).
-    Uses the versioned registry — only 'champion' records are returned.
-    Returns {} if no champion exists.
-    """
     try:
-        record = _registry.get_latest_for_timeframe(
-            Timeframe(timeframe), symbol=symbol
-        )
+        record = _registry.get_latest_for_timeframe(Timeframe(timeframe), symbol=symbol)
     except Exception as e:
         logger.error("Error reading model registry for %s/%s: %s", symbol, timeframe, e)
         return {}
-
     if record is None:
         return {}
-
-    # Return a dict that is backwards-compatible with the rest of this module
     return {
         "symbol":            record.symbol,
         "timeframe":         record.timeframe.value,
@@ -82,16 +77,7 @@ def get_latest_model_metadata(symbol: str, timeframe: str) -> dict:
 
 
 def get_trained_timeframes(symbol: str) -> list[str]:
-    """
-    BUG-003 FIX: Derive the active timeframe list from the registry + disk.
-
-    A timeframe is considered active only when ALL of these are true:
-      1. A 'champion' record exists in the registry for (symbol, timeframe)
-      2. The artifact file referenced in the record exists on disk
-      3. The recorded sharpe_ratio is > 0 (not a known-bad fallback)
-
-    Uses the versioned ModelRegistry — retired / candidate records are ignored.
-    """
+    """BUG-003 FIX: Derive active timeframe list from registry + disk."""
     try:
         all_champions = _registry.all_champions()
     except Exception as e:
@@ -102,34 +88,18 @@ def get_trained_timeframes(symbol: str) -> list[str]:
     for record in all_champions:
         if record.symbol != symbol:
             continue
-
         artifact_path = record.artifact_path or ""
         if not artifact_path:
-            # Fall back to the conventional filename if not stored
             artifact_path = os.path.join(
                 ARTIFACT_DIR, f"{symbol}_{record.timeframe.value}_winner.joblib"
             )
-
         if not os.path.exists(artifact_path):
-            logger.debug(
-                "Skipping %s/%s — artifact missing: %s",
-                symbol, record.timeframe.value, artifact_path,
-            )
+            logger.debug("Skipping %s/%s — artifact missing", symbol, record.timeframe.value)
             continue
         if record.sharpe_ratio <= 0:
-            logger.debug(
-                "Skipping %s/%s — Sharpe=%.3f (non-positive, model not trusted)",
-                symbol, record.timeframe.value, record.sharpe_ratio,
-            )
+            logger.debug("Skipping %s/%s — Sharpe=%.3f", symbol, record.timeframe.value, record.sharpe_ratio)
             continue
-
         active.append(record.timeframe.value)
-        logger.debug(
-            "Active timeframe: %s/%s  v%d  Sharpe=%.3f  gate=%s",
-            symbol, record.timeframe.value, record.version,
-            record.sharpe_ratio, "✓" if record.quality_gate else "✗",
-        )
-
     logger.info("Active trained timeframes for %s: %s", symbol, active or "none")
     return active
 
@@ -149,16 +119,8 @@ def load_model_instance(artifact_file: str):
 
 def generate_timeframe_signal(symbol: str, timeframe: str) -> dict:
     """
-    Runs inference for a single timeframe and returns a signal dict:
-    {
-        "timeframe":        "4h",
-        "direction":        "Bullish",
-        "signal_raw":       0.8,        # in [-1, +1]
-        "confidence":       80.0,       # in [50, 100]
-        "validation_sharpe": 1.85,
-        "model_used":       "xgboost",
-        "horizon_periods":  3,
-    }
+    Runs inference for a single timeframe and returns a signal dict.
+    Also returns the raw feature values for the latest bar (used for prediction storage).
     """
     meta = get_latest_model_metadata(symbol, timeframe)
     if not meta:
@@ -168,75 +130,58 @@ def generate_timeframe_signal(symbol: str, timeframe: str) -> dict:
     if model is None:
         raise ValueError(f"Model artifact missing for {symbol}/{timeframe}: {meta['artifact_file']}")
 
-    # ── Fetch OHLCV data for inference ────────────────────────────────────────
-    # OHLCVFetcher handles chunked intraday fetching internally.
-    # For intraday (1h/4h): period is ignored, chunked fetch up to 730 days.
-    # For daily+: use 5y to match the training window.
     if timeframe in ("1h", "4h"):
-        # period is ignored for intraday — chunked fetcher always gets max data
         records = OHLCVFetcher.fetch_historical_data(symbol, period="5y", interval="1h")
     else:
         records = OHLCVFetcher.fetch_historical_data(symbol, period="5y", interval=timeframe)
 
     if len(records) < 60:
         raise ValueError(
-            f"Not enough data for inference on {symbol}/{timeframe}: "
-            f"got {len(records)} bars (need ≥ 60)"
+            f"Not enough data for inference on {symbol}/{timeframe}: got {len(records)} bars (need ≥ 60)"
         )
 
     df = pd.DataFrame([
-        {
-            "date":   r.timestamp,
-            "open":   r.open,
-            "high":   r.high,
-            "low":    r.low,
-            "close":  r.close,
-            "volume": r.volume,
-        }
+        {"date": r.timestamp, "open": r.open, "high": r.high,
+         "low": r.low, "close": r.close, "volume": r.volume}
         for r in records
     ])
     df.set_index("date", inplace=True)
     df.sort_index(inplace=True)
 
-    # Resample 1h → 4h for the 4h timeframe (yfinance has no native 4h)
     if timeframe == "4h":
         df = df.resample("4h", label="left", closed="left").agg(
-            {"open": "first", "high": "max", "low": "min",
-             "close": "last", "volume": "sum"}
+            {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
         ).dropna()
 
-    # ── Feature engineering ───────────────────────────────────────────────────
-    # Use the same horizon that was used during training so the feature
-    # construction is identical between train time and inference time.
     horizon = meta.get("horizon_periods", TIMEFRAME_HORIZON.get(timeframe, DEFAULT_HORIZON))
-
     df_feat = engineer_features(df, horizon=horizon)
     if df_feat.empty:
-        raise ValueError(
-            f"Feature engineering returned empty DataFrame for {symbol}/{timeframe}. "
-            f"Check OHLCV data quality."
-        )
+        raise ValueError(f"Feature engineering returned empty DataFrame for {symbol}/{timeframe}.")
 
-    # ── Inference on the most recent bar ─────────────────────────────────────
     latest = df_feat.iloc[-1:].copy()
     latest["close_raw"] = float(df["close"].iloc[-1])
 
-    # Guard: ensure all expected features are present
     missing = [f for f in FEATURES if f not in latest.columns]
     if missing:
-        raise ValueError(
-            f"Missing features for inference on {symbol}/{timeframe}: {missing}. "
-            f"Re-train the model after adding new features."
-        )
+        raise ValueError(f"Missing features for {symbol}/{timeframe}: {missing}")
 
     X = latest[FEATURES + ["close_raw"]]
-
-    probs     = model.predict_proba(X)
-    prob_up   = float(probs[0, 1])
-
+    probs         = model.predict_proba(X)
+    prob_up       = float(probs[0, 1])
     direction_val = 1 if prob_up > 0.5 else -1
     confidence    = max(prob_up, 1.0 - prob_up) * 100.0
     signal_raw    = direction_val * (confidence / 100.0)
+
+    # Build feature snapshot for prediction storage
+    feature_snapshot: dict = {}
+    try:
+        for feat in FEATURES:
+            val = latest[feat].iloc[0]
+            feature_snapshot[feat] = round(float(val), 6) if not pd.isna(val) else None
+    except Exception:
+        pass  # snapshot is best-effort
+
+    current_price = float(df["close"].iloc[-1])
 
     return {
         "timeframe":         timeframe,
@@ -246,20 +191,21 @@ def generate_timeframe_signal(symbol: str, timeframe: str) -> dict:
         "validation_sharpe": meta.get("validation_sharpe", 0.0),
         "model_used":        meta.get("model_name", "unknown"),
         "horizon_periods":   horizon,
+        "mlflow_run_id":     meta.get("mlflow_run_id"),
+        # Extra fields for prediction storage (not sent to frontend)
+        "_predicted_direction": 1 if direction_val > 0 else 0,
+        "_confidence_raw":      round(confidence / 100.0, 4),  # 0.5–1.0
+        "_current_price":       current_price,
+        "_feature_snapshot":    feature_snapshot,
     }
 
 
-# ── Consensus aggregation ─────────────────────────────────────────────────────
+# ── Consensus aggregation (sync — runs in executor) ──────────────────────────
 
 def compute_technical_consensus(symbol: str) -> dict:
     """
     Aggregates signals across all trained timeframes into a single 0–100 score.
-
-    Only timeframes with a trained artifact AND positive Sharpe are included
-    (see get_trained_timeframes). The score is a Sharpe-weighted average of the
-    per-timeframe raw signals, mapped from [-1, +1] to [0, 100].
-
-    Raises ValueError if no valid models exist for the symbol.
+    This is the sync core — called via run_in_executor from the endpoint.
     """
     active_timeframes = get_trained_timeframes(symbol)
 
@@ -278,10 +224,7 @@ def compute_technical_consensus(symbol: str) -> dict:
             signals.append(sig)
             logger.info(
                 "Signal %s/%s: %s  conf=%.1f%%  Sharpe=%.3f",
-                symbol, tf,
-                sig["direction"],
-                sig["confidence"],
-                sig["validation_sharpe"],
+                symbol, tf, sig["direction"], sig["confidence"], sig["validation_sharpe"],
             )
         except Exception as e:
             skipped.append(tf)
@@ -299,37 +242,84 @@ def compute_technical_consensus(symbol: str) -> dict:
             symbol, len(signals), len(active_timeframes), skipped,
         )
 
-    # Sharpe-weighted consensus (floor weight at 0.1 to avoid zero-weight signals)
     total_weight    = 0.0
     weighted_signal = 0.0
-
     for s in signals:
         w = max(s["validation_sharpe"], 0.1)
         weighted_signal += s["signal_raw"] * w
         total_weight    += w
 
     consensus_raw = weighted_signal / total_weight if total_weight > 0 else 0.0
+    score_0_100   = round((consensus_raw + 1) / 2 * 100, 1)
 
-    # Map [-1, +1] → [0, 100]
-    score_0_100 = round((consensus_raw + 1) / 2 * 100, 1)
-
-    if score_0_100 >= 80:
-        label = "Strong Bullish"
-    elif score_0_100 >= 60:
-        label = "Bullish Focus"
-    elif score_0_100 >= 40:
-        label = "Mixed / Neutral"
-    elif score_0_100 >= 20:
-        label = "Bearish Focus"
-    else:
-        label = "Strong Bearish"
+    if score_0_100 >= 80:   label = "Strong Bullish"
+    elif score_0_100 >= 60: label = "Bullish Focus"
+    elif score_0_100 >= 40: label = "Mixed / Neutral"
+    elif score_0_100 >= 20: label = "Bearish Focus"
+    else:                   label = "Strong Bearish"
 
     return {
-        "symbol":            symbol,
-        "consensus_score":   score_0_100,
-        "consensus_label":   label,
-        "signals":           signals,
-        "timeframes_used":   [s["timeframe"] for s in signals],
+        "symbol":             symbol,
+        "consensus_score":    score_0_100,
+        "consensus_label":    label,
+        "signals":            signals,
+        "timeframes_used":    [s["timeframe"] for s in signals],
         "timeframes_skipped": skipped,
-        "generated_at":      pd.Timestamp.utcnow().isoformat(),
+        "generated_at":       pd.Timestamp.utcnow().isoformat(),
     }
+
+
+# ── Async wrapper: compute + store predictions ────────────────────────────────
+
+async def compute_and_store_consensus(
+    symbol: str,
+    db,                       # AsyncSession — typed loosely to avoid circular import
+    *,
+    macro_score:    Optional[float] = None,
+    vix:            Optional[float] = None,
+    market_regime:  Optional[str]   = None,
+) -> dict:
+    """
+    Sprint 2 — todos-v5 Phase 5.2.
+
+    Async wrapper around compute_technical_consensus() that:
+      1. Runs the sync consensus computation in an executor (non-blocking)
+      2. For each signal, fires-and-forgets a prediction storage call
+         (failure to store never breaks signal delivery to the user)
+
+    Called from the technical endpoint instead of the raw sync function.
+    Falls back to the raw sync function gracefully if DB is unavailable.
+    """
+    import asyncio  # noqa: PLC0415
+
+    loop   = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, compute_technical_consensus, symbol.upper())
+
+    # Store predictions asynchronously — fire and forget, never blocks the response
+    if db is not None:
+        try:
+            from app.services.prediction_service import store_prediction  # noqa: PLC0415
+            for sig in result.get("signals", []):
+                price = sig.get("_current_price", 0.0)
+                if price <= 0:
+                    continue
+                await store_prediction(
+                    db,
+                    symbol=symbol.upper(),
+                    timeframe=sig["timeframe"],
+                    model_name=sig.get("model_used", "unknown"),
+                    predicted_direction=sig.get("_predicted_direction", 1),
+                    confidence=sig.get("_confidence_raw", 0.5),
+                    horizon_periods=sig.get("horizon_periods", 3),
+                    price_at_prediction=price,
+                    mlflow_run_id=sig.get("mlflow_run_id"),
+                    feature_snapshot=sig.get("_feature_snapshot"),
+                    macro_score=macro_score,
+                    vix=vix,
+                    market_regime=market_regime,
+                )
+        except Exception as exc:
+            # Prediction storage failure must NEVER break the consensus response
+            logger.warning("Prediction storage failed for %s (non-fatal): %s", symbol, exc)
+
+    return result

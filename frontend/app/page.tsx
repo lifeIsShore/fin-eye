@@ -14,6 +14,7 @@ import {
   type TechnicalSignalDto,
 } from "../lib/api";
 import { triggerTrainSymbol } from "../lib/api_bulk";
+import { fetchLatestPrice } from "../lib/api_price";
 import { useAuth } from "../components/AuthProvider";
 import MarketWeatherWidget from "../components/MarketWeatherWidget";
 import RegimeWidget from "../components/RegimeWidget";
@@ -23,6 +24,8 @@ import ConflictDetector from "../components/ConflictDetector";
 import { GuidedTour } from "../components/onboarding/GuidedTour";
 import { WatchlistWidget } from "../components/WatchlistWidget";
 import TickerDataPanel from "../components/TickerDataPanel";
+import LLMInsightCard from "../components/LLMInsightCard";
+import PriceTargetCard from "../components/PriceTargetCard";
 import ScoreExplainPanel, {
   type ExplainPayload,
   type SubComponent,
@@ -161,7 +164,6 @@ function detectConflicts(
 }
 
 // ─── ML output builder ───────────────────────────────────────────────────────
-// BUG-FIX-5: Build real signal summary so LLM insight is grounded in model data.
 function buildMlOutput(signals: TechnicalSignalDto[], techScore: number): string | null {
   if (signals.length === 0) return null;
   const bestSignal = [...signals].sort((a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0))[0];
@@ -181,7 +183,7 @@ function buildMlOutput(signals: TechnicalSignalDto[], techScore: number): string
   return parts.join(" ");
 }
 
-// ─── Phase 1.3 — "Not Trained" empty state with Train Now button ─────────────
+// ─── "Not Trained" empty state ───────────────────────────────────────────────
 function TrainNowEmptyState({
   symbol,
   onTrainStarted,
@@ -221,9 +223,7 @@ function TrainNowEmptyState({
 
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-6 px-4 rounded-xl bg-slate-800/30 border border-slate-700/50 text-center">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-xl">
-        🧠
-      </div>
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-xl">🧠</div>
       <div>
         <p className="text-sm font-semibold text-slate-200">No ML prediction yet for {symbol}</p>
         <p className="text-xs text-slate-500 mt-0.5">Technical consensus requires a trained model.</p>
@@ -247,8 +247,7 @@ function TrainNowEmptyState({
       </button>
       {error && <p className="text-xs text-red-400">{error}</p>}
       <p className="text-[10px] text-slate-600 max-w-xs">
-        Training uses historical OHLCV data and runs locally. Sharpe-weighted ML models across 5 timeframes.
-        Takes 60–120 seconds.
+        Training uses historical OHLCV data and runs locally. Sharpe-weighted ML models across 5 timeframes. Takes 60–120 seconds.
       </p>
     </div>
   );
@@ -256,13 +255,7 @@ function TrainNowEmptyState({
 
 // ─── Explain payload builders ─────────────────────────────────────────────────
 
-function buildGasPayload(
-  gasScore: number,
-  techScore: number,
-  sent30d: number | null,
-  macroScore: number,
-  macroLabel: string,
-): ExplainPayload {
+function buildGasPayload(gasScore: number, techScore: number, sent30d: number | null, macroScore: number, macroLabel: string): ExplainPayload {
   const sentScore0100 = ((sent30d ?? 0) + 1) / 2 * 100;
   const sentRaw = sent30d !== null ? `${sent30d >= 0 ? "+" : ""}${sent30d.toFixed(2)}` : "N/A";
   const sc = (s: number): SubComponent["color"] =>
@@ -284,8 +277,7 @@ function buildTechnicalPayload(techScore: number, signals: TechnicalSignalDto[])
   const bearish = signals.filter((s) => s.direction === "Bearish").length;
   const neutral = signals.length - bullish - bearish;
   const tfSubs: SubComponent[] = signals.map((s) => ({
-    label: s.timeframe,
-    value: s.direction === "Bullish" ? 75 : s.direction === "Bearish" ? 25 : 50,
+    label: s.timeframe, value: s.direction === "Bullish" ? 75 : s.direction === "Bearish" ? 25 : 50,
     rawLabel: s.direction,
     color: (s.direction === "Bullish" ? "emerald" : s.direction === "Bearish" ? "rose" : "amber") as SubComponent["color"],
     description: `${s.timeframe} timeframe ML model output.`,
@@ -298,12 +290,7 @@ function buildTechnicalPayload(techScore: number, signals: TechnicalSignalDto[])
   };
 }
 
-function buildMacroPayload(
-  macroScore: number,
-  macroLabel: string,
-  macroData: any,
-  vixLevel: number | null,
-): ExplainPayload {
+function buildMacroPayload(macroScore: number, macroLabel: string, macroData: any, vixLevel: number | null): ExplainPayload {
   const sc = (s: number): SubComponent["color"] =>
     s >= 65 ? "emerald" : s >= 55 ? "teal" : s >= 45 ? "amber" : s >= 35 ? "orange" : "rose";
   const vixScore = vixLevel != null ? vixLevel < 15 ? 75 : vixLevel <= 25 ? 50 : 25 : 50;
@@ -331,8 +318,7 @@ function buildVolatilityPayload(vixLevel: number | null): ExplainPayload {
     score: vixScore, scoreLabel: vixLevel != null ? `VIX ${vixLevel.toFixed(1)}` : "VIX N/A",
     summary: `Derived from CBOE VIX. Market fear / option pricing pressure.`,
     subComponents: [{
-      label: "VIX Level", value: vixScore,
-      rawLabel: vixLevel != null ? vixLevel.toFixed(2) : "N/A",
+      label: "VIX Level", value: vixScore, rawLabel: vixLevel != null ? vixLevel.toFixed(2) : "N/A",
       color: vixLevel == null ? "slate" : vixLevel < 15 ? "sky" : vixLevel <= 25 ? "amber" : "rose",
       description: vixLevel == null ? "VIX unavailable." : vixLevel < 15 ? "Below 15 — calm." : vixLevel <= 25 ? "15–25 — normal." : "Above 25 — elevated fear.",
     }],
@@ -373,7 +359,6 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
 export default function DashboardPage() {
   const { symbol: activeSymbol, setSymbol: setActiveSymbol } = useSymbol();
   const { user } = useAuth();
-  // is_admin is a typed field on the User interface in AuthProvider
   const isAdmin = user?.is_admin === true;
 
   const [techExplainOpen, setTechExplainOpen] = useState<boolean>(() => {
@@ -415,6 +400,16 @@ export default function DashboardPage() {
     { refreshInterval: 300_000, shouldRetryOnError: false, keepPreviousData: true },
   );
 
+  // Live price — refreshes every 5 minutes; used by LLM insight card for price targets.
+  // Uses keepPreviousData so the card never flickers when the symbol changes.
+  const { data: priceData } = useSWR(
+    `price-${activeSymbol}`,
+    () => fetchLatestPrice(activeSymbol),
+    { refreshInterval: 300_000, shouldRetryOnError: false, keepPreviousData: true },
+  );
+
+  void techError; // used implicitly via keepPreviousData
+
   const gasScore: number = gasSnapshot?.gas_score
     ?? (() => {
       const ts = techData?.technical_confidence_score ?? 50;
@@ -424,27 +419,21 @@ export default function DashboardPage() {
     })();
 
   const regimeFromSnapshot = gasSnapshot?.regime;
-  const techScore  = gasSnapshot?.component_scores?.technical ?? techData?.technical_confidence_score ?? 50;
-  const sent30d    = sentData?.sentiment_30d ?? null;
-  const macroScore = gasSnapshot?.component_scores?.macro ?? macroData?.macro_score?.score ?? 50;
-  const macroLabel = macroData?.macro_score?.label ?? "Neutral";
-  const vixLevel   = macroData?.data?.vix?.value ?? null;
-  const signals    = techData?.signals ?? [];
-  const isLoading  = gasLoading && !gasSnapshot && !gasError;
+  const techScore   = gasSnapshot?.component_scores?.technical ?? techData?.technical_confidence_score ?? 50;
+  const sent30d     = sentData?.sentiment_30d ?? null;
+  const macroScore  = gasSnapshot?.component_scores?.macro ?? macroData?.macro_score?.score ?? 50;
+  const macroLabel  = macroData?.macro_score?.label ?? "Neutral";
+  const vixLevel    = macroData?.data?.vix?.value ?? null;
+  const yieldSpread = macroData?.data?.yield_spread_10y_2y?.value ?? null;
+  const signals     = techData?.signals ?? [];
+  const isLoading   = gasLoading && !gasSnapshot && !gasError;
+  const currentPrice = priceData?.price ?? 0;
 
-  // BUG-FIX-5: Build real ML signal summary so the LLM gets grounded context.
-  const mlOutput = useMemo(
-    () => buildMlOutput(signals, techScore),
-    [signals, techScore],
-  );
+  const mlOutput = useMemo(() => buildMlOutput(signals, techScore), [signals, techScore]);
 
   const explainParamsStr = !isLoading ? JSON.stringify({
-    tech_score: techScore,
-    sent_30d: sent30d,
-    macro_score: macroScore,
-    macro_label: macroLabel,
-    gas_score: gasScore,
-    tech_signals: JSON.stringify(signals),
+    tech_score: techScore, sent_30d: sent30d, macro_score: macroScore,
+    macro_label: macroLabel, gas_score: gasScore, tech_signals: JSON.stringify(signals),
   }) : null;
 
   const { data: explanationData } = useSWR(
@@ -456,7 +445,6 @@ export default function DashboardPage() {
     { refreshInterval: 60_000, shouldRetryOnError: false, keepPreviousData: true },
   );
 
-  // BUG-FIX-2: all useMemo calls unconditional at top level
   const fallbackWhyBullets = useMemo(
     () => buildWhyBullets(techScore, signals, sent30d, macroScore, macroLabel),
     [techScore, signals, sent30d, macroScore, macroLabel],
@@ -472,38 +460,30 @@ export default function DashboardPage() {
     : fallbackConflictData;
   const initialAiSummary = explanationData?.ai_summary ?? null;
 
-  // Phase 1.4 — Poll techData every 5s after Train Now fires, stop when signals appear
   const handleTrainStarted = useCallback(() => {
     const intervalId = setInterval(async () => {
       const fresh = await mutateTech();
-      if (fresh?.signals && fresh.signals.length > 0) {
-        clearInterval(intervalId);
-      }
+      if (fresh?.signals && fresh.signals.length > 0) clearInterval(intervalId);
     }, 5000);
     setTimeout(() => clearInterval(intervalId), 180_000);
   }, [mutateTech]);
 
-  const openGasExplain = useCallback(() =>
-    setExplainPayload(buildGasPayload(gasScore, techScore, sent30d, macroScore, macroLabel)),
+  const openGasExplain = useCallback(
+    () => setExplainPayload(buildGasPayload(gasScore, techScore, sent30d, macroScore, macroLabel)),
     [gasScore, techScore, sent30d, macroScore, macroLabel],
   );
-  const openTechnicalExplain = useCallback(() =>
-    setExplainPayload(buildTechnicalPayload(techScore, signals)),
+  const openTechnicalExplain = useCallback(
+    () => setExplainPayload(buildTechnicalPayload(techScore, signals)),
     [techScore, signals],
   );
-  const openVolatilityExplain = useCallback(() =>
-    setExplainPayload(buildVolatilityPayload(vixLevel)),
+  const openVolatilityExplain = useCallback(
+    () => setExplainPayload(buildVolatilityPayload(vixLevel)),
     [vixLevel],
   );
-
-  // Note: buildMacroPayload is kept available for future wiring to a Macro explain button
-  // on the MacroWidget or RegimeWidget. Not currently surfaced as a click target.
-  const openMacroExplain = useCallback(() =>
-    setExplainPayload(buildMacroPayload(macroScore, macroLabel, macroData, vixLevel)),
+  const openMacroExplain = useCallback(
+    () => setExplainPayload(buildMacroPayload(macroScore, macroLabel, macroData, vixLevel)),
     [macroScore, macroLabel, macroData, vixLevel],
   );
-  // Suppress "assigned but never read" — openMacroExplain is intentionally kept
-  // ready for the Macro Intelligence page to call via props drilling if needed.
   void openMacroExplain;
 
   return (
@@ -552,7 +532,6 @@ export default function DashboardPage() {
 
               {/* Row 2 – Technical Consensus */}
               <section className="tour-timeframes p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
-
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-slate-100">Technical Consensus</h3>
@@ -560,10 +539,14 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-baseline gap-2 flex-shrink-0">
                     <span className={`text-4xl font-black tabular-nums ${
-                      techScore >= 60 ? "text-emerald-400" :
-                      techScore >= 40 ? "text-amber-400"   : "text-rose-400"
+                      techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"
                     }`}>{techScore.toFixed(1)}</span>
                     <span className="text-slate-500 text-base">/ 100</span>
+                    {currentPrice > 0 && (
+                      <span className="ml-2 text-xs text-slate-500 font-mono tabular-nums">
+                        ${currentPrice.toFixed(2)}
+                      </span>
+                    )}
                     <span className={`ml-1 text-xs font-bold px-2 py-0.5 rounded-full border ${
                       techScore >= 60 ? "text-emerald-400 bg-emerald-950/40 border-emerald-800/50" :
                       techScore >= 40 ? "text-amber-400 bg-amber-950/40 border-amber-800/50"       :
@@ -581,10 +564,8 @@ export default function DashboardPage() {
                       onClick={toggleTechExplain}
                       className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors group"
                     >
-                      <svg
-                        className={`h-3.5 w-3.5 transition-transform duration-200 ${techExplainOpen ? "rotate-90" : "rotate-0"}`}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-                      >
+                      <svg className={`h-3.5 w-3.5 transition-transform duration-200 ${techExplainOpen ? "rotate-90" : "rotate-0"}`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                       </svg>
                       <span className="group-hover:underline">
@@ -604,7 +585,6 @@ export default function DashboardPage() {
                           </div>
                           <span className="text-[10px] text-slate-600 w-14 flex-shrink-0 text-right">100 Bull</span>
                         </div>
-
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                           <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 px-3 py-2">
                             <p className="text-slate-500 mb-0.5">Scale</p>
@@ -625,12 +605,10 @@ export default function DashboardPage() {
                             <p className="text-slate-500 text-[10px] mt-0.5">better models count more</p>
                           </div>
                         </div>
-
                         <p className="text-[11px] text-slate-500 leading-relaxed">
                           Each timeframe outputs −1 (bearish) to +1 (bullish), weighted by{" "}
                           <span className="text-sky-400 font-medium">Sharpe Ratio</span>, mapped to 0–100.
                         </p>
-
                         <div>
                           <p className="text-[10px] text-slate-500 mb-1.5 font-medium uppercase tracking-wider">Inputs</p>
                           <div className="flex flex-wrap gap-2">
@@ -654,11 +632,31 @@ export default function DashboardPage() {
                 )}
 
                 {signals.length > 0 ? (
-                  <TimeframeGrid signals={signals} />
+                  <TimeframeGrid signals={signals} symbol={activeSymbol} />
                 ) : (
                   <TrainNowEmptyState symbol={activeSymbol} onTrainStarted={handleTrainStarted} />
                 )}
               </section>
+
+              {/* Row 3 – Price Targets & Kelly Sizing (Sprint 5) */}
+              <PriceTargetCard symbol={activeSymbol} isVisible={signals.length > 0} />
+
+              {/* Row 4 – LLM Investment Manager Insight (todos-v5 Sprint 1) */}
+              <LLMInsightCard
+                symbol={activeSymbol}
+                signals={signals}
+                currentPrice={currentPrice}
+                macroScore={macroScore}
+                vix={vixLevel}
+                yieldSpread={yieldSpread}
+                macroRegime={regimeFromSnapshot ?? null}
+                newsSentiment={{
+                  d1:  sentData?.sentiment_1d  ?? null,
+                  d7:  sentData?.sentiment_7d  ?? null,
+                  d30: sentData?.sentiment_30d ?? null,
+                }}
+                gasScore={gasScore}
+              />
 
               {/* Phase 8.2 — Per-ticker data panel (admin only, collapsible) */}
               <TickerDataPanel
@@ -667,7 +665,7 @@ export default function DashboardPage() {
                 onTrained={() => mutateTech()}
               />
 
-              {/* Row 3 – Why moving + Conflicts */}
+              {/* Row 4 – Why moving + Conflicts */}
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="tour-why-moving">
                   <WhyMovingPanel
@@ -689,7 +687,7 @@ export default function DashboardPage() {
                 />
               </section>
 
-              {/* Row 4 – Quick links */}
+              {/* Row 5 – Quick links */}
               <section className="flex flex-wrap gap-4 pt-4 border-t border-slate-800/50">
                 <Link href="/macro" className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors">
                   View Full Macro Intel &rarr;

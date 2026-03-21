@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import { TechnicalSignalDto } from "../lib/api";
+import ModelDetailsPanel from "./ModelDetailsPanel";
 import {
     X, TrendingUp, TrendingDown, Minus,
-    Clock, BarChart2, Info, ChevronRight,
+    Info, ChevronRight,
 } from "lucide-react";
 
 interface TimeframeGridProps {
-    signals: TechnicalSignalDto[];
+    signals:    TechnicalSignalDto[];
+    symbol?:    string;   // needed for ModelDetailsPanel
 }
 
 // ── Timeframe metadata ────────────────────────────────────────────────────────
@@ -134,47 +136,37 @@ function ConsensusSummary({ signals }: { signals: TechnicalSignalDto[] }) {
     const bullish = signals.filter(s => s.direction === "Bullish").length;
     const bearish = signals.filter(s => s.direction === "Bearish").length;
     const neutral = signals.length - bullish - bearish;
-    const total = signals.length;
+    const total   = signals.length;
 
-    const dominant = bullish > bearish ? "Bullish" : bearish > bullish ? "Bearish" : "Mixed";
+    const dominant      = bullish > bearish ? "Bullish" : bearish > bullish ? "Bearish" : "Mixed";
     const dominantCount = Math.max(bullish, bearish);
-    const agreement = total > 0 ? Math.round((dominantCount / total) * 100) : 0;
+    const agreement     = total > 0 ? Math.round((dominantCount / total) * 100) : 0;
+    const avgConf       = total > 0 ? signals.reduce((s, x) => s + x.confidence, 0) / total : 0;
 
-    const avgConf = total > 0
-        ? signals.reduce((s, x) => s + x.confidence, 0) / total
-        : 0;
-
-    let summaryText = "";
+    let summaryText  = "";
     let summaryColor = "text-slate-400";
 
     if (dominant === "Mixed") {
-        summaryText = "Signals are split — no clear directional consensus across timeframes.";
+        summaryText  = "Signals are split — no clear directional consensus across timeframes.";
         summaryColor = "text-amber-400";
     } else if (agreement >= 80) {
-        summaryText = `Strong ${dominant} consensus — ${dominantCount} of ${total} timeframes agree.`;
+        summaryText  = `Strong ${dominant} consensus — ${dominantCount} of ${total} timeframes agree.`;
         summaryColor = dominant === "Bullish" ? "text-emerald-400" : "text-rose-400";
     } else if (agreement >= 60) {
-        summaryText = `Mild ${dominant} lean — ${dominantCount} of ${total} timeframes agree.`;
+        summaryText  = `Mild ${dominant} lean — ${dominantCount} of ${total} timeframes agree.`;
         summaryColor = dominant === "Bullish" ? "text-emerald-400" : "text-rose-400";
     } else {
-        summaryText = `Conflicted signals — only ${dominantCount} of ${total} timeframes lean ${dominant.toLowerCase()}.`;
+        summaryText  = `Conflicted signals — only ${dominantCount} of ${total} timeframes lean ${dominant.toLowerCase()}.`;
         summaryColor = "text-amber-400";
     }
 
     return (
         <div className="mt-3 rounded-lg bg-slate-900/60 border border-slate-800 px-3 py-2.5 space-y-2">
-            {/* Alignment bar */}
             <div className="flex items-center gap-2">
                 <div className="flex-1 flex h-2 rounded-full overflow-hidden gap-px bg-slate-800">
                     {signals.map((s, i) => {
                         const cfg = directionConfig(s.direction);
-                        return (
-                            <div
-                                key={i}
-                                className={`flex-1 ${cfg.bar} opacity-80`}
-                                title={`${s.timeframe}: ${s.direction}`}
-                            />
-                        );
+                        return <div key={i} className={`flex-1 ${cfg.bar} opacity-80`} title={`${s.timeframe}: ${s.direction}`} />;
                     })}
                 </div>
                 <span className="text-[10px] font-mono text-slate-500 flex-shrink-0">{agreement}% agree</span>
@@ -190,41 +182,31 @@ function ConsensusSummary({ signals }: { signals: TechnicalSignalDto[] }) {
     );
 }
 
-// ── Detail panel (left slide-over) ────────────────────────────────────────────
+// ── Detail panel (signal slide-over) ─────────────────────────────────────────
 
 function TimeframeDetailPanel({
     signal,
     onClose,
+    onOpenModelDetails,
 }: {
-    signal: TechnicalSignalDto | null;
-    onClose: () => void;
+    signal:               TechnicalSignalDto | null;
+    onClose:              () => void;
+    onOpenModelDetails:   () => void;
 }) {
-    const isOpen = signal !== null;
-
-    const meta = signal ? (TIMEFRAME_META[signal.timeframe] ?? {
-        label: signal.timeframe,
-        horizon: "Unknown",
-        audience: "All traders",
-        description: "No additional description available.",
-    }) : null;
-
-    const cfg = signal ? directionConfig(signal.direction) : null;
+    const isOpen   = signal !== null;
+    const meta     = signal ? (TIMEFRAME_META[signal.timeframe] ?? { label: signal.timeframe, horizon: "Unknown", audience: "All traders", description: "" }) : null;
+    const cfg      = signal ? directionConfig(signal.direction) : null;
     const confInfo = signal ? interpretConfidence(signal.confidence) : null;
-
-    // What does this confidence score mean in plain English?
     const confBarWidth = signal ? Math.min(100, signal.confidence) : 0;
 
     return (
         <>
-            {/* Backdrop */}
             <div
                 className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${
                     isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
                 }`}
                 onClick={onClose}
             />
-
-            {/* RIGHT slide-over panel — consistent with GAS/sentiment panels */}
             <div
                 role="dialog"
                 aria-modal="true"
@@ -238,22 +220,17 @@ function TimeframeDetailPanel({
                         <div className={`flex items-start justify-between p-6 lg:p-8 border-b border-slate-800 ${cfg.panelBg}`}>
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
-                                    <span className={`${cfg.text}`}>{cfg.icon}</span>
+                                    <span className={cfg.text}>{cfg.icon}</span>
                                     <span className={`text-xs font-bold uppercase tracking-widest ${cfg.text}`}>
                                         {meta.label} Signal
                                     </span>
                                 </div>
-                                <h2 className="text-3xl lg:text-4xl font-black text-slate-100">
-                                    {cfg.label}
-                                </h2>
+                                <h2 className="text-3xl lg:text-4xl font-black text-slate-100">{cfg.label}</h2>
                                 <p className="text-sm text-slate-400 mt-1">
                                     Forecast horizon: <span className="text-slate-200 font-medium">{meta.horizon}</span>
                                 </p>
                             </div>
-                            <button
-                                onClick={onClose}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-3 mt-1"
-                            >
+                            <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-3 mt-1">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
@@ -267,30 +244,18 @@ function TimeframeDetailPanel({
                                     <span className={cfg.text}>{cfg.icon}</span>
                                     <span className={`text-lg font-bold ${cfg.text}`}>{cfg.label}</span>
                                 </div>
-                                <p className="text-sm lg:text-base text-slate-300 leading-relaxed">
-                                    {cfg.plain}
-                                </p>
+                                <p className="text-sm lg:text-base text-slate-300 leading-relaxed">{cfg.plain}</p>
                             </div>
 
-                            {/* Confidence section */}
+                            {/* Confidence */}
                             <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                                        Model Confidence
-                                    </h3>
-                                    <span className={`text-2xl font-black ${confInfo.color}`}>
-                                        {signal.confidence.toFixed(1)}%
-                                    </span>
+                                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Model Confidence</h3>
+                                    <span className={`text-2xl font-black ${confInfo.color}`}>{signal.confidence.toFixed(1)}%</span>
                                 </div>
-
-                                {/* Confidence bar */}
                                 <div className="space-y-1">
                                     <div className="relative h-3 rounded-full bg-slate-800 overflow-hidden">
-                                        <div
-                                            className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${cfg.bar}`}
-                                            style={{ width: `${confBarWidth}%` }}
-                                        />
-                                        {/* 50% neutral line */}
+                                        <div className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${cfg.bar}`} style={{ width: `${confBarWidth}%` }} />
                                         <div className="absolute inset-y-0 left-1/2 w-px bg-slate-600/80" />
                                     </div>
                                     <div className="flex justify-between text-[10px] text-slate-600">
@@ -298,8 +263,6 @@ function TimeframeDetailPanel({
                                         <span>Certain (100%)</span>
                                     </div>
                                 </div>
-
-                                {/* Confidence label */}
                                 <div className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
                                     confInfo.label === "Very High" ? "bg-emerald-950/30 border-emerald-800/40" :
                                     confInfo.label === "High"      ? "bg-sky-950/30 border-sky-800/40" :
@@ -309,51 +272,37 @@ function TimeframeDetailPanel({
                                     <span className={`text-xs font-bold ${confInfo.color}`}>{confInfo.label} Confidence</span>
                                 </div>
                                 <p className="text-sm text-slate-400 leading-relaxed">{confInfo.description}</p>
-
-                                {/* What confidence means — plain language box */}
                                 <div className="rounded-lg bg-slate-800/50 border border-slate-700/50 px-4 py-3">
-                                    <p className="text-[11px] font-semibold text-slate-400 mb-1">
-                                        💡 What does Confidence mean?
-                                    </p>
+                                    <p className="text-[11px] font-semibold text-slate-400 mb-1">💡 What does Confidence mean?</p>
                                     <p className="text-[11px] text-slate-500 leading-relaxed">
                                         Confidence is the ML model's probability estimate for this direction.
                                         <strong className="text-slate-400"> 50% = coin flip</strong> (no edge),{" "}
                                         <strong className="text-slate-400">100% = maximum certainty</strong>.
                                         Even at 90%, the model is not always right — markets are inherently uncertain.
-                                        Higher confidence means the model's input features more strongly agree on direction.
                                     </p>
                                 </div>
                             </div>
 
-                            {/* Sharpe ratio */}
-                            {(signal.sharpe_weight !== undefined && signal.sharpe_weight !== null) && (
+                            {/* Sharpe */}
+                            {signal.sharpe_weight != null && (
                                 <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-3">
-                                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                                        Model Quality (Sharpe Ratio)
-                                    </h3>
+                                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Model Quality (Sharpe Ratio)</h3>
                                     <div className="flex items-baseline gap-2">
                                         <span className={`text-2xl font-black ${
                                             signal.sharpe_weight >= 1.5 ? "text-emerald-400" :
-                                            signal.sharpe_weight >= 0.5 ? "text-sky-400" :
-                                            signal.sharpe_weight >= 0   ? "text-amber-400" :
-                                            "text-rose-400"
-                                        }`}>
-                                            {signal.sharpe_weight.toFixed(2)}
-                                        </span>
+                                            signal.sharpe_weight >= 0.5 ? "text-sky-400"     :
+                                            signal.sharpe_weight >= 0   ? "text-amber-400"   : "text-rose-400"
+                                        }`}>{signal.sharpe_weight.toFixed(2)}</span>
                                         <span className="text-sm text-slate-500">Sharpe</span>
                                     </div>
                                     <div className="rounded-lg bg-slate-800/50 border border-slate-700/50 px-3 py-2.5">
-                                        <p className="text-[11px] font-semibold text-slate-400 mb-1">
-                                            💡 What does Sharpe Ratio mean?
-                                        </p>
+                                        <p className="text-[11px] font-semibold text-slate-400 mb-1">💡 What does Sharpe Ratio mean?</p>
                                         <p className="text-[11px] text-slate-500 leading-relaxed">
-                                            This measures how well the model performed on <strong className="text-slate-400">historical data it had never seen before</strong> (the validation set).
-                                            Think of it as a quality score for the model itself:
-                                            <br /><br />
-                                            <span className="text-emerald-400 font-medium">≥ 1.5 = Excellent</span> — strong historical edge<br />
-                                            <span className="text-sky-400 font-medium">0.5–1.5 = Good</span> — solid signal, use with confidence<br />
-                                            <span className="text-amber-400 font-medium">0–0.5 = Weak</span> — marginal edge, treat cautiously<br />
-                                            <span className="text-rose-400 font-medium">&lt; 0 = Poor</span> — model underperformed in testing
+                                            Quality score for the model on held-out validation data:<br />
+                                            <span className="text-emerald-400 font-medium">≥ 1.5 = Excellent</span> ·{" "}
+                                            <span className="text-sky-400 font-medium">0.5–1.5 = Good</span> ·{" "}
+                                            <span className="text-amber-400 font-medium">0–0.5 = Weak</span> ·{" "}
+                                            <span className="text-rose-400 font-medium">&lt; 0 = Poor</span>
                                         </p>
                                     </div>
                                 </div>
@@ -361,9 +310,7 @@ function TimeframeDetailPanel({
 
                             {/* Timeframe info */}
                             <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-4">
-                                <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                                    About This Timeframe
-                                </h3>
+                                <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">About This Timeframe</h3>
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <div className="rounded-lg bg-slate-800/50 px-3 py-2">
                                         <p className="text-slate-500 mb-0.5">Forecast Window</p>
@@ -377,19 +324,17 @@ function TimeframeDetailPanel({
                                 <p className="text-sm text-slate-400 leading-relaxed">{meta.description}</p>
                             </div>
 
-                            {/* How to use this */}
+                            {/* How to use */}
                             <div className="rounded-xl bg-slate-900/40 border border-slate-700/50 p-5">
-                                <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">
-                                    How To Use This Signal
-                                </h3>
+                                <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">How To Use This Signal</h3>
                                 <ul className="space-y-3 text-sm text-slate-400 leading-relaxed">
                                     <li className="flex gap-2">
                                         <ChevronRight className="h-3 w-3 text-sky-500 flex-shrink-0 mt-0.5" />
-                                        <span>Don't rely on a single timeframe — check if multiple agree (cross-timeframe consensus).</span>
+                                        <span>Don't rely on a single timeframe — check if multiple agree.</span>
                                     </li>
                                     <li className="flex gap-2">
                                         <ChevronRight className="h-3 w-3 text-sky-500 flex-shrink-0 mt-0.5" />
-                                        <span>Higher confidence + higher Sharpe = more reliable signal. Low confidence or negative Sharpe = treat with extreme caution.</span>
+                                        <span>Higher confidence + higher Sharpe = more reliable signal.</span>
                                     </li>
                                     <li className="flex gap-2">
                                         <ChevronRight className="h-3 w-3 text-sky-500 flex-shrink-0 mt-0.5" />
@@ -397,10 +342,22 @@ function TimeframeDetailPanel({
                                     </li>
                                     <li className="flex gap-2">
                                         <ChevronRight className="h-3 w-3 text-amber-500 flex-shrink-0 mt-0.5" />
-                                        <span>This is an educational signal, not investment advice. Past model performance does not guarantee future returns.</span>
+                                        <span>Educational signal only — not investment advice.</span>
                                     </li>
                                 </ul>
                             </div>
+
+                            {/* ⚙ Model Details link — Sprint 4 addition */}
+                            <button
+                                onClick={() => { onClose(); onOpenModelDetails(); }}
+                                className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/60 px-4 py-3 transition-colors group"
+                            >
+                                <span className="text-sm">⚙</span>
+                                <span className="text-xs font-semibold text-slate-400 group-hover:text-slate-200 transition-colors">
+                                    View full model details — features, training info &amp; model competition
+                                </span>
+                                <ChevronRight className="h-3.5 w-3.5 text-slate-600 group-hover:text-slate-300 ml-auto transition-colors" />
+                            </button>
                         </div>
                     </>
                 )}
@@ -411,8 +368,9 @@ function TimeframeDetailPanel({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function TimeframeGrid({ signals }: TimeframeGridProps) {
-    const [selectedSignal, setSelectedSignal] = useState<TechnicalSignalDto | null>(null);
+export default function TimeframeGrid({ signals, symbol }: TimeframeGridProps) {
+    const [selectedSignal,       setSelectedSignal]       = useState<TechnicalSignalDto | null>(null);
+    const [modelDetailsPanelOpen, setModelDetailsPanelOpen] = useState(false);
 
     const sortedSignals = [...signals].sort((a, b) =>
         TILE_ORDER.indexOf(a.timeframe) - TILE_ORDER.indexOf(b.timeframe)
@@ -420,13 +378,12 @@ export default function TimeframeGrid({ signals }: TimeframeGridProps) {
 
     return (
         <>
-            {/* Tiles — larger, full-width responsive grid */}
+            {/* Signal tiles */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full mt-4">
                 {sortedSignals.map((signal) => {
-                    const cfg = directionConfig(signal.direction);
+                    const cfg      = directionConfig(signal.direction);
                     const confInfo = interpretConfidence(signal.confidence);
-                    const confBarWidth = Math.min(100, signal.confidence);
-                    const meta = TIMEFRAME_META[signal.timeframe];
+                    const meta     = TIMEFRAME_META[signal.timeframe];
 
                     return (
                         <button
@@ -435,57 +392,61 @@ export default function TimeframeGrid({ signals }: TimeframeGridProps) {
                             className={`group flex flex-col p-4 rounded-2xl border text-left transition-all duration-150 cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${cfg.tile}`}
                             title={`Click to learn more about the ${signal.timeframe} signal`}
                         >
-                            {/* Timeframe label + info icon */}
                             <div className="flex items-center justify-between mb-3">
                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                                     {meta?.label ?? signal.timeframe}
                                 </span>
                                 <Info className="h-3.5 w-3.5 text-slate-600 group-hover:text-slate-300 transition-colors" />
                             </div>
-
-                            {/* Direction icon + label */}
                             <div className={`flex items-center gap-2 mb-1 ${cfg.text}`}>
                                 {cfg.icon}
                                 <span className="text-base font-black">{cfg.label}</span>
                             </div>
-
-                            {/* Horizon */}
-                            <p className="text-[11px] text-slate-500 mb-3 leading-tight">
-                                {meta?.horizon ?? ""}
-                            </p>
-
-                            {/* Confidence bar */}
+                            <p className="text-[11px] text-slate-500 mb-3 leading-tight">{meta?.horizon ?? ""}</p>
                             <div className="w-full h-2 rounded-full bg-slate-800/80 overflow-hidden mb-2">
                                 <div
                                     className={`h-full rounded-full transition-all duration-500 ${cfg.bar}`}
-                                    style={{ width: `${confBarWidth}%` }}
+                                    style={{ width: `${Math.min(100, signal.confidence)}%` }}
                                 />
                             </div>
-
-                            {/* Confidence label + pct */}
                             <div className="flex items-center justify-between">
-                                <span className={`text-[10px] font-semibold ${confInfo.color}`}>
-                                    {confInfo.label}
-                                </span>
-                                <span className="text-xs text-slate-400 font-mono font-bold">
-                                    {signal.confidence.toFixed(0)}%
-                                </span>
+                                <span className={`text-[10px] font-semibold ${confInfo.color}`}>{confInfo.label}</span>
+                                <span className="text-xs text-slate-400 font-mono font-bold">{signal.confidence.toFixed(0)}%</span>
                             </div>
                         </button>
                     );
                 })}
             </div>
 
-            {/* Consensus summary row */}
-            {sortedSignals.length > 1 && (
-                <ConsensusSummary signals={sortedSignals} />
+            {/* Consensus summary */}
+            {sortedSignals.length > 1 && <ConsensusSummary signals={sortedSignals} />}
+
+            {/* ⚙ Model Details link (bottom of grid) — Sprint 4 */}
+            {symbol && sortedSignals.length > 0 && (
+                <button
+                    onClick={() => setModelDetailsPanelOpen(true)}
+                    className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-600 hover:text-slate-400 transition-colors group"
+                >
+                    <span>⚙</span>
+                    <span className="group-hover:underline">Model details — features, training info &amp; model competition</span>
+                </button>
             )}
 
-            {/* Detail slide-over panel */}
+            {/* Signal detail slide-over */}
             <TimeframeDetailPanel
                 signal={selectedSignal}
                 onClose={() => setSelectedSignal(null)}
+                onOpenModelDetails={() => setModelDetailsPanelOpen(true)}
             />
+
+            {/* Model details panel — Sprint 4 */}
+            {symbol && (
+                <ModelDetailsPanel
+                    symbol={symbol}
+                    isOpen={modelDetailsPanelOpen}
+                    onClose={() => setModelDetailsPanelOpen(false)}
+                />
+            )}
         </>
     );
 }

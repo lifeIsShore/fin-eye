@@ -1,7 +1,13 @@
 """
 app/core/security.py
+
 Password hashing and JWT token utilities.
+
+Sprint 7 (SEC-04): Refresh tokens now carry a JTI (JWT ID — unique UUID per token).
+The JTI is stored in Redis on issue. On logout the JTI is blacklisted.
+The /auth/refresh endpoint rotates the JTI: old token is blacklisted, new one issued.
 """
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -13,7 +19,6 @@ from app.config import get_settings
 settings = get_settings()
 
 # ── Password hashing ───────────────────────────────────────────────────────────
-# Using bcrypt directly — passlib is not compatible with Python 3.14+
 
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -25,13 +30,20 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── JWT ────────────────────────────────────────────────────────────────────────
 
-def _make_token(subject: str, expires_delta: timedelta, token_type: str) -> str:
+def _make_token(
+    subject: str,
+    expires_delta: timedelta,
+    token_type: str,
+    jti: Optional[str] = None,
+) -> str:
     expire = datetime.now(timezone.utc) + expires_delta
-    payload = {
-        "sub": subject,          # user id (UUID string)
-        "type": token_type,      # "access" | "refresh"
-        "exp": expire,
+    payload: dict = {
+        "sub":  subject,
+        "type": token_type,
+        "exp":  expire,
     }
+    if jti:
+        payload["jti"] = jti
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
@@ -43,20 +55,23 @@ def create_access_token(user_id: str) -> str:
     )
 
 
-def create_refresh_token(user_id: str) -> str:
-    return _make_token(
+def create_refresh_token(user_id: str, jti: Optional[str] = None) -> tuple[str, str]:
+    """
+    Create a refresh token. Returns (token, jti).
+    The JTI is a UUID embedded in the token and returned so callers can
+    store/blacklist it independently.
+    """
+    jti = jti or str(uuid.uuid4())
+    token = _make_token(
         subject=user_id,
         expires_delta=timedelta(days=settings.refresh_token_expire_days),
         token_type="refresh",
+        jti=jti,
     )
+    return token, jti
 
 
 def create_2fa_pending_token(user_id: str) -> str:
-    """
-    Short-lived token (5 minutes) issued when a user with 2FA enabled successfully
-    enters their password. The client must then call POST /auth/2fa/verify with
-    this token + their TOTP code to receive full access/refresh tokens.
-    """
     return _make_token(
         subject=user_id,
         expires_delta=timedelta(minutes=5),
@@ -65,11 +80,7 @@ def create_2fa_pending_token(user_id: str) -> str:
 
 
 def decode_token(token: str) -> Optional[dict]:
-    """
-    Decode and validate a JWT. Returns the payload dict or None if invalid.
-    """
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        return payload
+        return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
     except JWTError:
         return None

@@ -13,6 +13,7 @@ from app.services.scheduler import setup_scheduler
 from app.services.llm_service import close_ollama_service
 
 from app.middleware.metrics_middleware import MetricsMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware  # SEC-06
 
 import app.models  # noqa: F401 — side-effect: registers all ORM models with Base
 
@@ -27,6 +28,7 @@ from app.api.v1.endpoints import (
     insiders, earnings, shorts, adv_sentiment, fed_policy, indicators,
     admin_bulk,
 )
+from app.api.v1.endpoints.admin_ml import router as admin_ml_router  # Sprint 6
 from app.api.public.v1 import router as public_v1_router
 
 settings = get_settings()
@@ -90,6 +92,9 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+# ── Middleware stack (outermost first) ────────────────────────────────────────
+# Starlette applies middleware in reverse registration order.
+# SecurityHeaders is registered last so it wraps every response outbound.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -98,6 +103,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(MetricsMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)  # SEC-06: add security headers to every response
 
 
 @app.get("/")
@@ -147,11 +153,12 @@ app.include_router(adv_sentiment.router,  prefix="/api/v1/adv-sentiment",  tags=
 app.include_router(fed_policy.router,     prefix="/api/v1/fed-policy",     tags=["Fed Policy"])
 app.include_router(indicators.router,     prefix="/api/v1/indicators",     tags=["Custom Indicators"])
 
-# ── todos-v4.md — bulk pipeline admin (two routers, two prefixes) ─────────────
-# router_admin: single-ticker ops + ticker universe list
+# ── todos-v4.md — bulk pipeline admin ────────────────────────────────────────
 app.include_router(admin_bulk.router_admin, prefix="/api/v1/admin",       tags=["Admin — Pipeline"])
-# router: bulk seed/train/news + pipeline overview
 app.include_router(admin_bulk.router,       prefix="/api/v1/admin/bulk",  tags=["Admin — Bulk Pipeline"])
+
+# ── todos-v5 Sprint 6 — ML admin (drift alerts, Optuna params) ───────────────
+app.include_router(admin_ml_router, prefix="/api/v1/admin/ml", tags=["Admin — ML Pipeline"])
 
 # ── Public external API ───────────────────────────────────────────────────────
 app.include_router(public_v1_router.router, prefix="/public/v1", tags=["Public API"])

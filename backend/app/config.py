@@ -2,9 +2,6 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
-# Resolve .env relative to THIS file (backend/app/config.py → backend/.env)
-# This ensures the correct .env is loaded regardless of which directory
-# the process is launched from.
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
@@ -29,7 +26,7 @@ class Settings(BaseSettings):
     # Redis
     redis_password: str = Field(default="", alias="REDIS_PASSWORD")
     redis_url: str = Field(default="redis://localhost:6379", alias="REDIS_URL")
-    cache_ttl: int = Field(default=900, alias="CACHE_TTL")  # 15 minutes
+    cache_ttl: int = Field(default=900, alias="CACHE_TTL")
 
     # ── Market Data APIs ──────────────────────────────────────────────────────
     finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
@@ -70,6 +67,17 @@ class Settings(BaseSettings):
     pinecone_api_key: str = Field(default="", alias="PINECONE_API_KEY")
     pinecone_index: str = Field(default="fin-eye-docs", alias="PINECONE_INDEX")
     pinecone_environment: str = Field(default="us-east-1", alias="PINECONE_ENVIRONMENT")
+    ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
+    ollama_model: str = Field(default="llama3:8b", alias="OLLAMA_MODEL")
+
+    # ── Sprint 6: ML pipeline flags ───────────────────────────────────────────
+    # Set ENABLE_HYPERTUNING=True to run overnight Optuna tuning.
+    # Set AUTO_RETRAIN_ON_DRIFT=True to auto-retrain drifted models.
+    # Set DRIFT_THRESHOLD_PP to override the default 10pp alert threshold.
+    enable_hypertuning: bool = Field(default=False, alias="ENABLE_HYPERTUNING")
+    auto_retrain_on_drift: bool = Field(default=False, alias="AUTO_RETRAIN_ON_DRIFT")
+    drift_threshold_pp: float = Field(default=10.0, alias="DRIFT_THRESHOLD_PP")
+    optuna_n_trials: int = Field(default=30, alias="OPTUNA_N_TRIALS")
 
     # ── JWT & Auth ────────────────────────────────────────────────────────────
     secret_key: str = Field(default="change-in-production", alias="JWT_SECRET")
@@ -145,8 +153,6 @@ class Settings(BaseSettings):
     rate_limit_auth: int = Field(default=120, alias="RATE_LIMIT_AUTH")
     rate_limit_api_key: int = Field(default=300, alias="RATE_LIMIT_API_KEY")
     feature_flags: str = Field(default="", alias="FEATURE_FLAGS")
-    ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
-    ollama_model: str = Field(default="llama3:8b", alias="OLLAMA_MODEL")
 
     # ── Helper properties ─────────────────────────────────────────────────────
 
@@ -171,12 +177,9 @@ class Settings(BaseSettings):
         return [f.strip() for f in self.feature_flags.split(",") if f.strip()]
 
     model_config = SettingsConfigDict(
-        # Absolute path — always resolves to backend/.env regardless of CWD
         env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
-        # Ignore extra env vars from .env that aren't fields on this model
-        # (e.g. OAuth providers, webhook secrets, payment provider keys, etc.)
         extra="ignore",
     )
 

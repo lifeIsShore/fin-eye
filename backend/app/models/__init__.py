@@ -18,3 +18,7 @@ from app.models.custom_indicator import CustomIndicator
 from app.models.showcase import ShowcaseProduct, ShowcaseClick
 # todos-v4.md — bulk pipeline models
 from app.models.bulk_ops import TickerUniverse, BulkJobRun
+# todos-v5 Sprint 2 — prediction database
+from app.models.ml_prediction import MLPrediction
+# todos-v5 Sprint 6 — model drift alerts
+from app.models.model_drift_alert import ModelDriftAlert
