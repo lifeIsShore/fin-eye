@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import EventTimeline from "../../components/macro/EventTimeline";
 import { AlertTriangle, Info, ChevronDown, ChevronUp, Globe } from "lucide-react";
+import DataSourceStatus from "../../components/DataSourceStatus";
 import { PageBanner } from "../../components/ui/PageBanner";
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
@@ -95,16 +96,50 @@ function ScoreGauge({
 
 // ─── Core indicator card ──────────────────────────────────────────────────────
 
+// ── Data source attribution — Sprint 32 ────────────────────────────────────────
+
+const FRED_SOURCES: Record<string, string> = {
+  fed_funds_rate:        "FEDFUNDS",
+  unemployment_rate:     "UNRATE",
+  yield_spread_10y_2y:   "T10Y2Y",
+  cpi_yoy:               "CPIAUCSL",
+  vix:                   "VIXCLS",
+  treasury_2y:           "DGS2",
+  treasury_5y:           "DGS5",
+  treasury_10y:          "DGS10",
+  treasury_30y:          "DGS30",
+  nonfarm_payrolls:      "PAYEMS",
+  industrial_production: "INDPRO",
+  recession_indicator:   "USREC",
+};
+
+function FredAttribution({ indicatorKey }: { indicatorKey: string }) {
+  const series = FRED_SOURCES[indicatorKey];
+  if (!series) return null;
+  return (
+    <a
+      href={`https://fred.stlouisfed.org/series/${series}`}
+      target="_blank" rel="noopener noreferrer"
+      className="inline-flex items-center gap-0.5 text-[9px] text-slate-700 hover:text-sky-400 transition-colors"
+      title={`View ${series} on FRED`}
+    >
+      FRED · {series} ↗
+    </a>
+  );
+}
+
 function IndicatorCard({
   title,
   value,
   date,
   interpretation,
+  indicatorKey = "",
 }: {
   title: string;
   value: number | null;
   date: string | null;
   interpretation: string;
+  indicatorKey?: string;
 }) {
   const isWarning = interpretation.toLowerCase().includes("inverted") ||
     interpretation.toLowerCase().includes("high") ||
@@ -121,6 +156,7 @@ function IndicatorCard({
       <p className={`mt-1.5 text-xs ${isWarning ? "text-amber-400" : "text-slate-400"}`}>
         {interpretation}
       </p>
+      {indicatorKey && <FredAttribution indicatorKey={indicatorKey} />}
     </Card>
   );
 }
@@ -500,10 +536,12 @@ export default function MacroPage() {
 
       {/* ── Error ── */}
       {error && (
-        <div className="rounded-xl border border-red-800/50 bg-red-950/30 p-4 text-sm text-red-300">
-          Could not load macro data. Ensure the backend is running and indicators are refreshed
-          (POST /api/v1/macro/refresh).
-        </div>
+        <DataSourceStatus
+          source="Macro (FRED)"
+          error={error}
+          description="Could not load macro indicators. Ensure the backend is running and FRED data has been refreshed. Check backend logs for FRED API key or network issues."
+          variant="error"
+        />
       )}
 
       {/* ── Loading skeleton ── */}
@@ -512,6 +550,23 @@ export default function MacroPage() {
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-28 rounded-xl bg-slate-800/50" />
           ))}
+        </div>
+      )}
+
+      {/* ── Empty state (no data after load) ── */}
+      {!loading && !error && !basicData && (
+        <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/30 p-10 flex flex-col items-center gap-4 text-center">
+          <Globe className="h-10 w-10 text-slate-600" />
+          <div>
+            <p className="text-sm font-semibold text-slate-300">No macro data available yet</p>
+            <p className="text-xs text-slate-500 mt-1 max-w-xs">
+              Macro indicators are seeded from FRED on first run. Trigger a refresh from the admin
+              panel or wait for the scheduled overnight sync.
+            </p>
+          </div>
+          <a href="/admin" className="text-xs text-sky-400 hover:text-sky-300 underline transition-colors">
+            Go to Admin Panel →
+          </a>
         </div>
       )}
 
@@ -572,6 +627,7 @@ export default function MacroPage() {
                   value={val.value}
                   date={val.date}
                   interpretation={val.interpretation}
+                  indicatorKey={key}
                 />
               ))}
             </div>
@@ -718,6 +774,7 @@ export default function MacroPage() {
                   value={val.value}
                   date={val.date}
                   interpretation={val.interpretation}
+                  indicatorKey={key}
                 />
               ))}
             </div>
@@ -761,9 +818,14 @@ export default function MacroPage() {
       <div className="rounded-xl border border-slate-800/60 bg-slate-900/20 px-4 py-3 flex gap-2">
         <Info className="h-4 w-4 shrink-0 mt-0.5 text-slate-600" />
         <p className="text-xs text-slate-600">
-          All macro data is sourced from FRED (Federal Reserve Bank of St. Louis) and Yahoo Finance.
+          Macro data sourced from{" "}
+          <a href="https://fred.stlouisfed.org" target="_blank" rel="noopener noreferrer"
+            className="text-slate-500 hover:text-sky-400 underline underline-offset-2 transition-colors">
+            FRED (Federal Reserve Bank of St. Louis)
+          </a>{" "}
+          and Yahoo Finance (VIX). Hover any indicator to see its FRED series ID.
           Macro scores, recession probability, and the stress index are simplified educational models —
-          not professional economic forecasts. Past macro regimes do not predict future outcomes.
+          not professional economic forecasts.
         </p>
       </div>
     </div>

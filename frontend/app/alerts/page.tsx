@@ -286,6 +286,41 @@ export default function AlertsPage() {
           </button>
         </div>
 
+        {/* Sprint 31 — Rebalancing alert banners */}
+        {triggered.filter((t) => t.alert_type === "rebalance_suggested").length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold text-amber-400 uppercase tracking-wide">
+              ⚠️ Rebalancing Suggested ({triggered.filter((t) => t.alert_type === "rebalance_suggested").length})
+            </h2>
+            {triggered
+              .filter((t) => t.alert_type === "rebalance_suggested")
+              .map((t) => (
+                <div key={t.id}
+                  className="flex items-start gap-3 rounded-xl border border-amber-700/40 bg-amber-950/20 px-4 py-3"
+                >
+                  <span className="text-lg flex-shrink-0">📊</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-300">
+                      {t.symbol} — Rebalancing recommended
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Signal grade dropped {Math.round(t.triggered_value ?? 0)} step{Math.round(t.triggered_value ?? 0) !== 1 ? "s" : ""} since last update.
+                      Consider reducing or exiting this position until the grade recovers.
+                    </p>
+                    <p className="text-[10px] text-slate-600 mt-1">
+                      Fired {new Date(t.triggered_at ?? "").toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => acknowledgeAlert(t.id).then(() => setTriggered((prev) => prev.filter((x) => x.id !== t.id)))}
+                    className="text-slate-600 hover:text-slate-400 transition-colors flex-shrink-0 text-lg leading-none"
+                    aria-label="Dismiss"
+                  >×</button>
+                </div>
+              ))}
+          </div>
+        )}
+
         {/* Alert list */}
         <div>
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">

@@ -298,8 +298,14 @@ function GradeLeaderboard() {
             {/* Symbol */}
             <span className="font-mono font-bold text-sm text-slate-100 w-16 flex-shrink-0">{entry.symbol}</span>
 
-            {/* Grade badge */}
-            <GradeBadge grade={entry.signal_grade} score={entry.signal_grade_score} size="sm" />
+            {/* Grade badge + sparkline */}
+            <GradeBadge
+              grade={entry.signal_grade}
+              score={entry.signal_grade_score}
+              size="sm"
+              clickable
+              symbol={entry.symbol}
+            />
 
             {/* Weather label */}
             <span className="text-xs text-slate-500 hidden sm:block truncate flex-1">{entry.weather_label}</span>

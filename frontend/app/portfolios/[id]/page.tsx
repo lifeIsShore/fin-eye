@@ -662,6 +662,120 @@ function SectorPieChart({ breakdown }: { breakdown: Record<string, number> }) {
     );
 }
 
+// ── Rebalancing Calculator — Sprint 31 ───────────────────────────────────────────────────────────
+
+function RebalancingCalculator({
+    portfolio, totalCapital,
+}: { portfolio: any; totalCapital: number }) {
+    const items: any[] = portfolio?.items ?? [];
+    const [capitals, setCapitals] = React.useState<Record<string, string>>({});
+    const [open, setOpen] = React.useState(false);
+
+    if (items.length === 0) return null;
+
+    const totalWeight = items.reduce((s: number, i: any) => s + i.weight, 0) || 1;
+
+    const rows = items.map((item: any) => {
+        const targetPct  = (item.weight / totalWeight) * 100;
+        const currentStr = capitals[item.symbol] ?? "";
+        const currentUsd = parseFloat(currentStr) || 0;
+        const currentPct = totalCapital > 0 ? (currentUsd / totalCapital) * 100 : targetPct;
+        const diffPct    = targetPct - currentPct;
+        const tradeUsd   = Math.abs(diffPct / 100 * totalCapital);
+        const action     = Math.abs(diffPct) < 0.5 ? "HOLD" : diffPct > 0 ? "BUY" : "SELL";
+        return { symbol: item.symbol, currentPct, targetPct, diffPct, action, tradeUsd };
+    });
+
+    const allFilled = items.every((i: any) => capitals[i.symbol] !== undefined && capitals[i.symbol] !== "");
+
+    return (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+            <button type="button" onClick={() => setOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-800/20 transition-colors">
+                <div className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-violet-400" />
+                    <h2 className="text-sm font-bold text-slate-100">Rebalancing Calculator</h2>
+                    <span className="text-[10px] text-slate-500">Enter current holdings → get instructions</span>
+                </div>
+                <svg className={`h-4 w-4 text-slate-600 transition-transform ${open ? "rotate-180" : ""}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            {open && (
+                <div className="border-t border-slate-800 px-5 py-4 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {items.map((item: any) => (
+                            <div key={item.symbol} className="space-y-1">
+                                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                                    {item.symbol} — current value ($)
+                                </label>
+                                <input type="number" min={0}
+                                    placeholder={`e.g. ${(totalCapital * (item.weight / totalWeight)).toFixed(0)}`}
+                                    value={capitals[item.symbol] ?? ""}
+                                    onChange={(e) => setCapitals((prev) => ({ ...prev, [item.symbol]: e.target.value }))}
+                                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                />
+                            </div>
+                        ))}
+                    </div>
+
+                    {allFilled && (
+                        <div className="overflow-x-auto rounded-xl border border-slate-800">
+                            <table className="w-full text-xs">
+                                <thead className="bg-slate-900/60">
+                                    <tr className="border-b border-slate-800 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                                        <th className="px-4 py-2.5 text-left">Symbol</th>
+                                        <th className="px-4 py-2.5 text-right">Current %</th>
+                                        <th className="px-4 py-2.5 text-right">Target %</th>
+                                        <th className="px-4 py-2.5 text-right">Diff</th>
+                                        <th className="px-4 py-2.5 text-center">Action</th>
+                                        <th className="px-4 py-2.5 text-right">Trade ($)</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/50">
+                                    {rows.map((row: any) => (
+                                        <tr key={row.symbol} className="hover:bg-slate-800/10">
+                                            <td className="px-4 py-2.5 font-mono font-bold text-slate-100">{row.symbol}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">{row.currentPct.toFixed(1)}%</td>
+                                            <td className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-300">{row.targetPct.toFixed(1)}%</td>
+                                            <td className={`px-4 py-2.5 text-right font-mono tabular-nums font-semibold ${
+                                                row.action === "HOLD" ? "text-slate-500" :
+                                                row.action === "BUY"  ? "text-emerald-400" : "text-rose-400"
+                                            }`}>{row.diffPct >= 0 ? "+" : ""}{row.diffPct.toFixed(1)}%</td>
+                                            <td className="px-4 py-2.5 text-center">
+                                                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                                                    row.action === "BUY"  ? "bg-emerald-950/40 border-emerald-800/50 text-emerald-300" :
+                                                    row.action === "SELL" ? "bg-rose-950/40 border-rose-800/50 text-rose-300" :
+                                                    "bg-slate-800/40 border-slate-700/50 text-slate-500"
+                                                }`}>{row.action}</span>
+                                            </td>
+                                            <td className={`px-4 py-2.5 text-right font-mono tabular-nums font-semibold ${
+                                                row.action === "HOLD" ? "text-slate-600" :
+                                                row.action === "BUY"  ? "text-emerald-400" : "text-rose-400"
+                                            }`}>
+                                                {row.action === "HOLD" ? "—" : `${row.tradeUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {!allFilled && (
+                        <p className="text-xs text-slate-600">Fill in all current values above to see rebalancing instructions.</p>
+                    )}
+                    <p className="text-[10px] text-slate-700">
+                        Trade sizes = |target − current| × ${totalCapital.toLocaleString()}. Diff &lt; 0.5% = HOLD. Educational estimate only.
+                    </p>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function MetricBar({ label, value, max = 100, description }: {
     label: string; value: number; max?: number; description: string;
 }) {
@@ -883,6 +997,14 @@ export default function PortfolioDetailPage() {
                     />
                 </div>
             </div>
+
+            {/* Rebalancing Calculator — Sprint 31 */}
+            {(portfolio.items?.length ?? 0) >= 2 && (
+                <RebalancingCalculator
+                    portfolio={portfolio}
+                    totalCapital={10000}
+                />
+            )}
 
             {/* Main grid: allocations + analytics */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

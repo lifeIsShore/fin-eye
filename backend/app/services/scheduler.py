@@ -132,6 +132,17 @@ async def job_alert_email_notifications() -> None:
         get_metrics().record_pipeline_run("alert_email_notifications", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, False, str(exc))
 
 
+async def job_rebalancing_alerts() -> None:
+    """Sprint 31 — check grade drops and fire rebalancing suggestions."""
+    try:
+        from app.services.alert_service import check_and_fire_rebalancing_alerts  # noqa: PLC0415
+        async with AsyncSessionLocal() as session:
+            summary = await check_and_fire_rebalancing_alerts(session)
+        logger.info("Rebalancing alerts: %s", summary)
+    except Exception as exc:
+        logger.error("job_rebalancing_alerts failed: %s", exc)
+
+
 async def job_gas_precompute() -> None:
     from app.services.gas_precompute import run_gas_precompute_batch  # noqa: PLC0415
     started = datetime.now(timezone.utc).isoformat()
@@ -386,6 +397,12 @@ def setup_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(job_gas_precompute,
         trigger=CronTrigger(day_of_week="mon-fri", hour="13-21", minute="0,15,30,45"),
         id="gas_precompute", name="GAS Pre-Computation",
+        replace_existing=True, misfire_grace_time=120)
+
+    # Sprint 31 — rebalancing alerts: runs 5 min after GAS precompute so grade history is fresh
+    scheduler.add_job(job_rebalancing_alerts,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="13-21", minute="5,20,35,50"),
+        id="rebalancing_alerts", name="Grade-Drop Rebalancing Alerts",
         replace_existing=True, misfire_grace_time=120)
 
     scheduler.add_job(job_backup_db,

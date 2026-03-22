@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -26,8 +27,11 @@ router = APIRouter()
 )
 async def get_news_sentiment_timeseries(
     symbol: str,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> Any:
+    # Sprint 29 — Cache-Control: sentiment data is refreshed every 60 min
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=240"
     """
     Return 30-day news sentiment timeseries and current 1d/7d/30d averages
     for the requested symbol, along with a list of recent articles.

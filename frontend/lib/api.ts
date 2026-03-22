@@ -2596,6 +2596,92 @@ export async function evaluateSavedIndicator(
   return res.json();
 }
 
+// ── Sprint 27: Grade change history ─────────────────────────────────────────
+
+
+// ── Grade History ────────────────────────────────────────────────────────────
+
+export interface GradeHistoryPoint {
+  symbol?:          string;
+  grade:            string;
+  prev_grade:       string | null;
+  grade_score:      number | null;
+  gas_score:        number;
+  component_scores: Record<string, number> | null;
+  tradeable:        string | boolean | null;
+  recorded_at:      string;
+}
+
+export interface GradeHistoryResponse {
+  symbol:  string;
+  history: GradeHistoryPoint[];
+  total:   number;
+}
+
+/**
+ * Fetches grade history for a symbol.
+ * Uses the allocation endpoint which returns a wrapped response.
+ */
+export async function fetchGradeHistory(
+  symbol: string,
+  limit = 14,
+): Promise<GradeHistoryResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/allocation/grade-history/${encodeURIComponent(symbol.toUpperCase())}?limit=${limit}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Grade history unavailable for ${symbol}`);
+  return res.json();
+}
+
+// ── AI Allocation (Sprint 27) ──────────────────────────────────────────────────
+
+export interface AllocationRequest {
+  symbols:       string[];
+  total_capital: number;
+  min_grade:     string;   // "A+" | "A" | "B" | "C"
+}
+
+export interface PositionSuggestion {
+  symbol:           string;
+  grade:            string;
+  grade_score:      number | null;
+  gas_score:        number;
+  tradeable:        boolean;
+  weight_pct:       number;
+  position_usd:     number;
+  included:         boolean;
+  exclusion_reason: string | null;
+}
+
+export interface AllocationResponse {
+  total_capital:       number;
+  min_grade:           string;
+  positions:           PositionSuggestion[];
+  total_allocated_pct: number;
+  cash_pct:            number;
+  cash_usd:            number;
+  included_count:      number;
+  excluded_count:      number;
+  disclaimer:          string;
+}
+
+export async function fetchAllocationSuggestion(
+  payload: AllocationRequest,
+): Promise<AllocationResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/allocation/suggest`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Allocation request failed");
+  }
+  return res.json();
+}
+
 // ── GAS History — 7-day sparkline (todos-v3.md UX-GROWTH-01) ────────────────
 
 export interface GasHistoryPoint {
@@ -2641,8 +2727,35 @@ export async function fetchSymbolSearch(
     if (!res.ok) throw new Error("search failed");
     return res.json();
   } catch {
-    return [];   // graceful fallback — GlobalTickerSearch has its own static fallback
+    return [];   // graceful fallback
   }
+}
+
+// ── OHLCV price chart data (Sprint 27) ────────────────────────────────────────
+
+export interface OhlcvPoint {
+  date:   string;
+  open:   number;
+  high:   number;
+  low:    number;
+  close:  number;
+  volume: number;
+}
+
+/**
+ * Fetches OHLCV data for a symbol and period.
+ */
+export async function fetchOhlcv(
+  symbol: string,
+  period: "1mo" | "3mo" | "6mo" | "1y" = "3mo",
+  init?: RequestInit,
+): Promise<OhlcvPoint[]> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/technical/${encodeURIComponent(symbol.toUpperCase())}/ohlcv?period=${period}`,
+    { ...init, cache: "no-store" },
+  );
+  if (!res.ok) return [];
+  return res.json() as Promise<OhlcvPoint[]>;
 }
 
 // ── Walk-Forward Validation (Sprint 18) ────────────────────────────────────────

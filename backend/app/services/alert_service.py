@@ -79,6 +79,198 @@ async def acknowledge_alert(db: AsyncSession, alert_id: int, user: User) -> Opti
     return alert
 
 
+# ── Sprint 30: default alert seeding on watchlist add ────────────────────────────────
+
+_DEFAULT_GAS_ABOVE = 65.0  # "GAS just turned bullish"
+_DEFAULT_GAS_BELOW = 35.0  # "GAS entered danger zone"
+
+
+# ── Sprint 31: grade-drop rebalancing trigger ──────────────────────────────────────────
+
+_GRADE_ORDER = ["A+", "A", "B", "C", "D", "F"]
+_REBALANCE_STEP_THRESHOLD = 2   # grade must drop ≥2 steps
+_REBALANCE_ALERT_COOLDOWN_HOURS = 24  # don’t fire the same alert twice per day
+
+
+def _grade_rank(grade: str) -> int:
+    """Lower rank = better grade. F = 5."""
+    try:
+        return _GRADE_ORDER.index(grade)
+    except ValueError:
+        return len(_GRADE_ORDER)
+
+
+async def check_and_fire_rebalancing_alerts(db: AsyncSession) -> dict:
+    """
+    Sprint 31 (Phase 2B): Scan signal_grade_history for symbols where the most
+    recent grade change was a drop of ≥2 steps.  For every user who has that
+    symbol on their watchlist, fire an in-app alert with type="rebalance_suggested".
+
+    Design:
+      • Runs once per GAS precompute cycle (every 15 min on market days).
+      • Reads the two most-recent grade rows per symbol from signal_grade_history.
+      • Fires only when current < prev AND rank difference ≥ threshold.
+      • Cool-down: skips if a rebalance alert for that user+symbol was already
+        fired within _REBALANCE_ALERT_COOLDOWN_HOURS (avoids alert spam).
+      • Never blocks the calling job — all exceptions are caught and logged.
+
+    Returns a summary dict for logging.
+    """
+    from sqlalchemy import select as _sel, func as _func  # noqa: PLC0415
+    from datetime import timedelta  # noqa: PLC0415
+    from app.models.signal_grade_history import SignalGradeHistory  # noqa: PLC0415
+    from app.models.watchlist import WatchlistItem  # noqa: PLC0415
+
+    started = datetime.utcnow()
+    fired = 0
+    skipped = 0
+    errors: list[str] = []
+
+    try:
+        # 1. Find all symbols that have at least 2 grade history rows
+        sym_result = await db.execute(
+            _sel(SignalGradeHistory.symbol, _func.count(SignalGradeHistory.id).label("cnt"))
+            .group_by(SignalGradeHistory.symbol)
+            .having(_func.count(SignalGradeHistory.id) >= 2)
+        )
+        symbols = [row.symbol for row in sym_result.all()]
+
+        for sym in symbols:
+            try:
+                # 2. Get the two most-recent grade events for this symbol
+                hist_result = await db.execute(
+                    _sel(SignalGradeHistory)
+                    .where(SignalGradeHistory.symbol == sym)
+                    .order_by(SignalGradeHistory.recorded_at.desc())
+                    .limit(2)
+                )
+                rows = hist_result.scalars().all()
+                if len(rows) < 2:
+                    continue
+
+                current_grade = rows[0].grade
+                prev_grade    = rows[1].grade
+                current_rank  = _grade_rank(current_grade)
+                prev_rank     = _grade_rank(prev_grade)
+                drop          = current_rank - prev_rank
+
+                if drop < _REBALANCE_STEP_THRESHOLD:
+                    skipped += 1
+                    continue
+
+                # 3. Find all watchlist users that hold this symbol
+                wl_result = await db.execute(
+                    _sel(WatchlistItem).where(WatchlistItem.symbol == sym)
+                )
+                watchlist_rows = wl_result.scalars().all()
+
+                cooldown_cutoff = datetime.utcnow() - timedelta(hours=_REBALANCE_ALERT_COOLDOWN_HOURS)
+
+                for wl in watchlist_rows:
+                    try:
+                        # 4. Cool-down check — skip if we already fired recently
+                        recent = await db.execute(
+                            _sel(Alert).where(
+                                Alert.user_id == wl.user_id,
+                                Alert.symbol  == sym,
+                                Alert.alert_type == "rebalance_suggested",
+                                Alert.created_at >= cooldown_cutoff,
+                            )
+                        )
+                        if recent.scalar_one_or_none():
+                            skipped += 1
+                            continue
+
+                        # 5. Fire the in-app rebalancing alert
+                        # threshold stores the grade drop size as a float for sorting/display
+                        alert = Alert(
+                            user_id         = wl.user_id,
+                            symbol          = sym,
+                            alert_type      = "rebalance_suggested",
+                            threshold       = float(drop),
+                            delivery_channel = "in_app",
+                            is_active       = True,
+                            triggered_at    = datetime.utcnow(),
+                            triggered_value = float(drop),
+                        )
+                        db.add(alert)
+                        fired += 1
+                        logger.info(
+                            "Rebalancing alert fired: user=%s sym=%s %s→%s (drop %d steps)",
+                            wl.user_id, sym, prev_grade, current_grade, drop,
+                        )
+                    except Exception as inner_exc:
+                        errors.append(f"user={wl.user_id} sym={sym}: {inner_exc}")
+
+            except Exception as outer_exc:
+                errors.append(f"sym={sym}: {outer_exc}")
+
+        await db.commit()
+
+    except Exception as top_exc:
+        errors.append(f"top-level: {top_exc}")
+        logger.error("check_and_fire_rebalancing_alerts failed: %s", top_exc)
+
+    elapsed_ms = round((datetime.utcnow() - started).total_seconds() * 1000, 1)
+    summary = {"fired": fired, "skipped": skipped, "errors": len(errors), "elapsed_ms": elapsed_ms}
+    logger.info("Rebalancing alert check: %s", summary)
+    return summary
+
+
+async def seed_watchlist_alerts(db: AsyncSession, user: User, symbol: str) -> list[Alert]:
+    """
+    Sprint 30 (POLISH-03): When a symbol is first added to the watchlist,
+    automatically create two GAS threshold alerts:
+      • gas_above 65  — “Bullish environment opening up”
+      • gas_below 35  — “Instability zone — review exposure”
+
+    Idempotent: skips any alert type/threshold combo that already exists
+    for this user + symbol so re-adding doesn’t double up.
+    """
+    sym = symbol.upper()
+    created: list[Alert] = []
+
+    # Fetch existing active alerts for this symbol to avoid duplicates
+    existing = await db.execute(
+        select(Alert).where(
+            Alert.user_id == user.id,
+            Alert.symbol == sym,
+            Alert.is_active == True,  # noqa: E712
+        )
+    )
+    existing_set = {
+        (a.alert_type, a.threshold)
+        for a in existing.scalars().all()
+    }
+
+    for alert_type, threshold in [
+        ("gas_above", _DEFAULT_GAS_ABOVE),
+        ("gas_below", _DEFAULT_GAS_BELOW),
+    ]:
+        if (alert_type, threshold) in existing_set:
+            logger.debug("Skipping duplicate alert %s %s @ %.0f", sym, alert_type, threshold)
+            continue
+
+        alert = Alert(
+            user_id=user.id,
+            symbol=sym,
+            alert_type=alert_type,
+            threshold=threshold,
+            delivery_channel="in_app",
+        )
+        db.add(alert)
+        created.append(alert)
+        logger.info(
+            "Auto-created alert for %s %s (%s @ %.0f)",
+            user.id, sym, alert_type, threshold,
+        )
+
+    if created:
+        await db.flush()  # caller commits
+
+    return created
+
+
 # ── Evaluation engine ──────────────────────────────────────────────────────────
 
 async def get_triggered_alerts(db: AsyncSession, user: User) -> List[Alert]:

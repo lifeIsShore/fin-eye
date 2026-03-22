@@ -140,10 +140,14 @@ export default function NewsSentimentPage() {
             <p className="text-sm text-slate-400">Loading sentiment…</p>
           )}
           {error && (
-            <p className="text-sm text-rose-400">
-              Could not load sentiment data for {symbol}. Ensure the backend is
-              running and there is news data available.
-            </p>
+            <div className="rounded-xl border border-rose-800/40 bg-rose-950/20 p-5 flex flex-col items-center gap-2 text-center">
+              <Newspaper className="h-7 w-7 text-rose-600" />
+              <p className="text-sm font-semibold text-rose-300">Could not load sentiment data</p>
+              <p className="text-xs text-slate-500">
+                No scored headlines found for <span className="font-mono text-slate-400">{symbol}</span>.
+                Try a major ticker (AAPL, TSLA, NVDA) or trigger a news seed from the admin panel.
+              </p>
+            </div>
           )}
           {data && <SentimentChart data={data.series} />}
         </section>
@@ -207,9 +211,15 @@ export default function NewsSentimentPage() {
           </p>
           {data && <ArticleList articles={data.articles} />}
           {!data && !isLoading && !error && (
-            <p className="text-sm text-slate-400">
-              Enter a ticker symbol above to fetch sentiment.
-            </p>
+            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/30 p-8 flex flex-col items-center gap-3 text-center">
+              <Newspaper className="h-9 w-9 text-slate-600" />
+              <div>
+                <p className="text-sm font-semibold text-slate-300">No articles loaded yet</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Enter a ticker above and click Load to fetch FinBERT-scored headlines.
+                </p>
+              </div>
+            </div>
           )}
         </section>
 

@@ -33,6 +33,7 @@ import ScoreExplainPanel, {
 } from "../components/ScoreExplainPanel";
 import WhatChangedToday from "../components/WhatChangedToday";
 import FreshnessIndicator from "../components/FreshnessIndicator";
+import DataSourceStatus from "../components/DataSourceStatus";
 import CrossAssetRow from "../components/CrossAssetRow";
 import EarningsCalendarStrip from "../components/EarningsCalendarStrip";
 import DailyMarketBrief from "../components/DailyMarketBrief";
@@ -510,6 +511,73 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
   );
 }
 
+// ─── Sprint 27: Price Chart Widget (TradingView embed) ─────────────────────
+
+function PriceChartWidget({ symbol }: { symbol: string }) {
+  const [open, setOpen] = React.useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("fin-eye-chart-open") !== "false";
+  });
+
+  const toggle = () => {
+    setOpen((v) => {
+      const next = !v;
+      try { localStorage.setItem("fin-eye-chart-open", String(next)); } catch {}
+      return next;
+    });
+  };
+
+  // Map yfinance symbols to TradingView format
+  const tvSymbol = React.useMemo(() => {
+    const s = symbol.toUpperCase();
+    if (s.endsWith("-USD"))   return `BINANCE:${s.replace("-", "")}`;  // BTC-USD → BINANCE:BTCUSD
+    if (s.endsWith("=F"))     return `NYMEX:${s.replace("=F", "")}`;   // CL=F → NYMEX:CL
+    if (s.endsWith("=X"))     return `FX:${s.replace("=X", "")}`;      // EURUSD=X → FX:EURUSD
+    if (s.startsWith("^"))    return `TVC:${s.slice(1)}`;             // ^GSPC → TVC:GSPC
+    return `NASDAQ:${s}`;                                              // default US equity
+  }, [symbol]);
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+      <button
+        onClick={toggle}
+        className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-800/20 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <svg className="h-4 w-4 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+          </svg>
+          <span className="text-sm font-semibold text-slate-200">Price Chart</span>
+          <span className="text-xs text-slate-500 font-mono">{symbol}</span>
+          <span className="text-[10px] text-slate-600 bg-slate-800/60 border border-slate-700/50 rounded px-1.5 py-0.5">TradingView</span>
+        </div>
+        <svg
+          className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800">
+          <div className="h-[420px] w-full" key={symbol}>
+            <iframe
+              src={`https://www.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(tvSymbol)}&interval=D&theme=dark&style=1&locale=en&enable_publishing=false&hide_top_toolbar=0&hide_legend=0&save_image=false&calendar=false&hide_volume=false&support_host=https://www.tradingview.com`}
+              style={{ width: "100%", height: "100%", border: "none" }}
+              allowFullScreen
+              title={`${symbol} price chart`}
+            />
+          </div>
+          <p className="px-4 py-2 text-[10px] text-slate-700">
+            Chart powered by TradingView. Prices may be delayed. Educational use only.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page Component ──────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -549,7 +617,15 @@ export default function DashboardPage() {
     symbol: string;
   } | null>(null);
 
-  const { data: gasSnapshot, error: gasError, isLoading: gasLoading } = useSWR(
+  // Sprint 26 — Track previous regime to detect flips
+  const prevRegimeRef = React.useRef<string | null>(null);
+  const [regimeBanner, setRegimeBanner] = React.useState<{
+    prev: string;
+    curr: string;
+    symbol: string;
+  } | null>(null);
+
+  const { data: gasSnapshot, error: gasError, isLoading: gasLoading, isValidating: gasValidating } = useSWR(
     `gas-snapshot-${activeSymbol}`,
     () => fetchGasSnapshot(activeSymbol),
     {
@@ -563,14 +639,24 @@ export default function DashboardPage() {
           setGasChangeBanner({ delta: curr - prev, prev, curr, symbol: activeSymbol });
         }
         if (curr != null) prevGasScoreRef.current = curr;
+
+        // Sprint 26 — regime flip detection
+        const currRegime = data?.regime;
+        const prevRegime = prevRegimeRef.current;
+        if (currRegime && prevRegime && currRegime !== prevRegime) {
+          setRegimeBanner({ prev: prevRegime, curr: currRegime, symbol: activeSymbol });
+        }
+        if (currRegime) prevRegimeRef.current = currRegime;
       },
     },
   );
 
-  // Reset ref and banner when symbol changes
+  // Reset refs and banners when symbol changes
   React.useEffect(() => {
     prevGasScoreRef.current = null;
+    prevRegimeRef.current   = null;
     setGasChangeBanner(null);
+    setRegimeBanner(null);
   }, [activeSymbol]);
 
   const { data: techData, error: techError, mutate: mutateTech } = useSWR(
@@ -740,6 +826,8 @@ export default function DashboardPage() {
                 tradeable={gasSnapshot?.signal_tradeable}
                 size="md"
                 showTradeable
+                clickable
+                symbol={activeSymbol}
               />
             </div>
             <p className="text-sm text-slate-400">Real-time GAS, Regime, and Multi-Timeframe layers.</p>
@@ -845,6 +933,63 @@ export default function DashboardPage() {
                 </div>
               )}
 
+              {/* Sprint 26 — Regime change notification banner */}
+              {regimeBanner && regimeBanner.symbol === activeSymbol && (() => {
+                const toRiskOn   = regimeBanner.curr === "Risk-On";
+                const toRiskOff  = regimeBanner.curr === "Risk-Off";
+                const borderCls  = toRiskOn  ? "border-emerald-800/40 bg-emerald-950/20"
+                                 : toRiskOff ? "border-rose-800/40 bg-rose-950/20"
+                                 : "border-amber-800/40 bg-amber-950/20";
+                const textCls    = toRiskOn  ? "text-emerald-300"
+                                 : toRiskOff ? "text-rose-300"
+                                 : "text-amber-300";
+                const icon       = toRiskOn ? "🟢" : toRiskOff ? "🔴" : "🟡";
+                const implication = toRiskOn
+                  ? "Conditions now favour risk assets — momentum strategies may perform better."
+                  : toRiskOff
+                  ? "Conditions now favour defensive positioning — reduce exposure and tighten stops."
+                  : "Mixed signals — neither risk-on nor risk-off is clearly dominant.";
+                return (
+                  <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${borderCls}`}>
+                    <span className="text-lg flex-shrink-0">{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-bold ${textCls}`}>
+                        Regime flipped: {regimeBanner.prev} → {regimeBanner.curr}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">{implication}</p>
+                    </div>
+                    <button
+                      onClick={() => setRegimeBanner(null)}
+                      className="text-slate-600 hover:text-slate-400 transition-colors flex-shrink-0 text-lg leading-none"
+                      aria-label="Dismiss"
+                    >×</button>
+                  </div>
+                );
+              })()}
+
+              {/* Sprint 32 — Graceful degradation banners */}
+              {gasError && (
+                <DataSourceStatus
+                  source="GAS Engine"
+                  error={gasError}
+                  description="Signal grades and GAS scores are temporarily unavailable. Showing last cached values where possible."
+                />
+              )}
+              {sentData === undefined && !isLoading && (
+                <DataSourceStatus
+                  source="Sentiment (Finnhub)"
+                  error={new Error("No sentiment data returned")}
+                  description="News sentiment is temporarily unavailable — the GAS sentiment layer is using a neutral fallback (50)."
+                />
+              )}
+              {macroData === undefined && !isLoading && (
+                <DataSourceStatus
+                  source="Macro (FRED)"
+                  error={new Error("No macro data returned")}
+                  description="FRED macro indicators are unavailable — the GAS macro layer is using a neutral fallback (50)."
+                />
+              )}
+
               {/* Daily Market Brief */}
               {macroScore > 0 && (
                 <DailyMarketBrief
@@ -868,7 +1013,12 @@ export default function DashboardPage() {
               {/* Row 1 – GAS + Regime */}
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="tour-gas-score">
-                  <MarketWeatherWidget gasScore={gasScore} symbol={activeSymbol} onExplain={openGasExplain} />
+                  <MarketWeatherWidget
+                    gasScore={gasScore}
+                    symbol={activeSymbol}
+                    onExplain={openGasExplain}
+                    isRefreshing={gasValidating && !!gasSnapshot}
+                  />
                 </div>
                 <div className="tour-regime">
                   <RegimeWidget
@@ -980,6 +1130,56 @@ export default function DashboardPage() {
 
                 {signals.length > 0 ? (
                   <>
+                    {/* Sprint 28: Multi-timeframe agreement banner */}
+                    {signals.length > 1 && (() => {
+                      const b_ = signals.filter((s) => s.direction === "Bullish").length;
+                      const be_ = signals.filter((s) => s.direction === "Bearish").length;
+                      const t_ = signals.length;
+                      const dom_ = Math.max(b_, be_);
+                      const agr_ = dom_ / t_;
+                      const dir_ = b_ > be_ ? "Bullish" : be_ > b_ ? "Bearish" : "Mixed";
+                      const cls_ = (dir_ !== "Mixed" && agr_ >= 0.8)
+                        ? (dir_ === "Bullish" ? "border-emerald-800/40 bg-emerald-950/15 text-emerald-300" : "border-rose-800/40 bg-rose-950/15 text-rose-300")
+                        : (dir_ !== "Mixed" && agr_ >= 0.6)
+                        ? (dir_ === "Bullish" ? "border-emerald-900/40 bg-emerald-950/10 text-emerald-400" : "border-rose-900/40 bg-rose-950/10 text-rose-400")
+                        : "border-amber-800/40 bg-amber-950/15 text-amber-300";
+                      const ico_ = (dir_ !== "Mixed" && agr_ >= 0.6)
+                        ? (dir_ === "Bullish" ? "\u{1F7E2}" : "\u{1F534}")
+                        : "\u{1F7E1}";
+                      const msg_ = dir_ === "Mixed"
+                        ? "Timeframes are split — no clear direction"
+                        : agr_ >= 0.8 ? `${dom_}/${t_} timeframes agree: ${dir_}`
+                        : agr_ >= 0.6 ? `${dom_}/${t_} timeframes lean ${dir_}`
+                        : `${dom_}/${t_} timeframes lean ${dir_} — low conviction`;
+                      const sub_ = (dir_ === "Mixed" || agr_ < 0.6)
+                        ? "Timeframes conflict. Wait for confirmation before acting."
+                        : agr_ >= 0.8
+                        ? "Strong cross-timeframe consensus — higher-conviction signal."
+                        : "Moderate consensus — use with normal risk controls.";
+                      return (
+                        <div className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 ${cls_}`}>
+                          <span className="text-base flex-shrink-0">{ico_}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold">{msg_}</p>
+                            <p className="text-xs opacity-70 mt-0.5">{sub_}</p>
+                          </div>
+                          <div className="flex-shrink-0 hidden sm:flex flex-col items-end gap-0.5">
+                            <div className="flex gap-0.5 h-2">
+                              {signals.map((s, i) => (
+                                <div key={i} title={`${s.timeframe}: ${s.direction}`}
+                                  className={`w-4 rounded-sm ${
+                                    s.direction === "Bullish" ? "bg-emerald-500" :
+                                    s.direction === "Bearish" ? "bg-rose-500" : "bg-amber-400/40"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <p className="text-[9px] opacity-50">{b_}B &middot; {be_}Be &middot; {t_-b_-be_}N</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     <TimeframeGrid signals={signals} symbol={activeSymbol} />
                     {/* SHAP “What drove this?” — Sprint 24 */}
                     <ShapPanel
@@ -992,6 +1192,9 @@ export default function DashboardPage() {
                   <TrainNowEmptyState symbol={activeSymbol} onTrainStarted={handleTrainStarted} />
                 )}
               </section>
+
+              {/* Sprint 27 — Price Chart (TradingView embed) */}
+              <PriceChartWidget symbol={activeSymbol} />
 
               {/* Row 3 – Price Targets & Kelly Sizing (Sprint 5) */}
               <PriceTargetCard symbol={activeSymbol} isVisible={signals.length > 0} />

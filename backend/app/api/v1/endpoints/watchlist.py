@@ -9,6 +9,7 @@ from app.db.database import get_db
 from app.models.watchlist import WatchlistItem
 from app.models.user import User
 from app.api.v1.deps import get_current_user
+from app.services.alert_service import seed_watchlist_alerts
 
 router = APIRouter()
 
@@ -80,6 +81,8 @@ async def add_to_watchlist(
     item = WatchlistItem(user_id=current_user.id, symbol=symbol)
     db.add(item)
     try:
+        # Sprint 30 (POLISH-03): auto-seed two GAS threshold alerts for new symbols
+        await seed_watchlist_alerts(db, current_user, symbol)
         await db.commit()
         await db.refresh(item)
     except IntegrityError:

@@ -18,6 +18,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import Response as FastAPIResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -160,15 +161,29 @@ async def get_snapshots_batch(
             )
             prev = prev_result.scalar_one_or_none()
 
+            # Grade fields — present in both dict and ORM paths
+            if isinstance(snap_data, dict):
+                sig_grade     = snap_data.get("signal_grade")
+                sig_grade_sc  = snap_data.get("signal_grade_score")
+                sig_tradeable = snap_data.get("signal_tradeable")
+            else:
+                sig_grade     = getattr(snap_data, "signal_grade", None)
+                sig_grade_sc  = getattr(snap_data, "signal_grade_score", None)
+                sig_tradeable = getattr(snap_data, "signal_tradeable", None)
+
             results.append({
-                "symbol":           sym,
-                "gas_score":        round(gas_score, 1),
-                "weather_label":    weather,
-                "regime":           regime,
-                "component_scores": comp_scores,
-                "computed_at":      computed_at,
-                "prev_gas_score":   round(prev.gas_score, 1) if prev else None,
-                "delta":            round(gas_score - prev.gas_score, 1) if prev else None,
+                "symbol":             sym,
+                "gas_score":          round(gas_score, 1),
+                "weather_label":      weather,
+                "regime":             regime,
+                "component_scores":   comp_scores,
+                "computed_at":        computed_at,
+                "prev_gas_score":     round(prev.gas_score, 1) if prev else None,
+                "delta":              round(gas_score - prev.gas_score, 1) if prev else None,
+                # Sprint 27 — grade fields for watchlist sidebar + overview cards
+                "signal_grade":       sig_grade,
+                "signal_grade_score": sig_grade_sc,
+                "signal_tradeable":   sig_tradeable,
             })
         except Exception as exc:
             logger.debug("Batch snapshot failed for %s: %s", sym, exc)
@@ -183,8 +198,11 @@ async def get_snapshots_batch(
 )
 async def get_snapshot(
     symbol: str,
+    response: FastAPIResponse,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
+    # Sprint 29 — GAS snapshots are recomputed every 15 min; short cache is fine
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
     from app.services.gas_precompute import get_snapshot_cached  # noqa: PLC0415
 
     sym = symbol.upper()
@@ -199,14 +217,45 @@ async def get_snapshot(
 
 
 @router.get(
+    "/grade-history/{symbol}",
+    summary="Sprint 27 — Grade change history for a symbol (last N events)",
+)
+async def get_grade_history(
+    symbol: str,
+    limit: int = Query(default=30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """
+    Returns the last `limit` grade change events for a symbol ordered
+    oldest-first.  Used by the grade sparkline on watchlist cards and
+    the explore leaderboard, and by the rebalancing alert engine.
+    """
+    from app.models.signal_grade_history import SignalGradeHistory  # noqa: PLC0415
+
+    sym = symbol.upper()
+    result = await db.execute(
+        select(SignalGradeHistory)
+        .where(SignalGradeHistory.symbol == sym)
+        .order_by(SignalGradeHistory.recorded_at.desc())
+        .limit(limit)
+    )
+    rows = list(reversed(result.scalars().all()))
+    return [r.to_dict() for r in rows]
+
+
+@router.get(
     "/history/{symbol}",
     summary="Get last N GAS snapshots for a symbol (sparkline / trend data)",
 )
 async def get_gas_history(
     symbol: str,
     limit: int = Query(default=7, ge=1, le=90, description="Number of snapshots to return"),
+    response: FastAPIResponse = None,
     db: AsyncSession = Depends(get_db),
 ) -> List[Dict[str, Any]]:
+    # Sprint 29 — sparkline data; 5-min cache is safe
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
     """
     Returns the last `limit` GAS snapshots for a symbol ordered oldest-first,
     so the frontend can render a sparkline showing the 7-day GAS trend.

@@ -206,13 +206,28 @@ interface Props {
   articles: NewsArticleDto[];
 }
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+type PageSize = typeof PAGE_SIZE_OPTIONS[number];
+
 export function ArticleList({ articles }: Props) {
-  const [filter, setFilter] = useState<SentimentFilter>("all");
+  const [filter, setFilter]     = useState<SentimentFilter>("all");
+  const [pageSize, setPageSize] = useState<PageSize>(25);
+  const [page, setPage]         = useState(0);
+
+  const handleFilterChange   = (f: SentimentFilter) => { setFilter(f); setPage(0); };
+  const handlePageSizeChange = (ps: PageSize) => { setPageSize(ps); setPage(0); };
 
   const filtered = useMemo(() => {
     if (filter === "all") return articles;
     return articles.filter((a) => deriveSentiment(a) === filter);
   }, [articles, filter]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize);
+
+  const paginated = useMemo(() => {
+    const start = page * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
   // Count per filter
   const counts = useMemo(() => {
@@ -221,16 +236,16 @@ export function ArticleList({ articles }: Props) {
     return c;
   }, [articles]);
 
-  // Group by time
+  // Group by time (based on paginated slice so group headers reflect current page)
   const grouped = useMemo(() => {
     const map: Partial<Record<Group, NewsArticleDto[]>> = {};
-    for (const a of filtered) {
+    for (const a of paginated) {
       const g = timeGroup(a.published_at);
       if (!map[g]) map[g] = [];
       map[g]!.push(a);
     }
     return map;
-  }, [filtered]);
+  }, [paginated]);
 
   if (!articles.length) {
     return (
@@ -245,6 +260,9 @@ export function ArticleList({ articles }: Props) {
     { key: "neutral", label: "Neutral", count: counts.neutral  },
   ];
 
+  const startIdx = page * pageSize + 1;
+  const endIdx   = Math.min((page + 1) * pageSize, filtered.length);
+
   return (
     <div className="space-y-3">
       {/* Filter bar */}
@@ -252,7 +270,7 @@ export function ArticleList({ articles }: Props) {
         {FILTER_OPTS.map(({ key, label, count }) => (
           <button
             key={key}
-            onClick={() => setFilter(key)}
+            onClick={() => handleFilterChange(key)}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
               filter === key
                 ? "bg-slate-700 text-slate-100"
@@ -275,10 +293,13 @@ export function ArticleList({ articles }: Props) {
         <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-sky-400" /> Today</span>
         <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> &lt;3 days</span>
         <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-slate-600" /> Older</span>
+        <span className="flex items-center gap-1 ml-auto text-slate-500">
+          Click a headline to read the full article ↗
+        </span>
       </div>
 
       {/* Timeline groups */}
-      {filtered.length === 0 && (
+      {paginated.length === 0 && (
         <p className="text-sm text-slate-600 py-4 text-center">No articles match this filter.</p>
       )}
       {GROUP_ORDER.map((group) => {
@@ -300,6 +321,53 @@ export function ArticleList({ articles }: Props) {
           </div>
         );
       })}
+
+      {/* Pagination footer */}
+      {filtered.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3 mt-1">
+          {/* Prev / page info / next */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-2.5 py-1 rounded-md text-xs text-slate-400 hover:text-slate-200 disabled:opacity-30 border border-slate-800 hover:border-slate-700 transition"
+            >
+              ←
+            </button>
+            <span className="text-[11px] text-slate-500 tabular-nums">
+              {startIdx}–{endIdx} of {filtered.length}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-2.5 py-1 rounded-md text-xs text-slate-400 hover:text-slate-200 disabled:opacity-30 border border-slate-800 hover:border-slate-700 transition"
+            >
+              →
+            </button>
+          </div>
+
+          {/* Page-size selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-600">Show</span>
+            <div className="flex gap-0.5 rounded-lg border border-slate-800 bg-slate-900/50 p-0.5">
+              {PAGE_SIZE_OPTIONS.map((ps) => (
+                <button
+                  key={ps}
+                  onClick={() => handlePageSizeChange(ps)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                    pageSize === ps
+                      ? "bg-slate-700 text-slate-100"
+                      : "text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  {ps}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-slate-600">per page</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

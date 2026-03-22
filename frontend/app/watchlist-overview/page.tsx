@@ -20,7 +20,7 @@ import { fetchWatchlist } from "../../lib/api";
 import { useSymbol } from "../../lib/symbolContext";
 import type { GasBatchEntry } from "../../components/WhatChangedToday";
 import GasSparkline from "../../components/GasSparkline";
-import GradeBadge from "../../components/GradeBadge";
+import GradeBadge, { GradeSparkline as GradeSparklineInline } from "../../components/GradeBadge";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -513,7 +513,13 @@ export default function WatchlistOverviewPage() {
                         score={entry.signal_grade_score}
                         tradeable={entry.signal_tradeable}
                         size="xs"
+                        clickable
+                        symbol={sym}
                       />
+                      {/* Sprint 28 — grade sparkline */}
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <GradeSparklineInline symbol={sym} />
+                      </div>
                       <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${regimeBadgeClass(entry.regime)}`}>
                         {entry.regime}
                       </span>

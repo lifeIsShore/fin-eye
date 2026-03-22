@@ -1,5 +1,5 @@
 # Fin-Eye — Sprint Progress Tracker
-> Last updated: Sprint 25 complete
+> Last updated: Sprint 32 complete
 
 ## Completed Sprints
 
@@ -202,6 +202,77 @@ alembic upgrade head
 - [x] **Trade log table on backtesting** -- Backend: `TradeRecord` Pydantic schema (`entry_date`, `exit_date`, `entry_price`, `exit_price`, `return_pct`, `holding_days`, `side`); `backtesting_service.py` `run()` now walks the `position` series detecting entry/exit transitions and emits `List[TradeRecord]`; `BacktestResponse.trade_log` field. Frontend: `TradeRecord` interface + `trade_log?`/`benchmark_label?` added to `BacktestResponse` in `lib/api.ts`; `TradeLogTable` component in `backtesting/page.tsx` — collapsible (closed by default), paginated 10 rows/page with ←/→ controls, columns: # / Entry Date / Exit Date / Entry $ / Exit $ / Return % / Days Held, return % colour-coded emerald/rose, W/L summary in header. Rendered below the secondary stats row, above the Parameter Sweep panel.
 - [x] **Sentiment trend arrow on news page** -- `news-sentiment/page.tsx`: inline IIFE next to the "Sentiment over last 30 days" heading; sorts `data.series` by date, slices last 7 days (`recent`) and prior 7 days (`prior`), computes average `sentiment_score` for each window, derives `delta = avgRecent - avgPrior`; renders `↑ Improving` (emerald, `TrendingUp` icon) / `↓ Deteriorating` (rose, `TrendingDown` icon) / `— Flat` (slate, `Minus` icon) with delta in scaled pts; threshold 0.02 to suppress noise; silently hidden when fewer than 8 data points or fewer than 4 prior-window points.
 - [x] **Benchmark comparison toggle on backtesting** -- Backend: `BacktestRequest.benchmark` field (default `""`); `backtesting_service.py`: when `benchmark` is set and differs from the strategy symbol, fetches that ticker via `OHLCVFetcher`, aligns to the strategy date index via `reindex + ffill`, scales to `initial_capital`, overwrites `benchmark_equity` on the equity curve; `BENCHMARK_LABELS` dict maps SPY/QQQ/BTC-USD/GLD to display names; returns `BacktestResponse.benchmark_label`. Frontend: `benchmark?` field on `BacktestRequest` in `api.ts`; `BenchmarkStrip` pill component in `backtesting/page.tsx` config sidebar (Same Symbol / SPY / QQQ / BTC / GLD), placed below the strategy doc panel; equity curve section heading dynamically shows `result.benchmark_label ?? "Buy & Hold"`; `benchmark` state passed into `runBacktest` request.
+
+## ✅ Sprint 26 -- Complete
+
+### User requests (shipped alongside Sprint 26)
+- [x] **ArticleList URL click-through** -- Headline titles already had `<a href={article.url}>` in `ArticleCard` from Sprint 14; the missing piece was `sentiment_label` and `finbert_score` not flowing from backend. Fixed in the bug-fix session (`data_models.py` + `sentiment.py`). Added "Click a headline to read the full article ↗" hint in the legend row.
+- [x] **ArticleList pagination + page-size selector** -- `ArticleList.tsx`: added `pageSize` state (default 25), `page` state, `paginated` useMemo slice, `totalPages`, `handleFilterChange`/`handlePageSizeChange` helpers that reset page to 0. Pagination footer renders ← `startIdx–endIdx of total` → navigation and a Show 10/25/50/100 per page pill strip. Time-grouping now operates on the current page slice so group headers stay accurate.
+
+### Delivered
+- [x] **Regime change notification banner** -- `app/page.tsx`: `prevRegimeRef` + `regimeBanner` state added alongside `prevGasScoreRef`/`gasChangeBanner`. GAS snapshot `onSuccess` callback detects when `data.regime` differs from the previous value and sets the banner. Banner renders below the GAS score change banner: 🟢 emerald for Risk-On flip, 🔴 rose for Risk-Off flip, 🟡 amber for Transitional. Shows `prev → curr` and a plain-English implication sentence. Dismissable with ×. Clears on symbol change.
+- [x] **Economic calendar on macro page** -- `EventTimeline` was already wired into both Overview and Advanced tabs via `EventTimeline` component and `<Card><EventTimeline /></Card>` at the bottom of each view. Confirmed present in Overview tab — no new work needed.
+- [x] **Designed empty states** -- `app/macro/page.tsx`: error state replaced with centred `Globe` icon + message + "Try again" link; added new `!loading && !error && !basicData` empty state with dashed border, `Globe` icon, description, and "Go to Admin Panel" CTA. `app/news-sentiment/page.tsx`: error state replaced with centred `Newspaper` icon + ticker-specific message; pre-load empty state replaced with dashed-border card with `Newspaper` icon and instruction copy.
+
+## ✅ Sprint 27 -- Complete
+
+### Delivered
+- [x] **Mobile nav** -- Already fully implemented (`MobileNav` component with slide-in drawer, section groups, active highlighting) and wired in `layout.tsx`. Confirmed — no additional work needed.
+- [x] **Grade persistence + `signal_grade_history` table** -- Already fully implemented: `GasSnapshot` model has `signal_grade`/`signal_grade_score`/`signal_tradeable`/`signal_grade_desc`/`signal_grade_reasons` columns; `SignalGradeHistory` model and `s27_001_signal_grade_history.py` migration exist; `gas_precompute.py` writes a history row on every grade change (compares prev snapshot grade → new grade before upsert); model registered in `__init__.py`. All infrastructure was already in place.
+- [x] **AI Portfolio Allocation endpoint** -- `backend/app/api/v1/endpoints/allocation.py` (NEW): `POST /api/v1/allocation/suggest` — takes `symbols[]`, `total_capital`, `min_grade`; fetches GAS snapshot per symbol via `get_snapshot_cached()`; applies grade caps (A+=20%, A=15%, B=10%, C=5%, D/F=0%); normalises weights if total > 100%; returns `AllocationResponse` with per-position breakdown + cash reserve + disclaimer. `GET /api/v1/allocation/grade-history/{symbol}` — returns last N grade change events from `signal_grade_history` table for sparklines. Registered in `main.py`.
+- [x] **AI Allocation frontend types** -- `lib/api.ts`: `AllocationRequest`, `PositionSuggestion`, `AllocationResponse`, `GradeHistoryPoint`, `GradeHistoryResponse` interfaces; `fetchAllocationSuggestion()` and `fetchGradeHistory()` functions.
+- [x] **`/portfolio/build` page** -- `frontend/app/portfolio/build/page.tsx` (NEW): Config sidebar with capital input, min-grade pill strip (A+/A/B/C), symbol input with Enter-to-add and chip removal, "Load Watchlist" button; empty/loading/result states; `AllocationSummary` (capital bar + cash pct + excluded warning); position table with rank, symbol+GradeBadge, GAS score, weight bar, USD amount, tradeable status; cash reserve row; grade cap reference collapsible; educational disclaimer. `GradeCapReference` component explains the 20/15/10/5% cap system.
+- [x] **Nav: AI Allocator** -- Added `{ href: "/portfolio/build", label: "AI Allocator", icon: <Zap> }` to the Tools section in `Nav.tsx`.
+
+### Migration note
+```bash
+alembic upgrade head   # applies s27_001_signal_grade_history if not already run
+```
+
+## ✅ Sprint 28 -- Complete
+
+**Source todos:** `todos.md` Phase 2A (grade history sparkline, grade explanation panel) + `todos-v5.md` Phase 1.1 (multi-timeframe agreement banner)
+
+### Delivered
+- [x] **Grade history sparkline** -- `components/GradeBadge.tsx`: `GradeSparkline` component (exported) fetches `fetchGradeHistory(symbol, 10)` via SWR, reverses to oldest-first, maps each grade to a numeric value (A+=6...F=1), renders an inline SVG polyline (40×16px) colour-coded by current grade (emerald/sky/amber/rose), with a filled dot at the latest point. Wired into `watchlist-overview/page.tsx` per card (via `GradeSparklineInline` alias) and available on all `GradeBadge` instances via `showSparkline` prop.
+- [x] **Grade explanation panel** -- `components/GradeBadge.tsx`: `GradeExplainModal` full-screen modal opened when `clickable` prop is set on `GradeBadge`. Shows: grade letter + score + tradeable status; grade scale (A+–F with threshold pts, current grade highlighted); four scoring component cards (GAS Score 40pts, Component Alignment 30pts, Model Sharpe 20pts, Signal Conviction 10pts) with descriptions + proportion bars; "Why this grade" reasons list (from snapshot `signal_grade_reasons`); `GradeHistoryRow` timeline of last N grade changes with dates; "What improves the grade" educational block; educational disclaimer. New props added to `GradeBadge`: `clickable`, `symbol`, `reasons`, `showSparkline`. Wired with `clickable` + `symbol` on dashboard header badge, watchlist-overview cards, and explore leaderboard entries.
+- [x] **Multi-timeframe agreement banner** -- `app/page.tsx`: Inline IIFE above `TimeframeGrid` (only renders when `signals.length > 1`). Computes bullish/bearish/neutral counts, dominant direction, agreement ratio. Four states: Strong agreement ≥80% (green/red), Moderate lean ≥60% (muted green/red), Low conviction (amber), Mixed/split (amber). Shows icon (🟢/🔴/🟡) + message + sub-text + mini per-timeframe coloured bar strip on desktop. Examples: "4/5 timeframes agree: Bullish — Strong cross-timeframe consensus", "Timeframes are split — Wait for alignment".
+
+## ✅ Sprint 29 -- Complete
+
+**Sources:** `todos.md` §4 🔴 + `todos-v3.md` §12 🟠 (Cache-Control headers) · `todos.md` §6 🔴 + `todos-v3.md` §10 🟠 (Billing page) · `todos-v3.md` §3 ⚡ (Background refresh indicator)
+
+### Delivered
+- [x] **Cache-Control headers on GAS, macro, and sentiment endpoints** -- `backend/app/api/v1/endpoints/macro.py`: `GET /macro/latest` gets `Cache-Control: public, max-age=60, stale-while-revalidate=300`; `GET /macro/advanced` gets `max-age=120, stale-while-revalidate=600`. `backend/app/api/v1/endpoints/sentiment.py`: `GET /{symbol}/timeseries` gets `max-age=60, stale-while-revalidate=240`. `backend/app/api/v1/endpoints/admin_gas.py`: `GET /snapshots/{symbol}` gets `max-age=60, stale-while-revalidate=300`; `GET /history/{symbol}` gets `max-age=300, stale-while-revalidate=600`. All use FastAPI `Response` parameter injection pattern.
+- [x] **Billing page redesign** -- `frontend/app/billing/page.tsx` fully rewritten: monthly/annual toggle (slider switch) with "Save €59.89/year" emerald badge when annual selected; three plan cards (Free/Pro/Institutional) with `PriceDisplay` component showing per-month price (annualised when annual toggle on) and billed-annually callout; annual savings callout banner (only shown in monthly view, click to switch); full feature comparison table with 30+ features across 8 categories (Dashboard, Signals, Macro, Sentiment, Portfolio & Watchlist, Backtesting, Alerts, Enterprise) with Check/X/string cells; three trust signals (Stripe payments, cancel anytime, GDPR); expanded FAQ (5 questions). Payments remain disabled with "Coming Soon" state on buttons.
+- [x] **Background refresh indicator on GAS widget** -- `components/MarketWeatherWidget.tsx`: new `isRefreshing` boolean prop (default `false`); when true, a 10×10px `border-t-sky-400 animate-spin` spinner renders absolutely positioned top-right of the GAS score number. `app/page.tsx`: GAS snapshot SWR call now destructures `isValidating: gasValidating`; passed as `isRefreshing={gasValidating && !!gasSnapshot}` (only shows spinner after initial data is present, not during cold load). Users now see a subtle sky-blue spinner whenever SWR silently revalidates the GAS score in the background.
+
+## ✅ Sprint 30 -- Complete
+
+**Sources:** `todos-v3.md` §2 ⚡ (nav badges) · `todos-v3.md` §4 🟠 (auto-alerts on watchlist add) · `todos.md` §2 🟠 + `todos-v3.md` §8 🟠 (Learn Hub redesign)
+
+### Delivered
+- [x] **NEW / BETA / AI nav badges** -- `components/Nav.tsx`: `NavBadge` type (`"NEW" | "BETA" | "AI"`), `BADGE_STYLES` colour map (emerald/amber/violet). `NavItem` interface extended with optional `badge` field. Badges assigned: Adv. Sentiment → NEW, Fed Policy → NEW, Indicators → BETA, AI Allocator → AI. Desktop sidebar renders badge as tiny rounded-full pill to the right of the label (hidden when collapsed). Mobile drawer renders same badge inline. Both render only when sidebar is expanded / drawer is open.
+- [x] **Auto-create default GAS alerts on watchlist add** -- `backend/app/services/alert_service.py`: `seed_watchlist_alerts(db, user, symbol)` function — idempotent (skips if alert type+threshold already exists for that user+symbol), creates two in-app alerts: `gas_above 65.0` (“Bullish environment opening up”) and `gas_below 35.0` (“Instability zone”). `backend/app/api/v1/endpoints/watchlist.py`: imported and called inside `add_to_watchlist` before `db.commit()`, so both the watchlist item and the alerts are committed atomically. On IntegrityError (race) the rollback discards both safely.
+- [x] **Learn Hub redesign** -- `frontend/app/learn/page.tsx` fully rewritten. Six module intro cards always visible above the article grid: GAS Methodology (sky), FinBERT & Sentiment (violet), Technical Consensus (emerald), Conflict Detector (amber), Backtesting Pitfalls (rose), Macro 101 (teal). Each card is clickable — clicking filters the article grid to that module’s category. When a category is active, only the relevant module card(s) show. Category filter pills now show article counts. Case Studies hero banner preserved. Empty state has “View all articles →” fallback. Article grid and all CMS data fetching unchanged.
+
+## ✅ Sprint 31 -- Complete
+
+**Sources:** `todos.md` Phase 2B 🟠 (rebalancing trigger) · `todos-v3.md` §16 🟠 (rebalancing calculator, DCA simulator)
+
+### Delivered
+- [x] **Grade-drop rebalancing trigger** -- `backend/app/services/alert_service.py`: `check_and_fire_rebalancing_alerts(db)` — scans `signal_grade_history` for symbols with ≥2-step grade drops, fires `alert_type="rebalance_suggested"` in-app alerts for all watchlist users holding that symbol, 24h cooldown, fully exception-isolated. `backend/app/services/scheduler.py`: `job_rebalancing_alerts()` scheduler job added at `:05/:20/:35/:50` (5 min after GAS precompute at `:00/:15/:30/:45`). `frontend/app/alerts/page.tsx`: dismissable amber banner section for `rebalance_suggested` alerts showing symbol, drop count, action advice, dismiss via `acknowledgeAlert`.
+- [x] **Rebalancing calculator** -- `frontend/app/portfolios/[id]/page.tsx`: `RebalancingCalculator` collapsible component — user enters current USD value per position, calculator computes current vs target %, diff %, and BUY/SELL/HOLD action with trade size in USD. Differences < 0.5% = HOLD. Appears when portfolio ≥2 assets.
+- [x] **DCA simulator** -- `frontend/app/portfolio/dca/page.tsx` (NEW): fully client-side DCA vs Lump-Sum simulation using OHLCV price data. Inputs: ticker, total amount, DCA frequency (weekly/biweekly/monthly), start/end dates. Computes CAGR, final value, max drawdown for both strategies. Dual-line equity chart, winner banner, stat comparison cards, educational disclaimer.
+
+## ✅ Sprint 32 -- Complete
+
+**Sources:** `todos.md` Phase 2B 🔴 (AI allocation explainer) · `todos.md` §13 🟠 + `todos-v3.md` §11 🟠 (graceful degradation + data attribution)
+
+### Delivered
+- [x] **AI allocation explainer** -- `backend/app/api/v1/endpoints/allocation.py`: `POST /api/v1/allocation/explain` SSE endpoint — receives the allocation result, builds a structured LLM prompt with all position grades/GAS scores/weights/exclusions, streams via Ollama with deterministic static fallback when Ollama is offline. `frontend/app/portfolio/build/page.tsx`: `streamAllocationExplain()` async generator, `useEffect` auto-triggers on every new `result`, streams tokens into a violet `🧠 AI Portfolio Explanation` panel with typing cursor and "Generating…" indicator.
+- [x] **Graceful degradation messages** -- `frontend/components/DataSourceStatus.tsx` (NEW): reusable dismissable banner component with `error` / `stale` / `warning` variants; colour-coded icons (WifiOff/Clock/AlertTriangle); shows source name, description, optional raw error message. Wired into `app/page.tsx` (GAS Engine, Sentiment, Macro errors), `app/macro/page.tsx` (replaces old custom error div). Used everywhere a data fetch can silently fail.
+- [x] **Data source attribution** -- `frontend/app/macro/page.tsx`: `FRED_SOURCES` map (12 series IDs), `FredAttribution` component renders a clickable `FRED · {SERIES_ID} ↗` link on each `IndicatorCard`. `indicatorKey` prop added to `IndicatorCard`. Both Overview and Advanced tabs pass `indicatorKey={key}` to all `IndicatorCard` instances. Footer disclaimer updated with clickable FRED link and note about hovering for series IDs.
 
 ## Files to copy from outputs after this session
 

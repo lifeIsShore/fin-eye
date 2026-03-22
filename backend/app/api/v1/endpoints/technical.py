@@ -530,6 +530,39 @@ async def get_kelly_sizing(
 
 # ── /{symbol}/prediction-history ─────────────────────────────────────────────
 
+@router.get("/{symbol}/ohlcv")
+async def get_ohlcv_chart(
+    symbol: str,
+    period: str = "3mo",
+) -> List[Dict[str, Any]]:
+    """
+    Sprint 27 — OHLCV price chart data for the dashboard mini-chart.
+    period: 1mo | 3mo | 6mo | 1y
+    """
+    VALID_PERIODS = {"1mo", "3mo", "6mo", "1y"}
+    if period not in VALID_PERIODS:
+        period = "3mo"
+    sym = symbol.upper()
+    try:
+        records = OHLCVFetcher.fetch_historical_data(sym, period=period, interval="1d")
+        if not records:
+            return []
+        return [
+            {
+                "date":   r.timestamp.date().isoformat(),
+                "open":   round(float(r.open),  4),
+                "high":   round(float(r.high),  4),
+                "low":    round(float(r.low),   4),
+                "close":  round(float(r.close), 4),
+                "volume": int(r.volume),
+            }
+            for r in records
+        ]
+    except Exception as exc:
+        logger.error("OHLCV chart fetch failed for %s: %s", sym, exc)
+        return []
+
+
 @router.get("/{symbol}/prediction-history")
 async def get_prediction_history(
     symbol:    str,

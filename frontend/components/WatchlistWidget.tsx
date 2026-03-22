@@ -50,12 +50,14 @@ interface WatchlistWidgetProps {
 export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidgetProps) {
     const { user } = useAuth();
     const { setSymbol: setGlobalSymbol } = useSymbol();
-    const [input, setInput]           = useState("");
-    const [adding, setAdding]         = useState(false);
-    const [error, setError]           = useState<string | null>(null);
+    const [input, setInput]             = useState("");
+    const [adding, setAdding]           = useState(false);
+    const [error, setError]             = useState<string | null>(null);
     const [showSuggest, setShowSuggest] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
-    const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
+    const [refreshing, setRefreshing]   = useState(false);
+    const [refreshMsg, setRefreshMsg]   = useState<string | null>(null);
+    // Sprint 27 — grade filter
+    const [gradeFilter, setGradeFilter] = useState<"all" | "aplus" | "a_above" | "b_above" | "tradeable">("all");
 
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -231,6 +233,31 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                         {items.length}
                     </span>
                 )}
+                {/* Sprint 27 — grade filter pills */}
+                {items && items.length > 0 && gasMap && Object.keys(gasMap).length > 0 && (
+                    <div className="flex flex-wrap gap-0.5 mt-2 mb-1">
+                        {(["all", "aplus", "a_above", "b_above", "tradeable"] as const).map((f) => {
+                            const labels: Record<string, string> = {
+                                all: "All", aplus: "A+", a_above: "A+/A",
+                                b_above: "A–B", tradeable: "✓ Trade",
+                            };
+                            return (
+                                <button
+                                    key={f}
+                                    onClick={() => setGradeFilter(f)}
+                                    className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold transition-colors border ${
+                                        gradeFilter === f
+                                            ? "bg-sky-800/60 border-sky-600/60 text-sky-200"
+                                            : "bg-slate-800/40 border-slate-700/40 text-slate-500 hover:text-slate-300"
+                                    }`}
+                                >
+                                    {labels[f]}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
                 {/* Bulk GAS refresh */}
                 {items && items.length > 0 && (
                     <button
@@ -246,6 +273,24 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                     </button>
                 )}
             </div>
+            {/* Sprint 27 — grade filter strip (only when GAS data is available) */}
+            {gasMap && Object.keys(gasMap).length > 0 && (
+                <div className="flex gap-0.5 mb-1">
+                    {(["all", "tradeable", "a_above", "b_above"] as const).map((f) => (
+                        <button
+                            key={f}
+                            onClick={() => setGradeFilter(f)}
+                            className={`flex-1 px-1.5 py-1 rounded text-[9px] font-semibold transition-colors ${
+                                gradeFilter === f
+                                    ? "bg-slate-700 text-slate-100"
+                                    : "text-slate-600 hover:text-slate-400"
+                            }`}
+                        >
+                            {f === "all" ? "All" : f === "tradeable" ? "✓ Trade" : f === "a_above" ? "A+/A" : "B+"}
+                        </button>
+                    ))}
+                </div>
+            )}
             {/* Refresh feedback */}
             {refreshMsg && (
                 <p className={`text-[10px] mb-2 px-1 ${
@@ -322,9 +367,34 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                         No tickers yet. Add one above to quick-switch between symbols.
                     </p>
                 </div>
-            ) : (
+            ) : (() => {
+                const filtered = items.filter((item) => {
+                    if (gradeFilter === "all") return true;
+                    const g = gasMap?.[item.symbol];
+                    if (!g) return false;
+                    const grade = g.signal_grade ?? "";
+                    if (gradeFilter === "aplus")     return grade === "A+";
+                    if (gradeFilter === "a_above")   return grade === "A+" || grade === "A";
+                    if (gradeFilter === "b_above")   return ["A+","A","B"].includes(grade);
+                    if (gradeFilter === "tradeable") return g.signal_tradeable === true;
+                    return true;
+                });
+                if (filtered.length === 0 && gradeFilter !== "all") {
+                    return (
+                        <div className="py-4 text-center">
+                            <p className="text-[11px] text-slate-500">
+                                No symbols match this grade filter.
+                            </p>
+                            <button onClick={() => setGradeFilter("all")}
+                                className="mt-1 text-[10px] text-sky-400 hover:text-sky-300 transition-colors">
+                                Clear filter
+                            </button>
+                        </div>
+                    );
+                }
+                return (
                 <ul className="mt-2 space-y-1">
-                    {items.map((item) => {
+                    {filtered.map((item) => {
                         const isActive = item.symbol === activeSymbol;
                         return (
                             <li key={item.id}>
@@ -370,7 +440,8 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                         );
                     })}
                 </ul>
-            )}
+                );
+            })()}
         </div>
     );
 }

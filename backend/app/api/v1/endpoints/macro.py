@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.macro import get_history_async, get_latest_async, get_latest_batch_async
@@ -149,9 +150,14 @@ async def _build_core_response(
     response_model=MacroLatestResponse,
     summary="Core macro indicators + macro score",
 )
-async def get_latest(db: AsyncSession = Depends(get_db)) -> MacroLatestResponse:
-    response, _ = await _build_core_response(db)
-    return response
+async def get_latest(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> MacroLatestResponse:
+    # Sprint 29 — Cache-Control: macro data refreshes hourly
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
+    result, _ = await _build_core_response(db)
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -163,7 +169,12 @@ async def get_latest(db: AsyncSession = Depends(get_db)) -> MacroLatestResponse:
     response_model=MacroAdvancedResponse,
     summary="Full advanced macro dashboard — yield curve, recession risk, stress index",
 )
-async def get_advanced(db: AsyncSession = Depends(get_db)) -> MacroAdvancedResponse:
+async def get_advanced(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> MacroAdvancedResponse:
+    # Sprint 29 — Cache-Control: advanced macro is heavier, cache slightly longer
+    response.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=600"
     # Core
     core_response, core_values = await _build_core_response(db)
 

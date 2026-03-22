@@ -17,16 +17,26 @@ import {
 
 // ── Sidebar nav structure ─────────────────────────────────────────────────────
 
-interface NavItem {
-    href: string;
-    label: string;
-    icon: React.ReactNode;
-}
-
 interface NavSection {
     title: string;
     items: NavItem[];
 }
+
+// Sprint 30 — per-item badges for feature discovery
+type NavBadge = "NEW" | "BETA" | "AI";
+
+interface NavItem {
+    href: string;
+    label: string;
+    icon: React.ReactNode;
+    badge?: NavBadge;
+}
+
+const BADGE_STYLES: Record<NavBadge, string> = {
+    NEW:  "bg-emerald-600/80 text-emerald-100 border-emerald-500/40",
+    BETA: "bg-amber-600/80  text-amber-100  border-amber-500/40",
+    AI:   "bg-violet-600/80 text-violet-100 border-violet-500/40",
+};
 
 const SIDEBAR_SECTIONS: NavSection[] = [
     {
@@ -41,7 +51,7 @@ const SIDEBAR_SECTIONS: NavSection[] = [
         title: "Deep Signals",
         items: [
             { href: "/sentiment", label: "Retail Mood", icon: <Users className="h-4 w-4" /> },
-            { href: "/sentiment-adv", label: "Adv. Sentiment", icon: <Zap className="h-4 w-4" /> },
+            { href: "/sentiment-adv", label: "Adv. Sentiment", icon: <Zap className="h-4 w-4" />, badge: "NEW" },
             { href: "/options", label: "Options Flow", icon: <Activity className="h-4 w-4" /> },
             { href: "/insiders", label: "Insider Activity", icon: <Eye className="h-4 w-4" /> },
             { href: "/shorts", label: "Short Interest", icon: <TrendingDown className="h-4 w-4" /> },
@@ -53,8 +63,8 @@ const SIDEBAR_SECTIONS: NavSection[] = [
         items: [
             { href: "/explore", label: "Explorer", icon: <Zap className="h-4 w-4" /> },
             { href: "/sectors", label: "Sectors", icon: <PieChart className="h-4 w-4" /> },
-            { href: "/fed-policy", label: "Fed Policy", icon: <Landmark className="h-4 w-4" /> },
-            { href: "/indicators", label: "Indicators", icon: <BarChart className="h-4 w-4" /> },
+            { href: "/fed-policy", label: "Fed Policy", icon: <Landmark className="h-4 w-4" />, badge: "NEW" },
+            { href: "/indicators", label: "Indicators", icon: <BarChart className="h-4 w-4" />, badge: "BETA" },
             { href: "/hedge", label: "Hedge", icon: <Shield className="h-4 w-4" /> },
         ],
     },
@@ -64,6 +74,7 @@ const SIDEBAR_SECTIONS: NavSection[] = [
             { href: "/watchlist-overview", label: "Watchlist Overview", icon: <LayoutList className="h-4 w-4" /> },
             { href: "/backtesting", label: "Backtesting", icon: <Backtest className="h-4 w-4" /> },
             { href: "/portfolios", label: "Portfolio", icon: <Briefcase className="h-4 w-4" /> },
+            { href: "/portfolio/build", label: "AI Allocator", icon: <Zap className="h-4 w-4" />, badge: "AI" },
             { href: "/alerts", label: "Alerts", icon: <Bell className="h-4 w-4" /> },
             { href: "/showcase", label: "Pro Tools", icon: <ShoppingBag className="h-4 w-4" /> },
         ],
@@ -229,18 +240,27 @@ export function Sidebar() {
                                 return (
                                     <li key={item.href}>
                                         <Link
-                                            href={item.href}
-                                            title={collapsed ? item.label : undefined}
-                                            className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors ${active
-                                                ? "bg-slate-800 text-sky-400 border-l-2 border-sky-500"
-                                                : "text-slate-400 hover:bg-slate-900 hover:text-slate-100 border-l-2 border-transparent"
-                                                } ${collapsed ? "justify-center px-0" : ""}`}
+                                        href={item.href}
+                                        title={collapsed ? item.label : undefined}
+                                        className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors ${active
+                                        ? "bg-slate-800 text-sky-400 border-l-2 border-sky-500"
+                                        : "text-slate-400 hover:bg-slate-900 hover:text-slate-100 border-l-2 border-transparent"
+                                        } ${collapsed ? "justify-center px-0" : ""}`}
                                         >
-                                            <span className={`flex-shrink-0 ${active ? "text-sky-400" : "text-slate-500"}`}>
-                                                {item.icon}
-                                            </span>
-                                            {!collapsed && <span className="truncate">{item.label}</span>}
-                                        </Link>
+                                        <span className={`flex-shrink-0 ${active ? "text-sky-400" : "text-slate-500"}`}>
+                                        {item.icon}
+                                        </span>
+                                        {!collapsed && (
+                                                <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                                    <span className="truncate">{item.label}</span>
+                                    {item.badge && (
+                                        <span className={`flex-shrink-0 rounded-full border px-1.5 py-px text-[8px] font-bold leading-none ${BADGE_STYLES[item.badge]}`}>
+                                            {item.badge}
+                                        </span>
+                                    )}
+                                </span>
+                            )}
+                        </Link>
                                     </li>
                                 );
                             })}
@@ -313,13 +333,20 @@ export function MobileNav() {
                                     return (
                                         <li key={item.href}>
                                             <Link href={item.href}
-                                                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${active ? "bg-slate-800 text-sky-400" : "text-slate-300 hover:bg-slate-800/60 hover:text-slate-100"
-                                                    }`}>
-                                                <span className={active ? "text-sky-400" : "text-slate-500"}>
-                                                    {item.icon}
-                                                </span>
-                                                {item.label}
-                                            </Link>
+                                            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${active ? "bg-slate-800 text-sky-400" : "text-slate-300 hover:bg-slate-800/60 hover:text-slate-100"
+                                            }`}>
+                                            <span className={active ? "text-sky-400" : "text-slate-500"}>
+                                            {item.icon}
+                                            </span>
+                                            <span className="flex items-center gap-1.5 flex-1">
+                                                    {item.label}
+                                    {item.badge && (
+                                        <span className={`rounded-full border px-1.5 py-px text-[8px] font-bold leading-none ${BADGE_STYLES[item.badge]}`}>
+                                            {item.badge}
+                                        </span>
+                                    )}
+                                </span>
+                            </Link>
                                         </li>
                                     );
                                 })}

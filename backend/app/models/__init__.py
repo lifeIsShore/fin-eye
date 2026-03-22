@@ -22,3 +22,5 @@ from app.models.bulk_ops import TickerUniverse, BulkJobRun
 from app.models.ml_prediction import MLPrediction
 # todos-v5 Sprint 6 — model drift alerts
 from app.models.model_drift_alert import ModelDriftAlert
+# Sprint 27 — grade history for sparklines + rebalancing triggers
+from app.models.signal_grade_history import SignalGradeHistory  # noqa: F401

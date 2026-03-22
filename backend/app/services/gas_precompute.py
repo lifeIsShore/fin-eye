@@ -360,11 +360,45 @@ async def compute_gas_for_symbol(
     snap_dict = snap.to_dict()
 
     # Merge grade into the snapshot dict (available immediately even before DB migration)
-    snap_dict["signal_grade"]       = grade_result["grade"]
-    snap_dict["signal_grade_score"] = grade_result["grade_score"]
-    snap_dict["signal_tradeable"]   = grade_result["tradeable"]
-    snap_dict["signal_grade_desc"]  = grade_result["description"]
+    snap_dict["signal_grade"]         = grade_result["grade"]
+    snap_dict["signal_grade_score"]   = grade_result["grade_score"]
+    snap_dict["signal_tradeable"]     = grade_result["tradeable"]
+    snap_dict["signal_grade_desc"]    = grade_result["description"]
     snap_dict["signal_grade_reasons"] = grade_result["reasons"]
+
+    # ── Sprint 27: record grade change in history table ──────────────────────
+    # Fetch the previous grade from the latest existing snapshot (before upsert).
+    # The upsert overwrites in-place so we read from the returned snap object.
+    try:
+        from sqlalchemy import select as _select  # noqa: PLC0415
+        from app.models.signal_grade_history import SignalGradeHistory  # noqa: PLC0415
+        from app.crud.gas_snapshot import get_latest as _get_latest  # noqa: PLC0415
+
+        # Get the grade that was stored before this run
+        prev_snap = await _get_latest(db, symbol)
+        prev_grade = prev_snap.signal_grade if prev_snap else None
+        new_grade  = grade_result["grade"]
+
+        # Always write the first record; thereafter only write on grade change
+        if prev_grade != new_grade:
+            history_row = SignalGradeHistory(
+                symbol          = symbol,
+                grade           = new_grade,
+                prev_grade      = prev_grade,
+                grade_score     = grade_result["grade_score"],
+                gas_score       = gas_score,
+                component_scores = component_scores,
+                tradeable       = str(grade_result["tradeable"]),
+                recorded_at     = datetime.now(timezone.utc),
+            )
+            db.add(history_row)
+            logger.info(
+                "Grade history: %s %s → %s (GAS=%.1f)",
+                symbol, prev_grade or "(new)", new_grade, gas_score,
+            )
+    except Exception as _hist_exc:
+        # Never let grade history writes break the main precompute path
+        logger.warning("Grade history write failed for %s: %s", symbol, _hist_exc)
 
     cache = get_cache()
     if cache:

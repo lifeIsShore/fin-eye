@@ -12,15 +12,17 @@ import { ScoreTooltip } from "./Tooltip";
 import GasSparkline from "./GasSparkline";
 
 interface MarketWeatherWidgetProps {
-    gasScore:   number;
-    symbol?:    string;
-    onExplain?: () => void;
+    gasScore:     number;
+    symbol?:      string;
+    onExplain?:   () => void;
+    isRefreshing?: boolean;  // Sprint 29 — SWR isValidating passthrough
 }
 
 export default function MarketWeatherWidget({
     gasScore,
     symbol,
     onExplain,
+    isRefreshing = false,
 }: MarketWeatherWidgetProps) {
     let weatherLabel = "Unknown";
     let weatherColor = "text-slate-400";
@@ -58,9 +60,18 @@ export default function MarketWeatherWidget({
         <div className={`p-6 rounded-2xl border ${weatherBg} flex flex-col items-center justify-center text-center space-y-4`}>
             {/* ── Score row ── */}
             <div className="flex items-center justify-center gap-2">
-                <span className={`text-6xl font-black tracking-tighter ${weatherColor}`}>
-                    {gasScore.toFixed(0)}
-                </span>
+                <div className="relative">
+                  <span className={`text-6xl font-black tracking-tighter ${weatherColor}`}>
+                      {gasScore.toFixed(0)}
+                  </span>
+                  {/* Sprint 29 — subtle refresh spinner */}
+                  {isRefreshing && (
+                    <span
+                      className="absolute -top-1 -right-3 h-2.5 w-2.5 rounded-full border-2 border-transparent border-t-sky-400 animate-spin"
+                      title="Refreshing…"
+                    />
+                  )}
+                </div>
                 {/* "GAS" label + tooltip */}
                 <div className="flex flex-col items-start gap-1">
                     <div className="flex items-center gap-1">
