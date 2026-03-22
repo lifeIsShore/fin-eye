@@ -425,6 +425,48 @@ class OllamaBackend:
             logger.error("Ollama backend error: %s", exc)
             return None
 
+    async def generate_stream(self, system: str, user: str):
+        """
+        Stream tokens from Ollama /api/chat using server-sent events.
+        Yields raw text chunks as they arrive from the model.
+        Falls back to None generator if Ollama is unavailable.
+        """
+        payload = {
+            "model":  self.model,
+            "stream": True,
+            "options": {
+                "temperature": TEMPERATURE,
+                "num_predict": MAX_TOKENS,
+            },
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user",   "content": user},
+            ],
+        }
+        try:
+            client = await self._get_client()
+            import json as _json
+            async with client.stream("POST", "/api/chat", json=payload) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        chunk = _json.loads(line)
+                        token = chunk.get("message", {}).get("content", "")
+                        if token:
+                            yield token
+                        if chunk.get("done"):
+                            break
+                    except Exception:
+                        continue
+        except httpx.ConnectError:
+            logger.warning("Ollama not reachable for streaming — is `ollama serve` running?")
+            return
+        except Exception as exc:
+            logger.error("Ollama stream error: %s", exc)
+            return
+
     async def is_available(self) -> bool:
         """Quick health check — does Ollama respond at all?"""
         try:

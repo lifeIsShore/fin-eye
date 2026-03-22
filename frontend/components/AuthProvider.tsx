@@ -9,6 +9,8 @@ export interface User {
     is_pro: boolean;
     is_admin: boolean;
     name?: string | null;
+    default_symbol?: string | null;  // Sprint 23
+    risk_profile?: string | null;     // Sprint 24
 }
 
 interface AuthContextType {

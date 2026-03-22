@@ -38,15 +38,21 @@ class SentimentAggregateData(BaseModel):
 class SentimentTimeseriesResponse(BaseModel):
     symbol: str
     series: List[SentimentAggregateData]
-    sentiment_1d: Optional[float] = Field(default=None)
-    sentiment_7d: Optional[float] = Field(default=None)
+    sentiment_1d:  Optional[float] = Field(default=None)
+    sentiment_7d:  Optional[float] = Field(default=None)
     sentiment_30d: Optional[float] = Field(default=None)
+    articles:      List[NewsData]  = Field(default_factory=list)
+    # Sprint 11 (UX-TRUST-01): ISO UTC timestamp of the most recent article
+    # fetched, so the frontend FreshnessIndicator can show sentiment staleness.
+    fetched_at: Optional[str] = Field(default=None)
+
 
 class SentimentSourceBreakdownEntry(BaseModel):
     source: str
     positive: int
     negative: int
     neutral: int
+
 
 class SentimentSourceBreakdownResponse(BaseModel):
     symbol: str

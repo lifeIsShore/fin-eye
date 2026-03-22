@@ -307,14 +307,20 @@ async def me(
 @router.patch(
     "/me",
     response_model=UserResponse,
-    summary="Update display name",
+    summary="Update display name and preferences",
 )
 async def update_profile(
     body: UpdateProfileRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    return await update_user_name(db, current_user, name=body.name)
+    return await update_user_name(
+        db,
+        current_user,
+        name=body.name,
+        default_symbol=body.default_symbol,
+        risk_profile=body.risk_profile,
+    )
 
 
 # ─── Change password ──────────────────────────────────────────────────────────

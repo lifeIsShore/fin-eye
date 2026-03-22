@@ -7,12 +7,12 @@ import { useRef } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import {
     Settings, CreditCard, LogOut, ChevronDown, User,
-    Activity, BarChart2, FlaskConical, Menu, X,
-    LayoutDashboard, Globe, Newspaper, Users, Zap,
+    Activity, BarChart2, FlaskConical, Menu, X, Zap,
+    LayoutDashboard, Globe, Newspaper, Users,
     TrendingDown, Calendar, PieChart, Landmark, BarChart,
     Shield, FlaskConical as Backtest, Briefcase, Bell,
     ShoppingBag, BookOpen, MessageCircle, Eye, ChevronLeft,
-    ChevronRight,
+    ChevronRight, LayoutList,
 } from "lucide-react";
 
 // ── Sidebar nav structure ─────────────────────────────────────────────────────
@@ -32,45 +32,47 @@ const SIDEBAR_SECTIONS: NavSection[] = [
     {
         title: "Core Analysis",
         items: [
-            { href: "/",               label: "Dashboard",    icon: <LayoutDashboard className="h-4 w-4" /> },
-            { href: "/macro",          label: "Macro",        icon: <Globe className="h-4 w-4" /> },
-            { href: "/news-sentiment", label: "Sentiment",    icon: <Newspaper className="h-4 w-4" /> },
+            { href: "/", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+            { href: "/macro", label: "Macro", icon: <Globe className="h-4 w-4" /> },
+            { href: "/news-sentiment", label: "Sentiment", icon: <Newspaper className="h-4 w-4" /> },
         ],
     },
     {
         title: "Deep Signals",
         items: [
-            { href: "/sentiment",      label: "Retail Mood",     icon: <Users className="h-4 w-4" /> },
-            { href: "/sentiment-adv",  label: "Adv. Sentiment",  icon: <Zap className="h-4 w-4" /> },
-            { href: "/options",        label: "Options Flow",    icon: <Activity className="h-4 w-4" /> },
-            { href: "/insiders",       label: "Insider Activity",icon: <Eye className="h-4 w-4" /> },
-            { href: "/shorts",         label: "Short Interest",  icon: <TrendingDown className="h-4 w-4" /> },
-            { href: "/earnings",       label: "Earnings",        icon: <Calendar className="h-4 w-4" /> },
+            { href: "/sentiment", label: "Retail Mood", icon: <Users className="h-4 w-4" /> },
+            { href: "/sentiment-adv", label: "Adv. Sentiment", icon: <Zap className="h-4 w-4" /> },
+            { href: "/options", label: "Options Flow", icon: <Activity className="h-4 w-4" /> },
+            { href: "/insiders", label: "Insider Activity", icon: <Eye className="h-4 w-4" /> },
+            { href: "/shorts", label: "Short Interest", icon: <TrendingDown className="h-4 w-4" /> },
+            { href: "/earnings", label: "Earnings", icon: <Calendar className="h-4 w-4" /> },
         ],
     },
     {
         title: "Market Context",
         items: [
-            { href: "/sectors",        label: "Sectors",         icon: <PieChart className="h-4 w-4" /> },
-            { href: "/fed-policy",     label: "Fed Policy",      icon: <Landmark className="h-4 w-4" /> },
-            { href: "/indicators",     label: "Indicators",      icon: <BarChart className="h-4 w-4" /> },
-            { href: "/hedge",          label: "Hedge",           icon: <Shield className="h-4 w-4" /> },
+            { href: "/explore", label: "Explorer", icon: <Zap className="h-4 w-4" /> },
+            { href: "/sectors", label: "Sectors", icon: <PieChart className="h-4 w-4" /> },
+            { href: "/fed-policy", label: "Fed Policy", icon: <Landmark className="h-4 w-4" /> },
+            { href: "/indicators", label: "Indicators", icon: <BarChart className="h-4 w-4" /> },
+            { href: "/hedge", label: "Hedge", icon: <Shield className="h-4 w-4" /> },
         ],
     },
     {
         title: "Tools",
         items: [
-            { href: "/backtesting",    label: "Backtesting",     icon: <Backtest className="h-4 w-4" /> },
-            { href: "/portfolios",     label: "Portfolio",       icon: <Briefcase className="h-4 w-4" /> },
-            { href: "/alerts",         label: "Alerts",          icon: <Bell className="h-4 w-4" /> },
-            { href: "/showcase",       label: "Pro Tools",       icon: <ShoppingBag className="h-4 w-4" /> },
+            { href: "/watchlist-overview", label: "Watchlist Overview", icon: <LayoutList className="h-4 w-4" /> },
+            { href: "/backtesting", label: "Backtesting", icon: <Backtest className="h-4 w-4" /> },
+            { href: "/portfolios", label: "Portfolio", icon: <Briefcase className="h-4 w-4" /> },
+            { href: "/alerts", label: "Alerts", icon: <Bell className="h-4 w-4" /> },
+            { href: "/showcase", label: "Pro Tools", icon: <ShoppingBag className="h-4 w-4" /> },
         ],
     },
     {
         title: "Learn",
         items: [
-            { href: "/learn",          label: "Learn Hub",       icon: <BookOpen className="h-4 w-4" /> },
-            { href: "/community",      label: "Community",       icon: <MessageCircle className="h-4 w-4" /> },
+            { href: "/learn", label: "Learn Hub", icon: <BookOpen className="h-4 w-4" /> },
+            { href: "/community", label: "Community", icon: <MessageCircle className="h-4 w-4" /> },
         ],
     },
 ];
@@ -131,6 +133,10 @@ export function UserMenu() {
                                 className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors">
                                 <Activity className="h-4 w-4 text-slate-400" /> Ops Dashboard
                             </Link>
+                            <Link href="/admin/gas" onClick={() => setOpen(false)}
+                                className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors">
+                                <Zap className="h-4 w-4 text-sky-400" /> GAS Precompute
+                            </Link>
                             <Link href="/admin/analytics" onClick={() => setOpen(false)}
                                 className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors">
                                 <BarChart2 className="h-4 w-4 text-indigo-400" /> Analytics
@@ -182,9 +188,8 @@ export function Sidebar() {
 
     return (
         <aside
-            className={`hidden lg:flex flex-col flex-shrink-0 border-r border-slate-800 bg-slate-950 transition-all duration-300 ${
-                collapsed ? "w-14" : "w-56"
-            }`}
+            className={`hidden lg:flex flex-col flex-shrink-0 border-r border-slate-800 bg-slate-950 transition-all duration-300 ${collapsed ? "w-14" : "w-56"
+                }`}
             style={{ minHeight: "100vh" }}
         >
             {/* Logo area */}
@@ -226,11 +231,10 @@ export function Sidebar() {
                                         <Link
                                             href={item.href}
                                             title={collapsed ? item.label : undefined}
-                                            className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
-                                                active
-                                                    ? "bg-slate-800 text-sky-400 border-l-2 border-sky-500"
-                                                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-100 border-l-2 border-transparent"
-                                            } ${collapsed ? "justify-center px-0" : ""}`}
+                                            className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors ${active
+                                                ? "bg-slate-800 text-sky-400 border-l-2 border-sky-500"
+                                                : "text-slate-400 hover:bg-slate-900 hover:text-slate-100 border-l-2 border-transparent"
+                                                } ${collapsed ? "justify-center px-0" : ""}`}
                                         >
                                             <span className={`flex-shrink-0 ${active ? "text-sky-400" : "text-slate-500"}`}>
                                                 {item.icon}
@@ -250,9 +254,8 @@ export function Sidebar() {
                 <Link
                     href="/settings"
                     title={collapsed ? "Settings" : undefined}
-                    className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-slate-400 hover:bg-slate-900 hover:text-slate-100 transition-colors ${
-                        collapsed ? "justify-center px-0" : ""
-                    }`}
+                    className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-slate-400 hover:bg-slate-900 hover:text-slate-100 transition-colors ${collapsed ? "justify-center px-0" : ""
+                        }`}
                 >
                     <Settings className="h-4 w-4 flex-shrink-0 text-slate-500" />
                     {!collapsed && <span>Settings</span>}
@@ -285,9 +288,8 @@ export function MobileNav() {
                     onClick={() => setOpen(false)} />
             )}
 
-            <div className={`fixed top-0 left-0 z-50 h-full w-72 bg-slate-950 border-r border-slate-800 flex flex-col transition-transform duration-300 lg:hidden ${
-                open ? "translate-x-0" : "-translate-x-full"
-            }`}>
+            <div className={`fixed top-0 left-0 z-50 h-full w-72 bg-slate-950 border-r border-slate-800 flex flex-col transition-transform duration-300 lg:hidden ${open ? "translate-x-0" : "-translate-x-full"
+                }`}>
                 <div className="flex items-center justify-between px-4 py-4 border-b border-slate-800">
                     <div>
                         <span className="text-base font-bold text-slate-100">Fin-Eye</span>
@@ -311,9 +313,8 @@ export function MobileNav() {
                                     return (
                                         <li key={item.href}>
                                             <Link href={item.href}
-                                                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                                                    active ? "bg-slate-800 text-sky-400" : "text-slate-300 hover:bg-slate-800/60 hover:text-slate-100"
-                                                }`}>
+                                                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${active ? "bg-slate-800 text-sky-400" : "text-slate-300 hover:bg-slate-800/60 hover:text-slate-100"
+                                                    }`}>
                                                 <span className={active ? "text-sky-400" : "text-slate-500"}>
                                                     {item.icon}
                                                 </span>

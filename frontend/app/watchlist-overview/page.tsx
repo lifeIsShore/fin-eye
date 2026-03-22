@@ -15,10 +15,12 @@ import React, { useState, useMemo } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpDown, TrendingUp, TrendingDown, Minus, RefreshCw } from "lucide-react";
+import { ArrowUpDown, TrendingUp, TrendingDown, Minus, RefreshCw, GitCompare, X as XIcon } from "lucide-react";
 import { fetchWatchlist } from "../../lib/api";
 import { useSymbol } from "../../lib/symbolContext";
 import type { GasBatchEntry } from "../../components/WhatChangedToday";
+import GasSparkline from "../../components/GasSparkline";
+import GradeBadge from "../../components/GradeBadge";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -84,6 +86,130 @@ function ComponentBar({ label, value }: { label: string; value: number | undefin
 // ── Sort types ────────────────────────────────────────────────────────────────
 
 type SortMode = "gas_desc" | "gas_asc" | "alpha" | "delta_desc";
+type GradeFilter = "all" | "A+" | "A_above" | "B_above" | "tradeable";
+
+const GRADE_ORDER = ["A+", "A", "B", "C", "D", "F"];
+
+function gradeRank(g: string | null | undefined): number {
+  if (!g) return 99;
+  return GRADE_ORDER.indexOf(g) === -1 ? 99 : GRADE_ORDER.indexOf(g);
+}
+
+function passesGradeFilter(entry: GasBatchEntry, filter: GradeFilter): boolean {
+  if (filter === "all") return true;
+  const g = entry.signal_grade;
+  if (!g) return filter === "all";
+  if (filter === "A+")      return g === "A+";
+  if (filter === "A_above") return gradeRank(g) <= 1;  // A+ or A
+  if (filter === "B_above") return gradeRank(g) <= 2;  // A+, A, B
+  if (filter === "tradeable") return entry.signal_tradeable === true;
+  return true;
+}
+
+const GRADE_FILTER_LABELS: Record<GradeFilter, string> = {
+  all:       "All",
+  A_above:   "A & above",
+  "A+":      "A+ only",
+  B_above:   "B & above",
+  tradeable: "Tradeable",
+};
+
+// -- Comparison Panel (Sprint 19) --
+
+function ComparisonPanel({
+  a,
+  b,
+  onClose,
+}: {
+  a: GasBatchEntry;
+  b: GasBatchEntry;
+  onClose: () => void;
+}) {
+  const rows = [
+    { label: "GAS Score",  key: "gas_score",  fmt: (v: any) => typeof v === "number" ? v.toFixed(0) : "--" },
+    { label: "Delta",      key: "delta",       fmt: (v: any) => v != null ? `${v >= 0 ? "+" : ""}${v.toFixed(1)}` : "--" },
+    { label: "Regime",     key: "regime",      fmt: (v: any) => v ?? "--" },
+    { label: "Signal",     key: "weather_label", fmt: (v: any) => v ?? "--" },
+    { label: "Technical",  key: "tech",        fmt: (v: any) => typeof v === "number" ? v.toFixed(0) : "--" },
+    { label: "Sentiment",  key: "sent",        fmt: (v: any) => typeof v === "number" ? v.toFixed(0) : "--" },
+    { label: "Macro",      key: "macro",       fmt: (v: any) => typeof v === "number" ? v.toFixed(0) : "--" },
+  ];
+
+  const getVal = (entry: GasBatchEntry, key: string): any => {
+    if (key === "tech")  return entry.component_scores?.technical;
+    if (key === "sent")  return entry.component_scores?.sentiment;
+    if (key === "macro") return entry.component_scores?.macro;
+    return (entry as any)[key];
+  };
+
+  const numColor = (v: number | null | undefined) =>
+    v == null ? "text-slate-500" : v >= 65 ? "text-emerald-400" : v >= 40 ? "text-amber-400" : "text-rose-400";
+
+  return (
+    <div className="rounded-2xl border border-sky-800/40 bg-sky-950/20 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <GitCompare className="h-4 w-4 text-sky-400" />
+          <h2 className="text-sm font-bold text-slate-100">
+            <span className="text-sky-300 font-mono">{a.symbol}</span>
+            {" vs "}
+            <span className="text-violet-300 font-mono">{b.symbol}</span>
+          </h2>
+        </div>
+        <button onClick={onClose} className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors">
+          <XIcon className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-slate-800">
+              <th className="text-left py-2 pr-4 text-slate-500 font-medium">Metric</th>
+              <th className="text-center py-2 px-3 text-sky-300 font-mono font-bold">{a.symbol}</th>
+              <th className="text-center py-2 px-3 text-violet-300 font-mono font-bold">{b.symbol}</th>
+              <th className="text-left py-2 pl-3 text-slate-500 font-medium">Edge</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/50">
+            {rows.map(({ label, key, fmt }) => {
+              const va = getVal(a, key);
+              const vb = getVal(b, key);
+              const numA = typeof va === "number" ? va : null;
+              const numB = typeof vb === "number" ? vb : null;
+              const edge = numA !== null && numB !== null
+                ? numA > numB + 2 ? a.symbol : numB > numA + 2 ? b.symbol : "Tied"
+                : null;
+              return (
+                <tr key={key} className="hover:bg-slate-800/20">
+                  <td className="py-2 pr-4 text-slate-400">{label}</td>
+                  <td className={`py-2 px-3 text-center font-mono font-semibold ${numA !== null ? numColor(numA) : "text-slate-300"}`}>{fmt(va)}</td>
+                  <td className={`py-2 px-3 text-center font-mono font-semibold ${numB !== null ? numColor(numB) : "text-slate-300"}`}>{fmt(vb)}</td>
+                  <td className="py-2 pl-3">
+                    {edge === a.symbol && <span className="text-[10px] font-bold text-sky-400">{a.symbol} ↑</span>}
+                    {edge === b.symbol && <span className="text-[10px] font-bold text-violet-400">{b.symbol} ↑</span>}
+                    {edge === "Tied"    && <span className="text-[10px] text-slate-600">≈</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        {[a, b].map((entry) => (
+          <div key={entry.symbol} className="space-y-1">
+            <p className="text-[10px] font-mono text-slate-400">{entry.symbol} &mdash; 7-day GAS</p>
+            <div onClick={(e) => e.stopPropagation()}>
+              <GasSparkline symbol={entry.symbol} limit={7} width={200} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const SORT_LABELS: Record<SortMode, string> = {
   gas_desc:   "GAS ↓",
@@ -97,7 +223,11 @@ const SORT_LABELS: Record<SortMode, string> = {
 export default function WatchlistOverviewPage() {
   const router = useRouter();
   const { setSymbol } = useSymbol();
-  const [sort, setSort] = useState<SortMode>("gas_desc");
+  const [sort, setSort]             = useState<SortMode>("gas_desc");
+  const [gradeFilter, setGradeFilter]   = useState<GradeFilter>("all");
+  const [compareMode, setCompareMode]   = useState(false);
+  const [compareA, setCompareA]         = useState<GasBatchEntry | null>(null);
+  const [compareB, setCompareB]         = useState<GasBatchEntry | null>(null);
 
   // Load watchlist symbols
   const { data: watchlist, isLoading: wlLoading } = useSWR(
@@ -128,20 +258,23 @@ export default function WatchlistOverviewPage() {
     return m;
   }, [snapshots]);
 
-  // Sort
+  // Sort + filter
   const sorted = useMemo(() => {
-    const list = symbols.map((sym) => snapMap[sym] ?? null);
+    const list = symbols
+      .map((sym) => snapMap[sym] ?? null)
+      .filter((entry): entry is GasBatchEntry =>
+        entry !== null && passesGradeFilter(entry, gradeFilter)
+      );
     return [...list].sort((a, b) => {
-      if (!a && !b) return 0;
-      if (!a) return 1;
-      if (!b) return -1;
-      if (sort === "gas_desc")  return b.gas_score - a.gas_score;
-      if (sort === "gas_asc")   return a.gas_score - b.gas_score;
-      if (sort === "alpha")     return a.symbol.localeCompare(b.symbol);
+      if (sort === "gas_desc")   return b.gas_score - a.gas_score;
+      if (sort === "gas_asc")    return a.gas_score - b.gas_score;
+      if (sort === "alpha")      return a.symbol.localeCompare(b.symbol);
       if (sort === "delta_desc") return Math.abs(b.delta ?? 0) - Math.abs(a.delta ?? 0);
       return 0;
     });
-  }, [symbols, snapMap, sort]);
+  }, [symbols, snapMap, sort, gradeFilter]);
+
+  const hiddenCount = symbols.length - sorted.length;
 
   const isLoading = wlLoading || snapLoading;
 
@@ -165,7 +298,24 @@ export default function WatchlistOverviewPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+          {/* Grade filter */}
+          <div className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 p-0.5">
+            {(Object.keys(GRADE_FILTER_LABELS) as GradeFilter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setGradeFilter(f)}
+                className={`px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
+                  gradeFilter === f
+                    ? "bg-slate-700 text-slate-100"
+                    : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                {GRADE_FILTER_LABELS[f]}
+              </button>
+            ))}
+          </div>
+
           {/* Sort selector */}
           <div className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 p-0.5">
             {(Object.keys(SORT_LABELS) as SortMode[]).map((s) => (
@@ -183,6 +333,23 @@ export default function WatchlistOverviewPage() {
             ))}
           </div>
 
+          {/* Compare mode toggle */}
+          <button
+            onClick={() => {
+              setCompareMode(m => !m);
+              setCompareA(null);
+              setCompareB(null);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              compareMode
+                ? "border-sky-600 bg-sky-950/40 text-sky-400"
+                : "border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <GitCompare className="h-3.5 w-3.5" />
+            {compareMode ? "Exit Compare" : "Compare"}
+          </button>
+
           {/* Refresh */}
           <button
             onClick={() => refreshSnapshots()}
@@ -193,6 +360,43 @@ export default function WatchlistOverviewPage() {
           </button>
         </div>
       </div>
+
+      {/* Grade filter summary */}
+      {gradeFilter !== "all" && !isLoading && (
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span>Showing <span className="font-semibold text-slate-300">{sorted.length}</span> of {symbols.length} symbols</span>
+          {hiddenCount > 0 && (
+            <span>({hiddenCount} hidden by grade filter)</span>
+          )}
+          <button
+            onClick={() => setGradeFilter("all")}
+            className="text-sky-500 hover:text-sky-400 transition-colors ml-1"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
+
+      {/* Compare instruction banner */}
+      {compareMode && !(compareA && compareB) && (
+        <div className="rounded-xl border border-sky-800/40 bg-sky-950/15 px-4 py-3 text-sm text-sky-300 flex items-center gap-3">
+          <GitCompare className="h-4 w-4 flex-shrink-0" />
+          <span>
+            {!compareA
+              ? "Click a symbol card to select the first symbol to compare."
+              : `${compareA.symbol} selected — now click a second symbol to compare.`}
+          </span>
+        </div>
+      )}
+
+      {/* Comparison Panel */}
+      {compareMode && compareA && compareB && (
+        <ComparisonPanel
+          a={compareA}
+          b={compareB}
+          onClose={() => { setCompareA(null); setCompareB(null); }}
+        />
+      )}
 
       {/* Empty watchlist */}
       {!isLoading && symbols.length === 0 && (
@@ -264,12 +468,39 @@ export default function WatchlistOverviewPage() {
               );
             }
 
+            const isSelectedA  = compareA?.symbol === sym;
+            const isSelectedB  = compareB?.symbol === sym;
+            const isHighlighted = isSelectedA || isSelectedB;
+
+            const handleCardClick = () => {
+              if (!compareMode) { handleSelect(sym); return; }
+              if (!compareA) { setCompareA(entry); return; }
+              if (!compareB && entry.symbol !== compareA.symbol) { setCompareB(entry); return; }
+              // clicking same as A resets A
+              if (entry.symbol === compareA.symbol) { setCompareA(compareB); setCompareB(null); return; }
+              // clicking same as B resets B
+              if (entry.symbol === compareB?.symbol) { setCompareB(null); return; }
+            };
+
             return (
               <button
                 key={sym}
-                onClick={() => handleSelect(sym)}
-                className="rounded-2xl border border-slate-800 hover:border-slate-600 bg-slate-900/40 hover:bg-slate-900/70 p-4 text-left transition-all space-y-3 group"
+                onClick={handleCardClick}
+                className={`rounded-2xl border ${
+                  isSelectedA ? "border-sky-500 ring-1 ring-sky-500/40" :
+                  isSelectedB ? "border-violet-500 ring-1 ring-violet-500/40" :
+                  compareMode ? "border-slate-700 hover:border-sky-700" :
+                  "border-slate-800 hover:border-slate-600"
+                } bg-slate-900/40 hover:bg-slate-900/70 p-4 text-left transition-all space-y-3 group relative`
               >
+                {/* Compare badge */}
+                {isSelectedA && (
+                  <span className="absolute top-2 right-2 text-[9px] font-bold bg-sky-600 text-white rounded px-1.5 py-0.5">A</span>
+                )}
+                {isSelectedB && (
+                  <span className="absolute top-2 right-2 text-[9px] font-bold bg-violet-600 text-white rounded px-1.5 py-0.5">B</span>
+                )}
+
                 {/* Top row: symbol + GAS score + delta */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -277,6 +508,12 @@ export default function WatchlistOverviewPage() {
                       <span className="text-sm font-black text-slate-100 font-mono">
                         {sym}
                       </span>
+                      <GradeBadge
+                        grade={entry.signal_grade}
+                        score={entry.signal_grade_score}
+                        tradeable={entry.signal_tradeable}
+                        size="xs"
+                      />
                       <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${regimeBadgeClass(entry.regime)}`}>
                         {entry.regime}
                       </span>
@@ -309,6 +546,11 @@ export default function WatchlistOverviewPage() {
                   <ComponentBar label="Tech"  value={entry.component_scores?.technical} />
                   <ComponentBar label="Sent"  value={entry.component_scores?.sentiment} />
                   <ComponentBar label="Macro" value={entry.component_scores?.macro} />
+                </div>
+
+                {/* 7-day GAS sparkline */}
+                <div onClick={(e) => e.stopPropagation()}>
+                  <GasSparkline symbol={sym} limit={7} width={220} />
                 </div>
 
                 {/* Footer */}

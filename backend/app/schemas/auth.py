@@ -49,6 +49,8 @@ class RefreshRequest(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     name: Optional[str] = Field(default=None, max_length=128)
+    default_symbol: Optional[str] = Field(default=None, max_length=20)  # Sprint 23
+    risk_profile: Optional[str] = Field(default=None, max_length=32)    # Sprint 24
 
 
 # ── Change password ─────────────────────────────────────────────────────────────
@@ -139,6 +141,8 @@ class UserResponse(BaseModel):
     is_admin: bool
     subscription_tier: str
     totp_enabled: bool = False
+    default_symbol: Optional[str] = None   # Sprint 23
+    risk_profile: Optional[str] = None       # Sprint 24
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,6 +77,12 @@ async def get_news_sentiment_timeseries(
             detail=f"No news sentiment data available for symbol {symbol}",
         )
 
+    # Sprint 11 (UX-TRUST-01) — derive fetched_at from most-recent article timestamp
+    fetched_at: Optional[str] = None
+    if article_rows:
+        most_recent = max(article_rows, key=lambda r: r.published_at)
+        fetched_at = most_recent.published_at.isoformat() + "Z"
+
     return SentimentTimeseriesResponse(
         symbol=symbol,
         series=series,
@@ -84,6 +90,7 @@ async def get_news_sentiment_timeseries(
         sentiment_7d=window_avgs.get("7d"),
         sentiment_30d=window_avgs.get("30d"),
         articles=articles,
+        fetched_at=fetched_at,
     )
 
 

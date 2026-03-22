@@ -20,6 +20,8 @@ from app.db.database import get_db
 from app.models.user import User
 from app.schemas.alert_models import (
     AlertCreate,
+    AlertHistoryListResponse,
+    AlertHistoryResponse,
     AlertListResponse,
     AlertResponse,
     TriggeredAlertResponse,
@@ -29,6 +31,7 @@ from app.services.alert_service import (
     build_trigger_message,
     create_alert,
     delete_alert,
+    get_alert_history,
     get_triggered_alerts,
     list_alerts,
 )
@@ -81,6 +84,35 @@ async def remove(
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found.")
     await db.commit()
+
+
+@router.get(
+    "/history",
+    response_model=AlertHistoryListResponse,
+    summary="Last 50 triggered alerts (fired + dismissed)",
+)
+async def history(
+    limit: int = 50,
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: AsyncSession = Depends(get_db),
+) -> AlertHistoryListResponse:
+    alerts = await get_alert_history(db, current_user, limit=min(limit, 100))
+    items = [
+        AlertHistoryResponse(
+            id=a.id,
+            symbol=a.symbol,
+            alert_type=a.alert_type,
+            threshold=a.threshold,
+            delivery_channel=a.delivery_channel,
+            triggered_value=a.triggered_value,
+            triggered_at=a.triggered_at,
+            is_active=a.is_active,
+            created_at=a.created_at,
+            message=build_trigger_message(a),
+        )
+        for a in alerts
+    ]
+    return AlertHistoryListResponse(history=items, total=len(items))
 
 
 @router.get(

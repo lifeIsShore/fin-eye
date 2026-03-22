@@ -31,6 +31,16 @@ import ScoreExplainPanel, {
   type ExplainPayload,
   type SubComponent,
 } from "../components/ScoreExplainPanel";
+import WhatChangedToday from "../components/WhatChangedToday";
+import FreshnessIndicator from "../components/FreshnessIndicator";
+import CrossAssetRow from "../components/CrossAssetRow";
+import EarningsCalendarStrip from "../components/EarningsCalendarStrip";
+import DailyMarketBrief from "../components/DailyMarketBrief";
+import PriceTape from "../components/PriceTape";
+import GradeBadge from "../components/GradeBadge";
+import { useRecentSymbols } from "../hooks/useRecentSymbols";
+import { fetchWatchlist } from "../lib/api";
+import { fetchModelDetails, type ModelDetailsResponse } from "../lib/api_model_details";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -182,6 +192,151 @@ function buildMlOutput(signals: TechnicalSignalDto[], techScore: number): string
     );
   }
   return parts.join(" ");
+}
+
+// ─── SHAP "What drove this?" panel ──────────────────────────────────────────────────────────────────────────────
+
+/** Plain-English descriptions for the most common ML feature names */
+const FEATURE_DESCRIPTIONS: Record<string, string> = {
+  rsi_14:          "RSI — momentum oscillator. Below 30 = oversold (bullish potential), above 70 = overbought.",
+  macd_hist:       "MACD histogram — difference between the signal line. Positive = bullish momentum building.",
+  bb_pb:           "Bollinger Band %B — where price sits in the band. Near 0 = lower band, near 1 = upper band.",
+  sma_cross_10_20: "10-period SMA vs 20-period SMA. Positive = short-term trend above medium-term.",
+  atr_pct:         "ATR as % of price — current volatility level. Higher = larger expected swings.",
+  volume_ratio:    "Volume vs 20-day average. Above 1 = unusual activity, often confirms price moves.",
+  ret_1:           "Yesterday's return — recent price momentum (1 bar).",
+  mom_10:          "10-period momentum — price change % over the last 10 bars.",
+  mom_20:          "20-period momentum — price change % over the last 20 bars.",
+  high_low_pct:    "Intraday range (high-low)/close — measures conviction vs indecision.",
+  close_position:  "Where price closed in the day's range. Near 1 = strong close (bullish sign).",
+  gap_pct:         "Overnight gap — how much the open differed from yesterday's close.",
+  sma_slope_20:    "Slope of the 20-day moving average — rising/flat/falling trend.",
+  ret_10_vs_ret_20:"Whether 10-day and 20-day momentum agree in direction.",
+};
+
+function ShapPanel({ modelData, activeTf, signals }: {
+  modelData: ModelDetailsResponse | undefined;
+  activeTf:  string;
+  signals:   { timeframe: string; sharpe_weight?: number | null; direction: string }[];
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  // Pick best timeframe: prefer activeTf if trained, else highest-Sharpe available
+  const bestTf = React.useMemo(() => {
+    if (modelData?.timeframes?.[activeTf]) return activeTf;
+    if (!signals.length) return "1d";
+    const sorted = [...signals].sort((a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0));
+    return sorted[0].timeframe;
+  }, [modelData, activeTf, signals]);
+
+  const detail = modelData?.timeframes?.[bestTf];
+  const shap: Record<string, number> | null = (detail as any)?.shap_importance ?? null;
+  const features = detail?.features_used ?? [];
+
+  // Build top-5 SHAP bars (or feature list if no SHAP)
+  const rows = React.useMemo(() => {
+    if (!features.length) return [];
+    if (shap) {
+      return [...features]
+        .sort((a, b) => (shap[b.name] ?? 0) - (shap[a.name] ?? 0))
+        .slice(0, 5)
+        .map((f) => ({
+          name:        f.name,
+          value:       shap[f.name] ?? 0,
+          description: FEATURE_DESCRIPTIONS[f.name] ?? f.description,
+        }));
+    }
+    // No SHAP yet — show first 5 features with placeholder
+    return features.slice(0, 5).map((f) => ({
+      name:        f.name,
+      value:       null as number | null,
+      description: FEATURE_DESCRIPTIONS[f.name] ?? f.description,
+    }));
+  }, [features, shap]);
+
+  if (!detail || rows.length === 0) return null;
+
+  const maxVal = shap ? Math.max(...rows.map((r) => r.value as number), 0.001) : 1;
+  const hasSHAP = shap !== null;
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-800/40 transition-colors group"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm">🔬</span>
+          <span className="text-xs font-semibold text-slate-400 group-hover:text-slate-200 transition-colors">
+            What drove this signal?
+          </span>
+          <span className="text-[10px] text-slate-600 font-mono">{bestTf}</span>
+          {!hasSHAP && (
+            <span className="text-[9px] text-amber-500 bg-amber-950/30 border border-amber-800/40 rounded-full px-1.5 py-0.5">No SHAP yet</span>
+          )}
+        </div>
+        <svg
+          className={`h-3.5 w-3.5 text-slate-600 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800 px-4 py-4 space-y-3">
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            {hasSHAP
+              ? `Top 5 features by mean |SHAP value| — how much each shifted the ${bestTf} model's prediction on validation data.`
+              : `Features the ${bestTf} model was trained on. SHAP importance will appear after the next retrain with a tree-based winner.`
+            }
+          </p>
+
+          <div className="space-y-3">
+            {rows.map((row) => {
+              const pct = hasSHAP && row.value != null
+                ? Math.round((row.value / maxVal) * 100)
+                : 0;
+              const barColor =
+                pct >= 70 ? "bg-violet-500" :
+                pct >= 40 ? "bg-sky-500" :
+                "bg-slate-600";
+
+              return (
+                <div key={row.name} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-mono font-bold text-sky-400 truncate">{row.name}</span>
+                    {hasSHAP && row.value != null && (
+                      <span className="text-[10px] font-mono text-violet-400 tabular-nums flex-shrink-0">
+                        {row.value.toFixed(4)}
+                      </span>
+                    )}
+                  </div>
+                  {hasSHAP && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-[9px] text-slate-600 tabular-nums w-7 text-right">{pct}%</span>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-500 leading-relaxed">{row.description}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="text-[9px] text-slate-700 border-t border-slate-800/50 pt-2">
+            SHAP = SHapley Additive exPlanations. Higher value = stronger influence on this prediction.
+            Source: {bestTf} model · {detail.winner_model} winner.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── "Not Trained" empty state ───────────────────────────────────────────────
@@ -358,8 +513,15 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
 // ─── Page Component ──────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { symbol: activeSymbol, setSymbol: setActiveSymbol } = useSymbol();
+  const { symbol: activeSymbol, setSymbol: setActiveSymbol, seedDefaultOnce } = useSymbol();
   const { user } = useAuth();
+
+  // Apply user's default_symbol on first load if no localStorage symbol is set
+  React.useEffect(() => {
+    if (user?.default_symbol) {
+      seedDefaultOnce(user.default_symbol);
+    }
+  }, [user?.default_symbol, seedDefaultOnce]);
   const { toast } = useToast();
   const isAdmin = user?.is_admin === true;
 
@@ -378,11 +540,38 @@ export default function DashboardPage() {
   const [explainPayload, setExplainPayload] = useState<ExplainPayload | null>(null);
   const closeExplain = useCallback(() => setExplainPayload(null), []);
 
+  // Track previous GAS score to detect meaningful changes
+  const prevGasScoreRef = React.useRef<number | null>(null);
+  const [gasChangeBanner, setGasChangeBanner] = React.useState<{
+    delta: number;
+    prev: number;
+    curr: number;
+    symbol: string;
+  } | null>(null);
+
   const { data: gasSnapshot, error: gasError, isLoading: gasLoading } = useSWR(
     `gas-snapshot-${activeSymbol}`,
     () => fetchGasSnapshot(activeSymbol),
-    { refreshInterval: 60_000, shouldRetryOnError: false, keepPreviousData: true },
+    {
+      refreshInterval: 60_000,
+      shouldRetryOnError: false,
+      keepPreviousData: true,
+      onSuccess: (data) => {
+        const curr = data?.gas_score;
+        const prev = prevGasScoreRef.current;
+        if (curr != null && prev != null && Math.abs(curr - prev) >= 5) {
+          setGasChangeBanner({ delta: curr - prev, prev, curr, symbol: activeSymbol });
+        }
+        if (curr != null) prevGasScoreRef.current = curr;
+      },
+    },
   );
+
+  // Reset ref and banner when symbol changes
+  React.useEffect(() => {
+    prevGasScoreRef.current = null;
+    setGasChangeBanner(null);
+  }, [activeSymbol]);
 
   const { data: techData, error: techError, mutate: mutateTech } = useSWR(
     `tech-${activeSymbol}`,
@@ -409,6 +598,28 @@ export default function DashboardPage() {
     () => fetchLatestPrice(activeSymbol),
     { refreshInterval: 300_000, shouldRetryOnError: false, keepPreviousData: true },
   );
+
+  const { data: watchlistData } = useSWR(
+    "watchlist",
+    fetchWatchlist,
+    { refreshInterval: 5 * 60_000, shouldRetryOnError: false },
+  );
+  const watchlistSymbols = (watchlistData ?? []).map((w) => w.symbol);
+  const { recent: recentSymbols } = useRecentSymbols(activeSymbol);
+
+  // Model details for SHAP panel — Sprint 24
+  const { data: modelData } = useSWR(
+    signals.length > 0 ? `model-details-shap-${activeSymbol}` : null,
+    () => fetchModelDetails(activeSymbol),
+    { revalidateOnFocus: false, shouldRetryOnError: false, keepPreviousData: true },
+  );
+
+  // Best active timeframe for SHAP (1d default, or highest-Sharpe signal)
+  const shapActiveTf = React.useMemo(() => {
+    if (!signals.length) return "1d";
+    const sorted = [...signals].sort((a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0));
+    return sorted[0].timeframe;
+  }, [signals]);
 
   void techError; // used implicitly via keepPreviousData
 
@@ -498,19 +709,93 @@ export default function DashboardPage() {
       <ScoreExplainPanel payload={explainPayload} onClose={closeExplain} />
 
       <div className="flex gap-6">
-        <aside className="hidden xl:block w-48 flex-shrink-0">
+        <aside className="hidden xl:flex xl:flex-col xl:w-56 flex-shrink-0 space-y-4">
           <WatchlistWidget activeSymbol={activeSymbol} onSelectSymbol={setActiveSymbol} />
+          <WhatChangedToday
+            symbols={watchlistSymbols}
+            onSelectSymbol={setActiveSymbol}
+            activeSymbol={activeSymbol}
+          />
+          {watchlistSymbols.length > 0 && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 px-1">
+                Upcoming Earnings
+              </p>
+              <EarningsCalendarStrip symbols={watchlistSymbols} />
+            </div>
+          )}
         </aside>
 
         <div className="min-w-0 flex-1 space-y-6">
+          {/* Price Tape -- Sprint 20 */}
+          <PriceTape activeSymbol={activeSymbol} onSelectSymbol={setActiveSymbol} />
+
           <header className="flex flex-col gap-1 border-b border-slate-800 pb-5">
-            <h1 className="text-3xl font-black tracking-tight text-slate-100">{activeSymbol} Intelligence</h1>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-3xl font-black tracking-tight text-slate-100">{activeSymbol} Intelligence</h1>
+              <GradeBadge
+                grade={gasSnapshot?.signal_grade}
+                score={gasSnapshot?.signal_grade_score}
+                tradeable={gasSnapshot?.signal_tradeable}
+                size="md"
+                showTradeable
+              />
+            </div>
             <p className="text-sm text-slate-400">Real-time GAS, Regime, and Multi-Timeframe layers.</p>
-            <div className="mt-0.5"><SnapshotMeta snapshot={gasSnapshot} /></div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-4">
+              <SnapshotMeta snapshot={gasSnapshot} />
+              {macroData && (
+                <FreshnessIndicator
+                  updatedAt={macroData?.fetched_at as string | undefined}
+                  label="Macro"
+                  freshMinutes={60}
+                  agingMinutes={120}
+                />
+              )}
+              {sentData && (
+                <FreshnessIndicator
+                  updatedAt={sentData.fetched_at ?? undefined}
+                  label="Sentiment"
+                  freshMinutes={60}
+                  agingMinutes={240}
+                />
+              )}
+            </div>
           </header>
 
-          <div className="xl:hidden">
+          {/* Recent symbols quick-switch — Sprint 21 */}
+          {recentSymbols.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-slate-600 uppercase tracking-wider font-semibold flex-shrink-0">
+                Recent
+              </span>
+              {recentSymbols.map((sym) => (
+                <button
+                  key={sym}
+                  onClick={() => setActiveSymbol(sym)}
+                  className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-400 hover:text-slate-100 hover:border-slate-600 hover:bg-slate-800 transition-all"
+                >
+                  {sym}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="xl:hidden space-y-4">
             <WatchlistWidget activeSymbol={activeSymbol} onSelectSymbol={setActiveSymbol} />
+            {watchlistSymbols.length > 0 && (
+              <WhatChangedToday
+                symbols={watchlistSymbols}
+                onSelectSymbol={setActiveSymbol}
+                activeSymbol={activeSymbol}
+              />
+            )}
+            {watchlistSymbols.length > 0 && (
+              <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 px-1">Upcoming Earnings</p>
+                <EarningsCalendarStrip symbols={watchlistSymbols} />
+              </div>
+            )}
           </div>
 
           {isLoading ? (
@@ -519,6 +804,65 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-6">
+
+              {/* GAS score change explainer banner — Sprint 22 */}
+              {gasChangeBanner && gasChangeBanner.symbol === activeSymbol && (
+                <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${
+                  gasChangeBanner.delta > 0
+                    ? "bg-emerald-950/25 border-emerald-800/40"
+                    : "bg-rose-950/25 border-rose-800/40"
+                }`}>
+                  <span className="text-lg flex-shrink-0">
+                    {gasChangeBanner.delta > 0 ? "📈" : "📉"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold ${
+                      gasChangeBanner.delta > 0 ? "text-emerald-300" : "text-rose-300"
+                    }`}>
+                      GAS {gasChangeBanner.delta > 0 ? "↑" : "↓"}{" "}
+                      {Math.abs(gasChangeBanner.delta).toFixed(0)} pts
+                      {" "}—{" "}
+                      {gasChangeBanner.prev.toFixed(0)} → {gasChangeBanner.curr.toFixed(0)}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {gasChangeBanner.delta > 0
+                        ? gasChangeBanner.delta >= 15
+                          ? "Significant improvement — check what shifted in the component scores below."
+                          : "Moderate improvement since last refresh — one or more layers strengthened."
+                        : gasChangeBanner.delta <= -15
+                          ? "Significant decline — review the Conflict Detector and macro layer for drivers."
+                          : "Moderate decline since last refresh — one or more layers weakened."}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setGasChangeBanner(null)}
+                    className="text-slate-600 hover:text-slate-400 transition-colors flex-shrink-0 text-lg leading-none"
+                    aria-label="Dismiss"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
+              {/* Daily Market Brief */}
+              {macroScore > 0 && (
+                <DailyMarketBrief
+                  macroScore={macroScore}
+                  macroLabel={macroLabel}
+                  regime={regimeFromSnapshot ?? null}
+                  sentimentScore={sent30d}
+                  gasScore={gasScore}
+                />
+              )}
+
+              {/* Cross-asset pulse row */}
+              <section>
+                <p className="text-[10px] text-slate-600 uppercase tracking-wider font-medium mb-2">Market Pulse</p>
+                <CrossAssetRow
+                  onSelectSymbol={setActiveSymbol}
+                  activeSymbol={activeSymbol}
+                />
+              </section>
 
               {/* Row 1 – GAS + Regime */}
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -553,8 +897,8 @@ export default function DashboardPage() {
                       </span>
                     )}
                     <span className={`ml-1 text-xs font-bold px-2 py-0.5 rounded-full border ${techScore >= 60 ? "text-emerald-400 bg-emerald-950/40 border-emerald-800/50" :
-                        techScore >= 40 ? "text-amber-400 bg-amber-950/40 border-amber-800/50" :
-                          "text-rose-400 bg-rose-950/40 border-rose-800/50"
+                      techScore >= 40 ? "text-amber-400 bg-amber-950/40 border-amber-800/50" :
+                        "text-rose-400 bg-rose-950/40 border-rose-800/50"
                       }`}>
                       {techScore >= 80 ? "Strong Bullish" : techScore >= 60 ? "Bullish Lean" :
                         techScore >= 40 ? "Mixed / Neutral" : techScore >= 20 ? "Bearish Lean" : "Strong Bearish"}
@@ -617,8 +961,8 @@ export default function DashboardPage() {
                           <div className="flex flex-wrap gap-2">
                             {signals.map((s) => (
                               <div key={s.timeframe} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${s.direction === "Bullish" ? "bg-emerald-950/40 border-emerald-800/50 text-emerald-400" :
-                                  s.direction === "Bearish" ? "bg-rose-950/40 border-rose-800/50 text-rose-400" :
-                                    "bg-amber-950/30 border-amber-800/40 text-amber-400"
+                                s.direction === "Bearish" ? "bg-rose-950/40 border-rose-800/50 text-rose-400" :
+                                  "bg-amber-950/30 border-amber-800/40 text-amber-400"
                                 }`}>
                                 <span className="text-slate-300 font-mono font-bold">{s.timeframe}</span>
                                 <span>{s.direction === "Bullish" ? "▲" : s.direction === "Bearish" ? "▼" : "—"}</span>
@@ -634,7 +978,15 @@ export default function DashboardPage() {
                 )}
 
                 {signals.length > 0 ? (
-                  <TimeframeGrid signals={signals} symbol={activeSymbol} />
+                  <>
+                    <TimeframeGrid signals={signals} symbol={activeSymbol} />
+                    {/* SHAP “What drove this?” — Sprint 24 */}
+                    <ShapPanel
+                      modelData={modelData}
+                      activeTf={shapActiveTf}
+                      signals={signals}
+                    />
+                  </>
                 ) : (
                   <TrainNowEmptyState symbol={activeSymbol} onTrainStarted={handleTrainStarted} />
                 )}
@@ -696,6 +1048,9 @@ export default function DashboardPage() {
                 </Link>
                 <Link href="/news-sentiment" className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors">
                   View Full Sentiment Intel &rarr;
+                </Link>
+                <Link href="/watchlist-overview" className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors">
+                  Watchlist Overview &rarr;
                 </Link>
               </section>
 

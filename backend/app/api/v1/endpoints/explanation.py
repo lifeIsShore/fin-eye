@@ -10,9 +10,12 @@ POST /api/v1/explanation/{symbol}/generate-insight (new — structured 6-section
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Depends
+import json as _json
+
+from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, AsyncGenerator
 from datetime import date
 import redis.asyncio as redis
 
@@ -21,6 +24,9 @@ from app.services.llm_service import (
     get_ollama_service,
     InsightInput,
     MLSignal,
+    SYSTEM_PROMPT,
+    build_user_prompt,
+    parse_llm_response,
 )
 from app.api.v1.deps import get_current_user
 from app.db.redis_client import get_redis
@@ -523,4 +529,351 @@ async def generate_structured_insight(
         downside_stop=targets.get("downside_stop"),
         expected_return_pct=targets.get("expected_return_pct"),
         atr_absolute=targets.get("atr_absolute"),
+    )
+
+
+# ─── Daily Market Brief (Sprint 16) ─────────────────────────────────────────
+
+class DailyBriefRequest(BaseModel):
+    macro_score:     float = 50.0
+    macro_label:     str   = "Neutral"
+    regime:          str   = "unknown"
+    sentiment_score: float = 0.0
+    gas_score:       float = 50.0
+
+
+@router.post("/daily-brief/generate-stream")
+async def generate_daily_brief_stream(
+    request: DailyBriefRequest,
+    req: Request,
+    redis_client: redis.Redis = Depends(get_redis),
+    _current_user: object = Depends(get_current_user),
+) -> StreamingResponse:
+    """
+    Sprint 16 — SSE-streaming daily market brief.
+    Generates a 3-4 paragraph plain-text summary of the current macro/sentiment/regime
+    environment. Cached in Redis for 4 hours (key = date + macro_label + regime).
+    """
+    import datetime as _dt
+    hour_block = _dt.datetime.utcnow().hour // 4   # 0-5, changes every 4h
+    cache_key  = f"daily_brief:{request.macro_label}:{request.regime}:{hour_block}"
+
+    # Check cache — return pre-generated brief as plain-text SSE
+    try:
+        cached_brief = await redis_client.get(cache_key)
+        if cached_brief:
+            async def _cached() -> AsyncGenerator[str, None]:
+                # Stream cached text word-by-word for a nicer UX
+                words = cached_brief.split()
+                chunk: list[str] = []
+                for word in words:
+                    chunk.append(word)
+                    if len(chunk) >= 4:
+                        payload = _json.dumps({"token": " ".join(chunk) + " "})
+                        yield f"data: {payload}\n\n"
+                        chunk = []
+                        import asyncio
+                        await asyncio.sleep(0.015)
+                if chunk:
+                    yield f"data: {_json.dumps({'token': ' '.join(chunk)})}\n\n"
+                yield "data: [DONE]\n\n"
+            return StreamingResponse(
+                _cached(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+    except Exception:
+        pass
+
+    # Build the brief prompt
+    sent_label = (
+        "bullish"        if request.sentiment_score >  0.3  else
+        "mildly bullish" if request.sentiment_score >  0.05 else
+        "neutral"        if request.sentiment_score > -0.05 else
+        "mildly bearish" if request.sentiment_score > -0.3  else
+        "bearish"
+    )
+    regime_clean = request.regime.replace("_", " ")
+    gas_desc = (
+        "strong tailwind"   if request.gas_score >= 75 else
+        "mild support"      if request.gas_score >= 60 else
+        "mixed signals"     if request.gas_score >= 40 else
+        "headwind"          if request.gas_score >= 25 else
+        "high instability"
+    )
+
+    system_prompt = (
+        "You are a concise, professional market analyst writing a daily market brief "
+        "for a financial intelligence platform. Write in 3 clear paragraphs covering: "
+        "(1) the macro environment and what it means for markets, "
+        "(2) the current sentiment and technical regime, "
+        "(3) key risks and opportunities. "
+        "Be factual, balanced, and educational. Do NOT give specific buy/sell advice. "
+        "Never use markdown, headers, or bullet points — only plain prose."
+    )
+    user_prompt = (
+        f"Today's market data: "
+        f"Macro regime is '{request.macro_label}' with a composite score of {request.macro_score:.0f}/100. "
+        f"The current market regime classifier shows '{regime_clean}'. "
+        f"News sentiment across covered securities is {sent_label} (score: {request.sentiment_score:+.2f}). "
+        f"The Global Alignment Score (GAS) — a composite of technical, sentiment and macro signals — is {request.gas_score:.0f}/100, "
+        f"indicating {gas_desc}. "
+        f"Write the daily brief now."
+    )
+
+    ollama_svc = get_ollama_service()
+    ollama_alive = await ollama_svc.is_available()
+
+    async def _stream_brief() -> AsyncGenerator[str, None]:
+        accumulated = ""
+        if ollama_alive:
+            async for token in ollama_svc.generate_stream(system_prompt, user_prompt):
+                if await req.is_disconnected():
+                    return
+                accumulated += token
+                yield f"data: {_json.dumps({'token': token})}\n\n"
+        else:
+            # Fallback static brief when Ollama is offline
+            fallback = (
+                f"The macro environment is currently characterised as '{request.macro_label}' with a composite "
+                f"score of {request.macro_score:.0f} out of 100. "
+                f"This suggests {'a broadly supportive backdrop for risk assets' if request.macro_score >= 60 else 'meaningful headwinds for equities and risk assets' if request.macro_score < 40 else 'a mixed and cautious environment'}. "
+                f"Investors should monitor Federal Reserve guidance, credit spreads, and yield curve dynamics closely.\n\n"
+                f"Market sentiment is currently {sent_label}, reflecting the aggregate FinBERT scoring of recent news flow. "
+                f"The regime classifier has flagged a '{regime_clean}' environment, which historically corresponds to "
+                f"{'higher momentum persistence and lower mean-reversion opportunity' if 'trending' in request.regime else 'more balanced two-way price action'}.\n\n"
+                f"The Global Alignment Score of {request.gas_score:.0f} indicates {gas_desc}, combining technical momentum, "
+                f"news sentiment, and the macro composite. "
+                f"As always, signals should be treated as educational inputs rather than actionable trade recommendations. "
+                f"Conduct independent research and consider your own risk tolerance before making any investment decisions."
+            )
+            accumulated = fallback
+            # Stream word-by-word for consistent UX
+            import asyncio
+            words = fallback.split()
+            for i in range(0, len(words), 5):
+                chunk = " ".join(words[i:i+5]) + " "
+                yield f"data: {_json.dumps({'token': chunk})}\n\n"
+                await asyncio.sleep(0.02)
+
+        # Cache the completed brief
+        if accumulated.strip():
+            try:
+                await redis_client.setex(cache_key, 14400, accumulated)  # 4h TTL
+            except Exception:
+                pass
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        _stream_brief(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/{symbol}/generate-insight-stream")
+async def generate_insight_stream(
+    symbol: str,
+    request: GenerateInsightRequest,
+    req: Request,
+    redis_client: redis.Redis = Depends(get_redis),
+    _current_user: object = Depends(get_current_user),
+) -> StreamingResponse:
+    """
+    Sprint 12 — SSE streaming version of generate-insight.
+
+    Streams tokens from Ollama token-by-token as Server-Sent Events so the
+    frontend can populate sections as the model writes them, eliminating the
+    15–30 second blank-screen wait.
+
+    SSE event format:
+      data: {"type": "meta",  ...consensus + targets...}   \n\n   (first event)
+      data: {"type": "token", "text": "..."}               \n\n   (one per token)
+      data: {"type": "done",  "cached": false}             \n\n   (final event)
+      data: {"type": "error", "message": "..."}            \n\n   (on failure)
+
+    Falls back to the non-streaming endpoint response if Ollama is unavailable.
+    """
+    sym = symbol.upper()
+
+    # ── Consensus + price target pre-computation (identical to non-stream endpoint) ——
+    service = get_llm_service()
+    bullish_count = sum(1 for s in request.signals if s.direction == "Bullish")
+    bearish_count = sum(1 for s in request.signals if s.direction == "Bearish")
+    total_tfs     = len(request.signals)
+    agree_count   = max(bullish_count, bearish_count)
+    dominant_dir  = (
+        "Bullish" if bullish_count > bearish_count else
+        "Bearish" if bearish_count > bullish_count else "Mixed"
+    )
+
+    targets: dict = {}
+    if request.current_price > 0 and request.atr_absolute and request.atr_absolute > 0:
+        expected_return = 0.0
+        if request.signals:
+            total_w, weighted_ret = 0.0, 0.0
+            for s in request.signals:
+                w   = max(s.sharpe, 0.1)
+                ret = (s.confidence / 100.0 - 0.5) * 0.06
+                if s.direction == "Bearish":
+                    ret = -abs(ret)
+                weighted_ret += ret * w
+                total_w      += w
+            expected_return = weighted_ret / total_w if total_w else 0.0
+        targets = service.compute_price_targets(
+            current_price=request.current_price,
+            expected_return=expected_return,
+            atr_absolute=request.atr_absolute,
+            confidence=agree_count / total_tfs if total_tfs else 0.5,
+        )
+
+    # ── Check Redis cache first — return immediately as a single 'done' event ——
+    today_str = date.today().isoformat()
+    cache_key = f"insight_v2:{sym}:{dominant_dir}:{today_str}"
+    try:
+        cached_raw = await redis_client.get(cache_key)
+        if cached_raw:
+            cached_data = _json.loads(cached_raw)
+
+            async def _cached_stream() -> AsyncGenerator[str, None]:
+                meta = _json.dumps({
+                    "type": "meta",
+                    "agreement_count":    agree_count,
+                    "total_timeframes":   total_tfs,
+                    "dominant_direction": dominant_dir,
+                    "backend_used":       cached_data.get("backend_used", "cache"),
+                    "model_used":         cached_data.get("model_used", "cached"),
+                    **{k: targets.get(k) for k in
+                       ["expected_price", "upside_target", "downside_stop",
+                        "expected_return_pct", "atr_absolute"] if k in targets},
+                })
+                yield f"data: {meta}\n\n"
+                # Send full sections as a single content event (cached — no streaming needed)
+                sections_payload = _json.dumps({
+                    "type":     "sections",
+                    "sections": cached_data["sections"],
+                })
+                yield f"data: {sections_payload}\n\n"
+                yield f'data: {{"type": "done", "cached": true}}\n\n'
+
+            return StreamingResponse(
+                _cached_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+    except Exception:
+        pass
+
+    # ── Build prompt ——
+    ml_signals = [
+        MLSignal(
+            timeframe=s.timeframe, direction=s.direction, confidence=s.confidence,
+            sharpe=s.sharpe, horizon_periods=s.horizon_periods, model_used=s.model_used,
+        )
+        for s in request.signals
+    ]
+    inp = InsightInput(
+        symbol=sym, current_price=request.current_price,
+        signals=ml_signals, agreement_count=agree_count,
+        total_timeframes=total_tfs, dominant_direction=dominant_dir,
+        rsi_14=request.rsi_14, macd_hist=request.macd_hist,
+        bb_pb=request.bb_pb, atr_pct=request.atr_pct,
+        volume_ratio=request.volume_ratio,
+        macro_score=request.macro_score, vix=request.vix,
+        yield_spread=request.yield_spread, macro_regime=request.macro_regime,
+        news_sentiment_1d=request.news_sentiment_1d,
+        news_sentiment_7d=request.news_sentiment_7d,
+        news_sentiment_30d=request.news_sentiment_30d,
+        gas_score=request.gas_score,
+        expected_price=targets.get("expected_price"),
+        upside_target=targets.get("upside_target"),
+        downside_stop=targets.get("downside_stop"),
+        expected_return_pct=targets.get("expected_return_pct"),
+        atr_absolute=request.atr_absolute,
+    )
+    user_prompt = build_user_prompt(inp)
+
+    # ── SSE generator ——
+    ollama_svc = get_ollama_service()
+
+    async def _stream_events() -> AsyncGenerator[str, None]:
+        # 1 — meta event (consensus, targets, backend)
+        meta = _json.dumps({
+            "type": "meta",
+            "agreement_count":    agree_count,
+            "total_timeframes":   total_tfs,
+            "dominant_direction": dominant_dir,
+            "backend_used":       "ollama",
+            "model_used":         ollama_svc.model,
+            **{k: targets.get(k) for k in
+               ["expected_price", "upside_target", "downside_stop",
+                "expected_return_pct", "atr_absolute"] if k in targets},
+        })
+        yield f"data: {meta}\n\n"
+
+        # 2 — check if client disconnected before we start the expensive call
+        if await req.is_disconnected():
+            return
+
+        # 3 — stream tokens from Ollama; accumulate full text for caching
+        full_text = ""
+        ollama_alive = await ollama_svc.is_available()
+
+        if ollama_alive:
+            async for token in ollama_svc.generate_stream(SYSTEM_PROMPT, user_prompt):
+                if await req.is_disconnected():
+                    return
+                full_text += token
+                yield f"data: {_json.dumps({'type': 'token', 'text': token})}\n\n"
+
+        # 4 — if Ollama was unavailable, fall back to Groq (non-streaming) or static fallback
+        if not ollama_alive or not full_text.strip():
+            out = await service.generate_investment_insight(inp)
+            full_text = out.raw_response
+            # Send as a single sections event so the frontend can render immediately
+            sections_obj = {
+                "primary_signal":  out.primary_signal,
+                "entry":           out.entry,
+                "targets":         out.targets,
+                "risk_management": out.risk_management,
+                "timeframe_split": out.timeframe_split,
+                "caution":         out.caution,
+            }
+            sections_payload = _json.dumps({"type": "sections", "sections": sections_obj})
+            yield f"data: {sections_payload}\n\n"
+
+            backend_used = out.backend_used
+            model_used   = out.model_used
+        else:
+            backend_used = "ollama"
+            model_used   = ollama_svc.model
+
+        # 5 — cache the completed response
+        if full_text.strip():
+            try:
+                parsed = parse_llm_response(full_text, backend_used, model_used)
+                cache_payload = _json.dumps({
+                    "sections": {
+                        "primary_signal":  parsed.primary_signal,
+                        "entry":           parsed.entry,
+                        "targets":         parsed.targets,
+                        "risk_management": parsed.risk_management,
+                        "timeframe_split": parsed.timeframe_split,
+                        "caution":         parsed.caution,
+                    },
+                    "backend_used": backend_used,
+                    "model_used":   model_used,
+                })
+                await redis_client.setex(cache_key, 43200, cache_payload)
+            except Exception:
+                pass
+
+        # 6 — done event
+        yield f'data: {{"type": "done", "cached": false}}\n\n'
+
+    return StreamingResponse(
+        _stream_events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

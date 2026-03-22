@@ -12,14 +12,10 @@
 ### Phase 2A — Grade-Based Portfolio Construction (UI + API)
 - [ ] 🔴 **Grade filter on watchlist**: Let users filter their watchlist by signal grade. "Show me only A+ and A signals right now." This is the core portfolio construction UI.
 - [ ] 🔴 **Portfolio builder page** (`/portfolio/build`): A page where users select a universe of symbols, set a minimum grade threshold (e.g., "only A/B"), and fin-eye proposes an equal-weighted or GAS-weighted allocation.
-- [ ] 🟠 **Grade badge on every ticker card**: Everywhere a symbol appears in the UI (watchlist, dashboard, cross-asset view), show the grade badge with color coding:
-  - A+ / A → emerald
-  - B       → sky
-  - C       → amber
-  - D / F   → rose
+- [x] ✅ **Grade badge on every ticker card**: Implemented Sprint 21 — `GradeBadge.tsx` component; wired to dashboard header + watchlist overview cards + watchlist sidebar. Colour-coded A+/A emerald, B sky, C amber, D orange, F rose.
 - [ ] 🟠 **Grade history sparkline**: Show how the grade has changed over the last 7 days for each symbol. A ticker that was F last week and is now A is more interesting than one that has been A all along.
 - [ ] 🟠 **Grade explanation panel**: When a user clicks a grade, show the exact breakdown — which factors contributed, what the reasons were, and what would need to change to improve the grade.
-- [ ] 🟡 **Grade leaderboard**: A ranked list of all tracked symbols sorted by grade descending, updated every 15 minutes. "Today's top signals" — extremely high engagement feature.
+- [x] ✅ **Grade leaderboard**: Implemented Sprint 23 — `GradeLeaderboard` component on `/explore` page. Ranks watchlist symbols by grade then GAS score, medals for top 3, click to open on dashboard. Refreshes every 5 min.
 
 ### Phase 2B — AI Allocation Engine
 > The AI reads the current signal grades across a portfolio and proposes allocation weights.
@@ -119,14 +115,14 @@ The `compute_signal_grade()` function in `gas_precompute.py` is the authoritativ
 - [ ] 🟠 **Tooltips & Hover States**: Add `[i]` icons next to GAS, Technical Score, Macro Score, Sentiment Score, Regime, VIX, and each timeframe signal. Hovering pops a concise, plain-English explanation. This is the #1 activation driver for new users.
 - [ ] 🟠 **Dedicated Documentation / "Learn" Hub**: Build a knowledge base explaining GAS methodology, FinBERT, Technical Consensus, and how to read the Conflict Detector.
 - [ ] 🟠 **Interactive Onboarding/Tour**: The GuidedTour component exists — ensure it fires automatically for first-time users (check `has_completed_tour` flag). Add a "What does this mean?" CTA on the GAS widget for cold users.
-- [ ] 🟡 **Score Change Explainer**: When GAS changes by more than 5 points between two refreshes, surface a brief "What changed?" banner explaining the shift (e.g., "Macro score dropped 8 pts — VIX spiked to 22").
+- [x] ✅ **Score Change Explainer**: Implemented Sprint 22 — dismissable banner in `page.tsx` when GAS delta ≥5 pts, shows prev→curr with contextual message.
 - [ ] 🟡 **Glossary Page** (`/learn/glossary`): Searchable A–Z glossary. Link every technical term on the dashboard to its glossary entry. Reduces support tickets and keeps users on-site.
 
 ---
 
 ## 3. General UI/UX Polish
-- [ ] 🔴 **Skeleton Loaders**: Replace the `animate-pulse` blank divs with layout-accurate skeleton screens that mirror the real UI shape. Perceived load time is a key retention lever — Bloomberg-grade tools feel instant.
-- [ ] 🔴 **Toast Notification System**: Implement a global toast/snackbar system (top-right). Use it for: save success, API errors, GAS alerts firing, strategy saved, copy-to-clipboard. Currently failures are silent or show raw error strings.
+- [x] ✅ **Skeleton Loaders**: Implemented Sprint 7 — `Skeletons.tsx` with layout-accurate skeletons across dashboard sections.
+- [x] ✅ **Toast Notification System**: Implemented Sprint 7 — `ToastProvider.tsx` + `useToast()` hook; global top-right toasts.
 - [ ] 🟠 **Empty States**: Every data section (Sentiment, Macro, Backtesting, News) needs a designed empty state with an icon, message, and a clear next-action CTA. "No data" text alone causes abandonment.
 - [ ] 🟠 **Responsive Design & Mobile Optimization**: The NAV_ITEMS list has 19 items — on mobile this overflows catastrophically. Implement a hamburger/drawer nav for screens below `md`. The dashboard grid also needs a single-column reflow tested on 375px width.
 - [ ] 🟠 **Color Coding & Badges**: Standardize semantic colors globally. Bullish = emerald-400, Bearish = rose-400, Neutral = amber-400, Loading = sky-400. Ensure badges on StrategyCard, TimeframeGrid, RegimeWidget all follow the same palette. Currently mixed.
@@ -137,7 +133,7 @@ The `compute_signal_grade()` function in `gas_precompute.py` is the authoritativ
 ---
 
 ## 4. Performance & Technical Debt
-- [ ] 🔴 **SWR Error Boundary**: Wrap data-dependent UI sections in error boundaries.
+- [x] ✅ **SWR Error Boundary**: Implemented Sprint 8 — `ErrorBoundary.tsx` wrapping each dashboard section.
 - [ ] 🔴 **API Response Caching Headers**: Ensure FastAPI responses for `/gas/snapshot`, `/macro/latest`, and `/sentiment` include proper `Cache-Control` headers.
 - [ ] 🟠 **Bundle Size Audit**: Run `next build --profile` and analyze the bundle. Target < 200kB initial JS.
 - [ ] 🟠 **Redis Cache Warming**: On startup/deploy, pre-warm Redis cache for the top 20 most-watched symbols.
@@ -152,11 +148,11 @@ The `compute_signal_grade()` function in `gas_precompute.py` is the authoritativ
 ---
 
 ## 5. Activation & User Retention (Product Growth)
-- [ ] 🔴 **"Aha Moment" Optimization**: Add GAS History sparkline (last 7 days) directly on the dashboard.
-- [ ] 🔴 **Email Alert Engine**: Threshold-based alerts (e.g., "Notify me when TSLA GAS crosses above 65").
+- [x] ✅ **"Aha Moment" Optimization — GAS History Sparkline**: Implemented Sprint 7 — `GasSparkline.tsx` 7-day sparkline on dashboard + watchlist overview.
+- [x] ✅ **Email Alert Engine**: Implemented — threshold-based alerts, `POST /alerts`, email delivery via Resend, evaluated every 5 min.
 - [ ] 🟠 **Daily/Weekly Digest Email**: Auto-generate weekly email summarizing top 5 movers.
 - [ ] 🟠 **Watchlist Improvements**: Drag-and-drop reorder, mini GAS badge, DB persistence, grouping.
-- [ ] 🟠 **"What Changed Today" Dashboard Widget**: Feed showing GAS movements for watchlist items.
+- [x] ✅ **"What Changed Today" Dashboard Widget**: Implemented Sprint 10 — `WhatChangedToday.tsx` with delta arrows.
 - [ ] 🟡 **Social Proof & Trust Signals**: User count, testimonials on landing/billing page.
 - [ ] 🟡 **Streak & Engagement Gamification**: Learning streak, badges for tour completion.
 - [ ] 🟡 **NPS Survey (In-App)**: After 7th session or 30 days.
@@ -175,9 +171,9 @@ The `compute_signal_grade()` function in `gas_precompute.py` is the authoritativ
 ---
 
 ## 7. Dashboard Intelligence Upgrades
-- [ ] 🟠 **GAS History Chart (7-day)**: Mini line chart of GAS score over past 7 days.
+- [x] ✅ **GAS History Chart (7-day)**: Implemented Sprint 7 — `GasSparkline.tsx`.
 - [ ] 🟠 **Regime Change Notification**: Highlighted banner when Regime flips.
-- [ ] 🟠 **Cross-Asset Dashboard**: Summary row showing GAS for SPY, QQQ, GLD, TLT, BTC.
+- [x] ✅ **Cross-Asset Dashboard**: Implemented Sprint 11 — `CrossAssetRow.tsx` on dashboard.
 - [ ] 🟡 **Price Chart Integration**: Lightweight TradingView chart embedded on dashboard.
 - [ ] 🟡 **Technical Consensus Explanation Expansion**: "Top Drivers" sub-section per timeframe signal.
 - [ ] 🟢 **Printable/Shareable Report**: "Share Analysis" button generating PNG/PDF card.
@@ -185,22 +181,22 @@ The `compute_signal_grade()` function in `gas_precompute.py` is the authoritativ
 ---
 
 ## 8. Backtesting UX Improvements
-- [ ] 🟠 **More Strategy Templates**: Mean Reversion, Macro-Responsive, Trend Following.
-- [ ] 🟠 **Monthly Returns Heatmap**: Calendar-style heatmap (green/red by month).
-- [ ] 🟠 **Drawdown Chart**: Peak-to-trough losses over time below equity curve.
+- [x] ✅ **More Strategy Templates**: Implemented Sprint 10 — Mean Reversion + Macro-Responsive strategies added.
+- [x] ✅ **Monthly Returns Heatmap**: Implemented Sprint 8 — `MonthlyHeatmap` in backtesting page.
+- [x] ✅ **Drawdown Chart**: Implemented Sprint 8 — `DrawdownChart` in backtesting page.
 - [ ] 🟡 **Benchmark Comparison Toggle**: Compare against SPY, QQQ, or BTC.
 - [ ] 🟡 **Trade Log Table**: Paginated table of all individual trades.
-- [ ] 🟡 **Walk-Forward Validation Panel**: Rolling 6-month performance windows tab.
+- [x] ✅ **Walk-Forward Validation Panel**: Implemented Sprint 18 — `WalkForwardPanel` with fold selector, OOS equity curve.
 - [ ] 🟢 **Parameter Optimization Grid**: Heatmap of Sharpe ratios across parameter range.
 
 ---
 
 ## 9. Macro Dashboard Improvements
-- [ ] 🟠 **Fed Meeting Countdown**: Countdown timer to next FOMC decision.
+- [x] ✅ **Fed Meeting Countdown**: Implemented Sprint 21 — `FomcCountdown` on macro page with urgency colour coding.
 - [ ] 🟠 **Economic Calendar Integration**: Full 2-week macro events calendar with expected vs prior values.
 - [ ] 🟡 **Macro Regime Label with History**: "Regime since: Jan 2025 (72 days)".
 - [ ] 🟡 **Central Bank Comparison Panel**: Fed, ECB, BoE rates side-by-side.
-- [ ] 🟢 **Yield Curve Inversion Alert Banner**: Auto-display when 2Y–10Y spread goes negative.
+- [x] ✅ **Yield Curve Inversion Alert Banner**: Implemented Sprint 23 — auto-displays amber banner on macro page when spread < 0.
 
 ---
 
@@ -231,7 +227,7 @@ The `compute_signal_grade()` function in `gas_precompute.py` is the authoritativ
 ---
 
 ## 13. Data Quality & Trust
-- [ ] 🔴 **Data Freshness Indicators on Every Data Section**: Colored dot with "Last updated: 14 min ago".
+- [x] ✅ **Data Freshness Indicators on Every Data Section**: Implemented Sprint 10 — `FreshnessIndicator.tsx` with green/amber/red dot.
 - [ ] 🟠 **Data Source Attribution**: Link each indicator to its source (FRED, Finnhub, etc.).
 - [ ] 🟠 **Graceful Degradation Messages**: Banner when a data source is down.
 - [ ] 🟡 **Model Confidence Intervals**: Show confidence % alongside directional signals.
@@ -239,8 +235,8 @@ The `compute_signal_grade()` function in `gas_precompute.py` is the authoritativ
 ---
 
 ## 14. Settings & Personalization
-- [ ] 🟠 **Notification Preferences Page**: Central settings for alerts, email frequency, timezone.
-- [ ] 🟡 **Default Ticker**: User-configurable default symbol on dashboard open.
+- [x] ✅ **Notification Preferences Page**: Implemented Sprint 11 — `/settings/notifications`.
+- [x] ✅ **Default Ticker**: Implemented Sprint 23 — `User.default_symbol` + `PATCH /auth/me` + Settings UI + `seedDefaultOnce()` in SymbolContext.
 - [ ] 🟡 **Currency Preference**: USD/EUR toggle.
 - [ ] 🟢 **Compact / Expanded View Toggle**: Data density setting.
 
@@ -249,7 +245,7 @@ The `compute_signal_grade()` function in `gas_precompute.py` is the authoritativ
 ## 15. Legal & Trust Compliance
 - [ ] 🔴 **Cookie Consent Banner**: Verify ConsentGate blocks analytics until consent.
 - [ ] 🟠 **Risk Disclaimer on Every Data-Driven Page**: Inline disclaimer on Backtesting, Hedge, Signals.
-- [ ] 🟡 **Data Deletion Flow**: "Delete My Account" with 30-day erasure confirmation email.
+- [x] ✅ **Data Deletion Flow**: Implemented — "Delete Account" in Settings with confirmation phrase modal; `/gdpr/delete` backend endpoint.
 
 ---
 

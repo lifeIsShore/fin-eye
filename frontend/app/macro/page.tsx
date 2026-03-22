@@ -358,6 +358,79 @@ function LeadingPanel({ leading }: { leading: MacroAdvancedDto["leading_indicato
   );
 }
 
+// ─── FOMC Countdown ─────────────────────────────────────────────────────────
+
+/** Published FOMC meeting dates (decision day = second day of meeting). */
+const FOMC_DATES_2025_2026: string[] = [
+  "2025-01-29",
+  "2025-03-19",
+  "2025-05-07",
+  "2025-06-18",
+  "2025-07-30",
+  "2025-09-17",
+  "2025-10-29",
+  "2025-12-10",
+  "2026-01-28",
+  "2026-03-18",
+  "2026-04-29",
+  "2026-06-17",
+  "2026-07-29",
+  "2026-09-16",
+  "2026-10-28",
+  "2026-12-09",
+];
+
+function getNextFomcDate(): { date: Date; label: string; daysAway: number } | null {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  for (const ds of FOMC_DATES_2025_2026) {
+    const d = new Date(ds + "T00:00:00");
+    if (d >= today) {
+      const daysAway = Math.round((d.getTime() - today.getTime()) / 86_400_000);
+      const label = d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+      return { date: d, label, daysAway };
+    }
+  }
+  return null;
+}
+
+function FomcCountdown() {
+  const next = getNextFomcDate();
+  if (!next) return null;
+
+  const urgency =
+    next.daysAway <= 3  ? { color: "text-rose-400",   bg: "bg-rose-950/30",   border: "border-rose-800/40",   dot: "bg-rose-400 animate-pulse" } :
+    next.daysAway <= 14 ? { color: "text-amber-400",  bg: "bg-amber-950/30",  border: "border-amber-800/40",  dot: "bg-amber-400" } :
+                          { color: "text-slate-300",   bg: "bg-slate-800/40",  border: "border-slate-700/40",  dot: "bg-slate-500" };
+
+  return (
+    <div className={`flex items-center gap-3 rounded-xl border ${urgency.bg} ${urgency.border} px-4 py-3`}>
+      <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${urgency.dot}`} />
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Next FOMC Decision</p>
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className={`text-sm font-bold ${urgency.color}`}>{next.label}</span>
+          <span className="text-xs text-slate-500">
+            {next.daysAway === 0
+              ? "Today — decision expected"
+              : next.daysAway === 1
+              ? "Tomorrow"
+              : `${next.daysAway} days away`}
+          </span>
+        </div>
+      </div>
+      <a
+        href="https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="ml-auto flex-shrink-0 text-[10px] text-sky-500 hover:text-sky-400 transition-colors"
+      >
+        Fed calendar ↗
+      </a>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const CORE_LABEL_MAP: Record<string, string> = {
@@ -448,6 +521,37 @@ export default function MacroPage() {
       {view === "basic" && basicData && (
         <div className="space-y-6">
 
+          {/* FOMC countdown — Sprint 21 */}
+          <FomcCountdown />
+
+          {/* Yield curve inversion alert — Sprint 23 */}
+          {(() => {
+            const spread = basicData.data?.yield_spread_10y_2y?.value ?? null;
+            if (spread === null || spread >= 0) return null;
+            return (
+              <div className="flex items-start gap-3 rounded-xl border border-amber-700/50 bg-amber-950/25 px-4 py-3">
+                <span className="text-lg flex-shrink-0">⚠️</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-amber-300">
+                    Yield Curve Inverted — 10Y–2Y Spread: {spread.toFixed(2)}%
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                    An inverted yield curve (where short-term rates exceed long-term rates) has historically
+                    preceded recessions by 6–18 months. This is an educational signal, not a guarantee of
+                    economic contraction. Monitor closely alongside the recession probability gauge below.
+                  </p>
+                </div>
+                <a
+                  href="/macro"
+                  onClick={(e) => { e.preventDefault(); }}
+                  className="flex-shrink-0 text-[10px] text-amber-500 hover:text-amber-400 whitespace-nowrap transition-colors"
+                >
+                  See Advanced ↗
+                </a>
+              </div>
+            );
+          })()}
+
           {/* Macro score + core indicators */}
           <div className="grid gap-4 md:grid-cols-5">
             <Card className="md:col-span-2 flex flex-col justify-between">
@@ -500,6 +604,28 @@ export default function MacroPage() {
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {view === "advanced" && advData && (
         <div className="space-y-6">
+
+          {/* FOMC countdown */}
+          <FomcCountdown />
+
+          {/* Yield curve inversion alert — Sprint 23 */}
+          {(() => {
+            const spread = advData.yield_curve?.spread_10y_2y ?? null;
+            if (spread === null || spread >= 0) return null;
+            return (
+              <div className="flex items-start gap-3 rounded-xl border border-amber-700/50 bg-amber-950/25 px-4 py-3">
+                <span className="text-lg flex-shrink-0">⚠️</span>
+                <div>
+                  <p className="text-sm font-bold text-amber-300">
+                    Yield Curve Inverted — 10Y–2Y Spread: {spread.toFixed(2)}%
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Historically preceded recessions by 6–18 months. Educational signal only.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Row 1: Macro score + Stress index */}
           <div className="grid gap-4 md:grid-cols-2">

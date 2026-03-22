@@ -29,6 +29,12 @@ class User(Base):
     # Subscription tier: "free" | "pro" | "institutional"
     subscription_tier = Column(String(32), default="free", nullable=False)
 
+    # User preferences — Sprint 23
+    default_symbol = Column(String(20), nullable=True)   # e.g. "AAPL" — loads on dashboard open
+
+    # Risk profile — Sprint 24
+    risk_profile = Column(String(32), nullable=True)     # Conservative | Moderate | Aggressive | Income
+
     # Two-factor authentication (TOTP) — CORE-SEC-01
     totp_secret  = Column(String(256), nullable=True)   # Fernet-encrypted; null until setup
     totp_enabled = Column(Boolean, default=False, nullable=False)

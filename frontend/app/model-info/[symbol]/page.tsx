@@ -22,6 +22,15 @@ import Link from "next/link";
 import useSWR from "swr";
 import { ArrowLeft, ExternalLink, RefreshCw, AlertTriangle } from "lucide-react";
 import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
+import {
   fetchModelDetails,
   fetchPredictionStats,
   type TimeframeModelDetail,
@@ -38,7 +47,7 @@ const TF_LABELS: Record<string, string> = {
   "1h": "1 Hour", "4h": "4 Hour", "1d": "1 Day", "1wk": "1 Week", "1mo": "1 Month",
 };
 
-type Tab = "overview" | "features" | "training" | "models" | "history" | "drift";
+type Tab = "overview" | "features" | "training" | "models" | "history" | "drift" | "regime";
 
 const ALL_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "overview",  label: "Overview",    icon: "📊" },
@@ -47,6 +56,7 @@ const ALL_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "models",    label: "All Models",  icon: "🤖" },
   { id: "history",   label: "History",     icon: "📅" },
   { id: "drift",     label: "Drift",       icon: "⚠️" },
+  { id: "regime",    label: "Regime",      icon: "🌐" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -378,6 +388,15 @@ function AllModelsSection({ detail }: { detail: TimeframeModelDetail }) {
   );
 }
 
+// ── Custom dot for confidence chart (coloured by correctness) ──────────────────────
+const ConfidenceDot = (props: any) => {
+  const { cx, cy, payload } = props;
+  const color =
+    payload.was_correct === true  ? "#34d399" :
+    payload.was_correct === false ? "#f87171" : "#64748b";
+  return <circle cx={cx} cy={cy} r={4} fill={color} stroke="#1e293b" strokeWidth={1.5} />;
+};
+
 function HistorySection({
   symbol, tf,
 }: { symbol: string; tf: string }) {
@@ -408,8 +427,86 @@ function HistorySection({
     );
   }
 
+  // Build chart data oldest→newest
+  const chartData = [...data].reverse().map((row, i) => ({
+    i,
+    date: new Date(row.predicted_at).toLocaleDateString("en-DE", { month: "short", day: "2-digit" }),
+    confidence: Math.round(row.confidence * 100),
+    was_correct: row.was_correct,
+  }));
+
+  const avgConf = Math.round(
+    data.reduce((sum, r) => sum + r.confidence, 0) / data.length * 100,
+  );
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+
+      {/* Confidence timeline chart */}
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/20 p-4 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Model Confidence Over Time</p>
+            <p className="text-[10px] text-slate-600 mt-0.5">Dot colour: ➔ <span className="text-emerald-400">● correct</span>  <span className="text-rose-400">● wrong</span>  <span className="text-slate-500">● unresolved</span></p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-slate-500">Avg confidence</p>
+            <p className={`text-lg font-black tabular-nums ${
+              avgConf >= 65 ? "text-emerald-400" : avgConf >= 55 ? "text-sky-400" : "text-amber-400"
+            }`}>{avgConf}%</p>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={130}>
+          <LineChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: -20 }}>
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 9, fill: "#475569" }}
+              axisLine={false}
+              tickLine={false}
+              interval={Math.max(0, Math.floor(chartData.length / 8) - 1)}
+            />
+            <YAxis
+              domain={[40, 100]}
+              tick={{ fontSize: 9, fill: "#475569" }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => `${v}%`}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "#0f172a",
+                border: "1px solid #334155",
+                borderRadius: 8,
+                fontSize: 11,
+                color: "#cbd5e1",
+              }}
+              formatter={(v: number) => [`${v}%`, "Confidence"]}
+              labelStyle={{ color: "#64748b", fontSize: 10 }}
+            />
+            {/* 50% baseline reference */}
+            <ReferenceLine y={50} stroke="#334155" strokeDasharray="3 3" />
+            {/* Average line */}
+            <ReferenceLine
+              y={avgConf}
+              stroke="#38bdf8"
+              strokeDasharray="4 2"
+              strokeOpacity={0.5}
+              label={{ value: `avg ${avgConf}%`, position: "insideTopRight", fontSize: 9, fill: "#38bdf8" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="confidence"
+              stroke="#475569"
+              strokeWidth={1.5}
+              dot={<ConfidenceDot />}
+              activeDot={false}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Predictions table */}
       <p className="text-[10px] text-slate-500">
         Last {data.length} resolved predictions for {symbol}/{tf}, newest first.
       </p>
@@ -438,8 +535,13 @@ function HistorySection({
                       {row.predicted_direction === 1 ? "▲ UP" : "▼ DOWN"}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-right text-slate-400 tabular-nums">
-                    {(row.confidence * 100).toFixed(0)}%
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    <span className={`font-semibold ${
+                      row.confidence >= 0.65 ? "text-emerald-400" :
+                      row.confidence >= 0.55 ? "text-sky-400" : "text-amber-400"
+                    }`}>
+                      {(row.confidence * 100).toFixed(0)}%
+                    </span>
                   </td>
                   <td className="px-3 py-2 text-right text-slate-400 tabular-nums font-mono">
                     {row.price_at_prediction != null ? row.price_at_prediction.toFixed(2) : "—"}
@@ -551,6 +653,162 @@ function DriftSection({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Regime Section (Sprint 15) ─────────────────────────────────────────────
+
+const REGIME_META: Record<string, { label: string; desc: string; color: string; bg: string }> = {
+  "risk_on":       { label: "Risk-On",       desc: "Equities trending up, low VIX, credit spreads tight.",          color: "text-emerald-300", bg: "bg-emerald-950/30 border-emerald-800/40" },
+  "risk_off":      { label: "Risk-Off",      desc: "Flight to safety, equities weak, bonds bid, VIX elevated.",    color: "text-rose-300",    bg: "bg-rose-950/30 border-rose-800/40" },
+  "trending_up":   { label: "Trending Up",   desc: "Price above key MAs, momentum positive, regime stable.",       color: "text-sky-300",     bg: "bg-sky-950/30 border-sky-800/40" },
+  "trending_down": { label: "Trending Down", desc: "Price below key MAs, momentum negative, bearish structure.",   color: "text-orange-300",  bg: "bg-orange-950/30 border-orange-800/40" },
+  "neutral":       { label: "Neutral",       desc: "No clear trend, consolidation, mixed signals.",                color: "text-slate-300",   bg: "bg-slate-800/40 border-slate-700/40" },
+  "high_vol":      { label: "High Vol",      desc: "Elevated realised volatility, wider bid-ask, choppy action.",  color: "text-amber-300",   bg: "bg-amber-950/30 border-amber-800/40" },
+  "low_vol":       { label: "Low Vol",       desc: "Compressed volatility, mean-reversion favoured, tight ranges.",color: "text-teal-300",    bg: "bg-teal-950/30 border-teal-800/40" },
+};
+
+function RegimeSection({
+  stats,
+}: {
+  stats?: TimeframePredictionStats;
+}) {
+  const byRegime = stats?.by_regime ?? {};
+  const hasData  = Object.keys(byRegime).length > 0;
+  const totalResolved = stats?.total_resolved ?? 0;
+
+  // Minimum sample gate — regime accuracy is unreliable under 30 predictions total
+  const gateOk = totalResolved >= 30;
+
+  // Sort regimes: most observations first
+  const sorted = Object.entries(byRegime).sort(([, a], [, b]) => (b.n ?? 0) - (a.n ?? 0));
+
+  // Overall live accuracy for delta comparison
+  const overallAcc = stats?.live_accuracy ?? null;
+
+  return (
+    <div className="space-y-5">
+      {/* Explainer */}
+      <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 px-4 py-3 space-y-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">What is regime-conditional accuracy?</p>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          The model&apos;s prediction accuracy varies depending on the current market regime. This tab breaks
+          down how often the model was correct in each regime — helping you understand when to trust the
+          signal most. A model that is only accurate in one regime may be over-fit to recent market conditions.
+        </p>
+      </div>
+
+      {/* Data gate warning */}
+      {!gateOk && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-700/40 bg-amber-950/15 px-4 py-3">
+          <span className="text-lg flex-shrink-0">⏳</span>
+          <div className="text-xs text-amber-300/90 space-y-0.5">
+            <p className="font-semibold">Not enough live data yet</p>
+            <p className="text-amber-400/70">
+              Regime breakdown needs at least 30 resolved predictions ({totalResolved} so far).
+              Accuracy figures are statistically unreliable below this threshold.
+              This section will populate as the model accumulates live predictions.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* No regime data at all */}
+      {!hasData && gateOk && (
+        <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 px-4 py-8 text-center space-y-2">
+          <p className="text-sm font-semibold text-slate-400">No regime breakdown available</p>
+          <p className="text-xs text-slate-600">
+            The backend didn&apos;t return per-regime stats. Ensure the prediction_service stores regime labels on each prediction.
+          </p>
+        </div>
+      )}
+
+      {/* Main breakdown */}
+      {hasData && (
+        <div className="space-y-3">
+          {sorted.map(([regime, data]) => {
+            const acc     = data.accuracy ?? null;
+            const n       = data.n ?? 0;
+            const meta    = REGIME_META[regime] ?? { label: regime, desc: "", color: "text-slate-300", bg: "bg-slate-800/40 border-slate-700/40" };
+            const delta   = acc != null && overallAcc != null ? acc - overallAcc : null;
+            const reliable = n >= 10; // sub-10 samples flagged unreliable
+
+            return (
+              <div key={regime} className={`rounded-xl border p-4 space-y-3 ${meta.bg} ${!reliable ? "opacity-60" : ""}`}>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-bold ${meta.color}`}>{meta.label}</span>
+                      {!reliable && (
+                        <span className="text-[9px] font-semibold rounded-full bg-slate-700/60 text-slate-500 px-1.5 py-0.5">Low sample</span>
+                      )}
+                    </div>
+                    {meta.desc && <p className="text-[10px] text-slate-500 leading-relaxed max-w-sm">{meta.desc}</p>}
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-2xl font-black tabular-nums ${
+                      acc == null ? "text-slate-600" :
+                      acc >= 0.55 ? "text-emerald-400" :
+                      acc >= 0.50 ? "text-amber-400" : "text-rose-400"
+                    }`}>
+                      {acc != null ? `${(acc * 100).toFixed(1)}%` : "n/a"}
+                    </p>
+                    <p className="text-[10px] text-slate-500">{n} predictions</p>
+                  </div>
+                </div>
+
+                {/* Accuracy bar */}
+                {acc != null && (
+                  <div className="space-y-1">
+                    <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${
+                          acc >= 0.55 ? "bg-emerald-500" : acc >= 0.50 ? "bg-amber-500" : "bg-rose-500"
+                        }`}
+                        style={{ width: `${acc * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-slate-600">
+                      <span>50% baseline</span>
+                      {delta != null && (
+                        <span className={delta >= 0 ? "text-emerald-500" : "text-rose-500"}>
+                          {delta >= 0 ? "+" : ""}{(delta * 100).toFixed(1)}pp vs overall
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Overall comparison row */}
+      {overallAcc != null && hasData && (
+        <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 px-4 py-3 flex items-center justify-between">
+          <div className="text-xs text-slate-500">
+            <span className="font-semibold text-slate-300">Overall live accuracy</span>
+            <span className="ml-2 text-[10px]">(all regimes combined, {totalResolved} predictions)</span>
+          </div>
+          <span className={`text-sm font-black tabular-nums ${
+            overallAcc >= 0.55 ? "text-emerald-400" : overallAcc >= 0.50 ? "text-amber-400" : "text-rose-400"
+          }`}>
+            {(overallAcc * 100).toFixed(1)}%
+          </span>
+        </div>
+      )}
+
+      {/* Methodology note */}
+      <div className="rounded-lg bg-slate-800/20 border border-slate-700/30 px-4 py-3">
+        <p className="text-[10px] text-slate-500 leading-relaxed">
+          Regime labels are determined at prediction time by the GAS Regime Classifier (technical + macro composite).
+          A prediction is marked correct if the actual price movement matched the predicted direction within the horizon period.
+          Samples below 10 are shown but flagged as statistically unreliable.
+          Regime breakdown requires predictions stored with a <code className="text-slate-400">regime</code> field.
+        </p>
+      </div>
     </div>
   );
 }
@@ -781,6 +1039,9 @@ export default function ModelInfoPage({
             )}
             {activeTab === "drift" && (
               <DriftSection symbol={symbol} tf={currentTf} />
+            )}
+            {activeTab === "regime" && (
+              <RegimeSection stats={tfStats} />
             )}
           </div>
 

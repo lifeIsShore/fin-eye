@@ -34,21 +34,37 @@ export function isValidTicker(raw: string): boolean {
 interface SymbolContextValue {
     symbol: string;
     setSymbol: (sym: string) => void;
+    seedDefaultOnce: (sym: string) => void;
 }
 
 const SymbolContext = createContext<SymbolContextValue>({
     symbol: DEFAULT_SYMBOL,
     setSymbol: () => {},
+    seedDefaultOnce: () => {},
 });
 
 export function SymbolProvider({ children }: { children: React.ReactNode }) {
     const [symbol, setSymbolState] = useState<string>(DEFAULT_SYMBOL);
 
     // Hydrate from localStorage on mount (client only)
+    // If no localStorage value exists, the dashboard will later override with user.default_symbol
     useEffect(() => {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored && isValidTicker(stored)) {
             setSymbolState(stored);
+        }
+    }, []);
+
+    // Allow external code to seed the initial symbol once (e.g. from user.default_symbol)
+    // Only applies if localStorage has no saved value (i.e., fresh session or cleared storage)
+    const seedDefaultOnce = useCallback((raw: string) => {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (!stored) {
+            const sym = normalizeTicker(raw);
+            if (isValidTicker(sym)) {
+                setSymbolState(sym);
+                // Don't write to localStorage — let the user's navigation set it
+            }
         }
     }, []);
 
@@ -60,7 +76,7 @@ export function SymbolProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     return (
-        <SymbolContext.Provider value={{ symbol, setSymbol }}>
+        <SymbolContext.Provider value={{ symbol, setSymbol, seedDefaultOnce }}>
             {children}
         </SymbolContext.Provider>
     );

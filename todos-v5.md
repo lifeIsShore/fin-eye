@@ -66,11 +66,7 @@ LAYER 3 (power users / devs — "Model Details" toggle):
   - "Next model update" countdown (based on last trained_at + refresh interval)
   - **File:** `frontend/components/TimeframeGrid.tsx` or signal tile sub-component
 
-- [ ] 🔴 `FE` Add **"What drove this?"** expandable section (Layer 2) to each timeframe tile:
-  - Show top 3–5 features that pushed the signal in each direction, in plain English
-  - Use SHAP values from backend (see ML section 4.1) if available; fall back to feature value + threshold description
-  - Examples: "RSI at 32 — oversold territory, historically bullish", "MACD just crossed signal line upward"
-  - Collapsed by default, expands inline on click
+- [x] ✅ `FE` **"What drove this?"** expandable section (Layer 2) — Implemented Sprint 24: `ShapPanel` below `TimeframeGrid` on dashboard. SHAP bars + plain-English feature descriptions for top 5 features.
 
 - [ ] 🟠 `FE` Add **multi-timeframe agreement indicator** above the grid:
   - "3 of 5 timeframes agree: UP" — shown as a summary banner
@@ -119,7 +115,7 @@ Instead, use an **always-accessible, per-section model details panel** that is:
 
 ### 2.1 BE — Model details endpoint
 
-- [ ] 🟠 `BE` Add `GET /api/v1/technical/{symbol}/model-details`
+- [x] ✅ `BE` `GET /api/v1/technical/{symbol}/model-details` — Implemented. Returns winner model, all_models, features_used, training_info, SHAP, per timeframe.
   Returns per timeframe:
   ```json
   {
@@ -163,7 +159,7 @@ Instead, use an **always-accessible, per-section model details panel** that is:
 
 ### 2.2 FE — "⚙ Model Details" panel
 
-- [ ] 🟠 `FE` Create `frontend/components/ModelDetailsPanel.tsx`
+- [x] ✅ `FE` `ModelDetailsPanel.tsx` — Implemented Sprint 4: side drawer with 4 tabs (Overview, Features, Training, All Models). Link from TimeframeGrid.
   - Triggered by "⚙ Model Details" text link at bottom of Technical Consensus card
   - Side drawer (slides in from right) or collapsible section below the grid
   - Tabs: **Overview** · **Features** · **Training Info** · **All Models**
@@ -174,7 +170,7 @@ Instead, use an **always-accessible, per-section model details panel** that is:
 
 ### 2.3 FE — `/model-info/{symbol}` deep-dive page
 
-- [ ] 🟡 `FE` Create a standalone route `/model-info/{symbol}` with full technical documentation for that ticker:
+- [x] ✅ `FE` `/model-info/{symbol}` deep-dive page — Implemented Sprint 6: 7 tabs (Overview, Features, Training, All Models, History+confidence chart, Drift, Regime). with full technical documentation for that ticker:
   - All timeframe model details in one page
   - Feature importance chart (bar chart of SHAP values — see ML section 4.1)
   - Prediction history table (see Phase 5 — prediction database)
@@ -327,7 +323,7 @@ PROBABILISTIC PRICE TARGETS (computed before LLM call — see 3.2):
 
 ### 4.1 BE — SHAP feature importance
 
-- [ ] 🟠 `BE` Add SHAP computation after XGBoost training:
+- [x] ✅ `BE` SHAP feature importance — Implemented Sprint 3: `shap.TreeExplainer` after XGBoost training, stored in model registry, exposed via `model-details`.
   ```python
   import shap
   explainer  = shap.TreeExplainer(best_obj.model)
@@ -344,7 +340,7 @@ PROBABILISTIC PRICE TARGETS (computed before LLM call — see 3.2):
 
 ### 4.2 BE — LightGBM as 4th competitor
 
-- [ ] 🟠 `BE` Add LightGBM to the model competition in `ml_pipeline.py`:
+- [x] ✅ `BE` LightGBM 4th competitor — Implemented Sprint 3: `LightGBMWrapper` in `ml_pipeline.py`.
   ```python
   from lightgbm import LGBMClassifier
 
@@ -365,7 +361,7 @@ PROBABILISTIC PRICE TARGETS (computed before LLM call — see 3.2):
 
 ### 4.3 BE — Probability-weighted ensemble (voting)
 
-- [ ] 🟠 `BE` After all 4 models are trained, add an ensemble as a 5th "candidate":
+- [x] ✅ `BE` Probability-weighted ensemble — Implemented Sprint 3: `EnsembleWrapper` blending Logistic+XGBoost+LightGBM by Sharpe.
   ```python
   class EnsembleWrapper:
       """Soft voting ensemble — weighted average of probabilities."""
@@ -420,7 +416,7 @@ PROBABILISTIC PRICE TARGETS (computed before LLM call — see 3.2):
 
 ### 4.5 BE — Remove or demote Prophet
 
-- [ ] 🟡 `BE` Prophet consistently gets disqualified (accuracy = 0.0) in `ml_pipeline.py`. Two options:
+- [x] ✅ `BE` Prophet removed from competition — Implemented Sprint 3. Option A: removed entirely from signal competition. (accuracy = 0.0) in `ml_pipeline.py`. Two options:
   - **Option A (recommended):** Remove Prophet from the per-symbol signal competition entirely. Move it to macro regime detection only (it works better on slow-moving macro series like VIX or yield spread trends). 
   - **Option B:** Keep Prophet but only allow it to vote in the ensemble (never be the solo winner), capped at 20% ensemble weight.
   - Decision: go with Option A — cleaner, faster training, less noise.
@@ -465,9 +461,7 @@ When the model is trained, you measure accuracy on validation data from the past
 
 ### 5.1 DB — `ml_predictions` table
 
-- [ ] 🔴 `DB` Alembic migration:
-  ```sql
-  CREATE TABLE ml_predictions (
+- [x] ✅ `DB` `ml_predictions` table — Implemented Sprint 2: Alembic migration with full schema + indexes. (
     id               BIGSERIAL PRIMARY KEY,
     symbol           VARCHAR(20)  NOT NULL,
     timeframe        VARCHAR(10)  NOT NULL,    -- '1h', '4h', '1d', '1wk', '1mo'
@@ -512,7 +506,7 @@ When the model is trained, you measure accuracy on validation data from the past
 
 ### 5.2 BE — Prediction storage on every inference
 
-- [ ] 🔴 `BE` Modify `technical_service.py` — every time a signal is computed for a user, store it:
+- [x] ✅ `BE` Prediction storage on inference — Implemented Sprint 2: `store_prediction()` in `prediction_service.py`, deduplication per symbol/timeframe/day.
   ```python
   async def store_prediction(db, symbol, timeframe, model_name, direction, 
                              confidence, expected_return, horizon_periods,
@@ -537,10 +531,7 @@ When the model is trained, you measure accuracy on validation data from the past
 
 ### 5.3 BE — Outcome resolver cron
 
-- [ ] 🔴 `BE` Add to `scheduler.py` — runs every hour:
-  ```python
-  @scheduler.scheduled_job("interval", hours=1)
-  async def resolve_prediction_outcomes():
+- [x] ✅ `BE` Outcome resolver cron — Implemented Sprint 2: APScheduler hourly job resolving outcomes.
       """
       Find all predictions where horizon_ends_at <= now and outcome_resolved_at IS NULL.
       Fetch current price from yfinance (or OHLCV DB).
@@ -567,7 +558,7 @@ When the model is trained, you measure accuracy on validation data from the past
 
 ### 5.4 BE — Live accuracy stats endpoint
 
-- [ ] 🟠 `BE` Add `GET /api/v1/technical/{symbol}/prediction-stats`
+- [x] ✅ `BE` `GET /api/v1/technical/{symbol}/prediction-stats` — Implemented Sprint 2: per-timeframe accuracy, regime breakdown, trend.
   Returns:
   ```json
   {
@@ -596,14 +587,14 @@ When the model is trained, you measure accuracy on validation data from the past
 
 ### 5.5 BE — Model drift alert
 
-- [ ] 🟡 `BE` In the outcome resolver cron, after resolving, compute 30-day rolling accuracy per symbol/timeframe:
+- [x] ✅ `BE` Model drift alert — Implemented Sprint 6: 10pp drop triggers `ModelDriftAlert`, `/admin/ml/drift-alerts` endpoint.
   - If live 30d accuracy drops more than 10 percentage points below training accuracy → create a `model_drift_alert` in DB
   - Add `GET /api/v1/admin/ml/drift-report` endpoint listing all drift alerts
   - Optionally: auto-trigger retrain for drifted models (flag in settings: `AUTO_RETRAIN_ON_DRIFT=True`)
 
 ### 5.6 FE — Live accuracy display in Model Details panel
 
-- [ ] 🟠 `FE` In `ModelDetailsPanel.tsx` (Phase 2.2), add a "Live Performance" tab:
+- [x] ✅ `FE` Live accuracy in Model Details — Implemented Sprint 6+20: History tab on model-info page with predictions table + confidence timeline chart.
   - Training accuracy vs live accuracy, side by side
   - "This model has been correct N/M times on live data (last 30 days)"
   - By-regime breakdown (if enough data): "Works better in trending markets"
@@ -627,7 +618,7 @@ When the model is trained, you measure accuracy on validation data from the past
 
 ### 6.1 FE — Price target display in LLM insight card
 
-- [ ] 🟠 `FE` Below the LLM [TARGETS] section, render a visual price target band:
+- [x] ✅ `FE` Price target display — Implemented Sprint 5: `PriceTargetCard.tsx` SVG range chart.
 
   ```
   Current:  $182.50
@@ -647,7 +638,7 @@ When the model is trained, you measure accuracy on validation data from the past
 
 ### 6.2 BE — Probabilistic price target endpoint
 
-- [ ] 🟠 `BE` Add `GET /api/v1/technical/{symbol}/price-targets`
+- [x] ✅ `BE` `GET /api/v1/technical/{symbol}/price-targets` — Implemented Sprint 5: ATR-based upside/expected/stop.
   ```json
   {
     "symbol": "AAPL",

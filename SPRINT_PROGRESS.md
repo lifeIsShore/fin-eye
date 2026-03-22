@@ -1,5 +1,5 @@
 # Fin-Eye — Sprint Progress Tracker
-> Last updated: Sprint 10 complete
+> Last updated: Sprint 25 complete
 
 ## Completed Sprints
 
@@ -88,22 +88,120 @@
 - api.ts: MacroLatestDto + fetched_at?: string | null
   → available as outputs/api_final.ts
 
-## Sprint 11 — Remaining (Next)
+## ✅ Sprint 11 -- Complete
+- [x] Cross-asset overview row (CrossAssetRow.tsx, Market Pulse section on dashboard)
+- [x] Sentiment fetched_at backend (sentiment.py derives from max published_at)
+- [x] Sentiment fetched_at frontend (SentimentTimeseriesDto.fetched_at, typed prop)
+- [x] Watchlist Overview sparklines (GasSparkline in watchlist-overview/page.tsx)
+- [x] Notification preferences page /settings/notifications (UX-SETTINGS-01)
+- [x] Settings page deep-link to full notification prefs
 
-### High priority
-- [ ] GAS History sparkline populates after first nightly precompute run (data-gated)
-- [ ] Notification preferences page /settings/notifications (UX-SETTINGS-01)
-- [ ] Cross-asset overview row — SPY/QQQ/GLD/TLT/BTC mini GAS row on dashboard
-- [ ] WhatChangedToday sentiment freshness — wire sentData fetched_at from backend
+## ✅ Sprint 12 -- Complete
+- [x] Backtesting strategy description cards (STRATEGY_DOCS + StrategyDocPanel)
+- [x] Watchlist Overview 7-day GAS sparklines per card
+- [x] LLM Insight Card full SSE streaming (useStreamInsight wired, sections appear progressively)
+- [x] OllamaBackend.generate_stream() added to llm_service.py
+- [x] POST /generate-insight-stream SSE endpoint in explanation.py
 
-### Medium priority
-- [ ] Backtesting: strategy description cards in the UI (explain the 3 strategies)
-- [ ] /watchlist-overview: add 7-day GAS sparkline per card (reuse GasSparkline component)
-- [ ] Data freshness for sentiment: SentimentTimeseriesDto needs fetched_at field
+## ✅ Sprint 13 -- Complete
+- [x] Portfolio GAS Aggregate Banner (PortfolioGasBanner in portfolios/[id]/page.tsx)
+- [x] Backend symbol_gas_breakdown (portfolio_service.py uses GAS snapshots + fallback)
+- [x] Admin GAS Precompute page (frontend/app/admin/gas/page.tsx -- NEW)
+- [x] Explore page (frontend/app/explore/page.tsx -- NEW: heatmap + RRG + quick-links)
+- [x] Nav: /explore in sidebar, /admin/gas in admin menu, Zap import
 
-### Data-gated (Sprint 12+)
-- [ ] Feature Analysis: regime-conditional accuracy (≥90 days of predictions)
-- [ ] Meta-model: "when to trust the base model"
+## ✅ Sprint 14 -- Complete
+- [x] ArticleList.tsx full redesign: FinBERT chips, source tier badges, time-grouped timeline, filter bar, freshness dots, score magnitude bars
+- [x] news-sentiment/page.tsx: FreshnessIndicator on articles header, updated caption
+- [x] Backtesting ParameterSweepPanel: N-value sweep, Sharpe/Return/DrawDown metric chart, best-value callout, results table, reference lines
+- [x] EarningsCalendarStrip.tsx (NEW): upcoming earnings for watchlist symbols, urgency colour coding, batch API, linked from dashboard sidebar (desktop + mobile)
+
+## ✅ Sprint 15 -- Complete
+
+### Delivered
+- [x] **Portfolio vs Benchmark equity chart** -- `PerformanceChart` component in `portfolios/[id]/page.tsx`; period picker (1mo/3mo/6mo/1y/2y/5y); portfolio + benchmark normalised to 100; alpha badge; `backend/app/services/portfolio_performance.py` (NEW); `GET /portfolios/{id}/performance?period=` endpoint added to `portfolios.py`
+- [x] **Risk page: Import from Portfolio** -- "Import from Portfolio" dropdown on Portfolio Stress tab fetches saved portfolios from API and pre-fills positions; `Briefcase` icon; auto-normalises weights to 10k total
+- [x] **Model-info Regime tab** -- `RegimeSection` component with per-regime accuracy bars, delta vs overall, data-gate warning (<30 predictions), low-sample badges (<10), methodology note; `REGIME_META` map covering 7 regime types; wired as 7th tab on model-info page
+
+## ✅ Sprint 16 -- Complete
+
+### Delivered
+- [x] **Daily Market Brief** -- `DailyMarketBrief.tsx` (NEW): SSE-streaming LLM summary card; collapsible; shows macro + sentiment + regime + GAS input badges; 4-hour localStorage cache; typing cursor; fallback static brief when Ollama is offline; `POST /api/v1/explanation/daily-brief/generate-stream` SSE endpoint (Redis 4h cache, word-by-word streaming of cached text); wired into dashboard above cross-asset pulse row
+- [x] **Model-info Regime tab** (Sprint 15 carry-over, counted in 15)
+- [x] **Risk page portfolio import** (Sprint 15 carry-over, counted in 15)
+
+## ✅ Sprint 17 -- Complete
+
+### Delivered
+- [x] **Watchlist bulk GAS refresh** -- `WatchlistWidget.tsx`: "Refresh GAS" button in header iterates watchlist symbols and calls `POST /admin/gas/precompute/{symbol}` for each; shows spinner + success/failure message; `RefreshCw` + `Zap` icons; disabled during run
+- [x] **Portfolio target return progress bar** -- `TargetReturnProgress` component in `portfolios/[id]/page.tsx`: fetches 1y performance data, computes YTD return, shows progress bar vs pro-rata target (day-of-year / 365 * annual target); on-pace marker line; On Track / Ahead / Behind verdict badge
+- [x] **Sentiment keyword cloud** -- `SentimentKeywordCloud.tsx` (NEW): Recharts Treemap of top 40 keywords extracted from article headlines; cell size = frequency; cell colour = aggregate sentiment (emerald/slate/rose); custom cell renderer with labels; stop-word filter; wired into `news-sentiment/page.tsx` between article list and source breakdown
+
+## ✅ Sprint 18 -- Complete
+
+### Delivered
+- [x] **Backtesting walk-forward validation** -- `WalkForwardPanel` in `backtesting/page.tsx`; fold selector (3/4/5/6/8); calls `POST /backtesting/walk-forward`; OOS summary strip (total return, avg Sharpe, Sharpe degradation, worst DD); per-fold IS vs OOS Sharpe comparison bars (blue/teal/rose); stitched OOS equity curve (teal line chart); overfitting warning banner when degradation > 0.4 or OOS Sharpe < 0.3; `WalkForwardEngine` in `backtesting_service.py` (expanding-window anchored splits, compounded OOS capital); `POST /backtesting/walk-forward` endpoint; `WalkForwardRequest/Fold/Response` schemas; `runWalkForward()` in `api.ts`
+- [x] **Admin analytics funnel drop-off chart** -- replaced `FunnelChart` in `admin/analytics/page.tsx`; now renders SVG waterfall: bars shrink proportionally to user count, grey hatched connector rectangles show users lost between steps, bar colour = green (>60% kept) / amber (30-60%) / red (<30%); drop-off count labels on connectors; legend
+- [x] **Explore page macro heat strip** -- `MacroHeatStrip` component in `explore/page.tsx`; fetches `GET /api/v1/macro/latest`; renders 5 FRED indicator tiles (Fed Funds Rate, Unemployment, Yield Spread, CPI YoY, VIX); each tile colour-coded by regime (rose/amber/emerald); click-to-/macro; composite macro score progress bar; section header with score label; skeleton + error states; placed between Sector Rotation and Deep Signal Pages sections
+
+## ✅ Sprint 19 -- Complete
+
+### Delivered
+- [x] **Watchlist comparison mode** -- `watchlist-overview/page.tsx`: "Compare" button in header toggles compare mode; instruction banner guides selection; cards get sky/violet border + A/B badge when selected; clicking 2 cards opens `ComparisonPanel` (metric table with edge indicator, dual 7-day GAS sparklines); clicking a selected card deselects it; compare mode fully integrates the existing `ComparisonPanel` component
+- [x] **Portfolio correlation matrix** -- `CorrelationMatrix` component in `portfolios/[id]/page.tsx`; `GET /portfolios/{id}/correlation?period=` endpoint; `portfolio_correlation.py` service; period picker (1mo/3mo/6mo/1y); colour-coded Pearson heatmap (emerald = high +ve, rose = high -ve); diagonal = 1.00; symbol labels; colour scale legend; n_days label; methodology note
+- [x] **Article topic clusters** -- `ArticleTopicClusters.tsx` (NEW): groups headlines into up to 6 seed-keyword clusters (Earnings, Macro/Fed, Analyst Moves, Products/Innovation, Legal/Regulatory, Market Moves); articles may appear in ≤2 clusters; cluster card shows icon, label, article count, avg sentiment badge, expandable headline list with FinBERT dot colour; "Other" catch-all bucket; coverage % header; wired into `news-sentiment/page.tsx` between keyword cloud and source breakdown
+
+### Data-gated (Sprint 20+)
+- [ ] Meta-model: when to trust the base model (>=90 days cross-regime predictions)
+- [ ] Regime-conditional backtest overlay (colour equity curve by regime)
+
+## ✅ Sprint 20 -- Complete
+
+### Delivered
+- [x] **Live Watchlist Price Tape** -- `components/PriceTape.tsx` (NEW): scrolling strip at top of dashboard polling `GET /technical/{symbol}/price` in parallel for all watchlist symbols every 30s; each tile shows symbol + live price + % change (emerald/rose/slate); clicking a tile switches active symbol; last-updated timestamp; invisible when watchlist empty or logged out; wired into `app/page.tsx`
+- [x] **Alerts History Log** -- `GET /api/v1/alerts/history` endpoint (backend); `AlertHistoryResponse` + `AlertHistoryListResponse` schemas; `get_alert_history()` service function; `AlertHistoryDto` + `fetchAlertHistory()` in `lib/api.ts`; tab switcher (🔔 Active / 📋 History) on `alerts/page.tsx`; history table with timestamp, symbol, condition badge, threshold, actual value, delivery channel, and status (Active/Dismissed); lazy-loads only when History tab is opened
+- [x] **Prediction Confidence Timeline** -- `HistorySection` in `model-info/[symbol]/page.tsx` now renders a Recharts `LineChart` above the predictions table; x-axis = prediction date (oldest→newest), y-axis = confidence %; coloured dots per point: emerald (correct), rose (wrong), slate (unresolved); dashed 50% baseline + sky-blue average reference line with label; avg confidence badge top-right; confidence column in table now colour-coded (emerald ≥65%, sky ≥55%, amber otherwise)
+
+## ✅ Sprint 21 -- Complete
+
+### Delivered
+- [x] **Signal Grade Badge everywhere** -- `components/GradeBadge.tsx` (NEW): reusable A+→F letter grade badge, colour-coded (emerald A+/A, sky B, amber C, orange D, rose F), 4 sizes (xs/sm/md/lg), hover tooltip with grade description + tradeable status, pulsing coloured dot. `GasSnapshotDto` + `GasBatchEntry` extended with `signal_grade/signal_grade_score/signal_tradeable` fields. Badge wired into dashboard header (md size, showTradeable) and every watchlist-overview card (xs size).
+- [x] **Recently-viewed symbol quick-switch** -- `hooks/useRecentSymbols.ts` (NEW): tracks last 6 viewed symbols in localStorage, auto-updates on `activeSymbol` change, excludes current symbol. Dashboard shows a "Recent" pill strip below the header; clicking any pill instantly switches symbol.
+- [x] **FOMC Countdown widget** -- `app/macro/page.tsx`: `FOMC_DATES_2025_2026` hardcoded schedule, `getNextFomcDate()` helper, `FomcCountdown` component with urgency colour-coding (rose ≤3 days with pulsing dot, amber ≤14 days, slate otherwise), "Fed calendar ↗" external link. Placed at top of both Overview and Advanced views.
+
+## ✅ Sprint 22 -- Complete
+
+### Delivered
+- [x] **Grade filter on watchlist overview** -- `app/watchlist-overview/page.tsx`: `GradeFilter` type + `passesGradeFilter()` + `gradeRank()` helpers. Filter pill strip in toolbar: All / A & above / A+ only / B & above / Tradeable. `sorted` memo applies filter before sorting. "Showing N of M symbols (X hidden)" status line with "Clear filter" link. Hidden-by-filter symbols excluded cleanly without breaking compare mode.
+- [x] **Mini GAS badge + score on watchlist sidebar** -- `components/WatchlistWidget.tsx`: `fetchGasBatch()` helper + SWR call polling every 5 min. Each list item now shows: symbol name + `<GradeBadge size="xs" showTooltip={false} />` + coloured GAS score number (emerald/amber/rose). Remove button stays visible on hover. No layout breakage on small sidebar.
+- [x] **GAS score change explainer banner** -- `app/page.tsx`: `prevGasScoreRef` tracks previous snapshot score per symbol; resets on symbol change. `gasChangeBanner` state set when delta ≥ 5 pts on SWR `onSuccess`. Dismissable banner appears above Daily Market Brief: emerald (improvement) or rose (decline), ↑5/↓5 pts label, prev → curr display, contextual message (moderate vs significant). Clears on symbol switch.
+
+## ✅ Sprint 23 -- Complete
+
+### Delivered
+- [x] **Default ticker preference** -- Backend: `default_symbol` column on `User` model; `UpdateProfileRequest.default_symbol` + `UserResponse.default_symbol` in schemas; `update_user_name()` saves it; `PATCH /auth/me` passes it through. Frontend: `updateDefaultSymbol()` in `lib/api.ts`; `User.default_symbol` in `AuthProvider`; `seedDefaultOnce()` in `SymbolContext` (seeds initial symbol from user preference only if no localStorage value); dashboard calls `seedDefaultOnce(user.default_symbol)` on mount; Settings Preferences section has "Default Ticker" input with Save/Clear buttons and success/error feedback.
+- [x] **Yield curve inversion alert banner** -- `app/macro/page.tsx`: IIFE renders amber warning banner when `yield_spread_10y_2y < 0`, showing exact spread value, historical context (6-18 month recession lead), and educational disclaimer. Visible on both Overview and Advanced tabs. Silently hidden when spread ≥ 0 or data unavailable.
+- [x] **Grade leaderboard on explore page** -- `app/explore/page.tsx`: `GradeLeaderboard` component fetches watchlist via SWR then batch GAS snapshots; sorts by `GRADE_ORDER_EXPLORE` then `gas_score`; renders ranked list with 🥇🥈🥉 medals for top 3, grade badge, weather label, T/S/M coloured dots, GAS score; clicking a row navigates to dashboard with that symbol active; empty/no-watchlist/no-grade states all handled. `fetchLeaderboard()` helper + `LeaderEntry` type added. `Trophy` icon in section header.
+
+## ✅ Sprint 24 -- Complete
+
+### Delivered
+- [x] **Sector breakdown pie chart** -- `portfolios/[id]/page.tsx`: `SectorPieChart` component using Recharts `PieChart`/`Pie`/`Cell`; donut chart (innerRadius 34, outerRadius 56) with 10-colour palette; legend list shows top-6 sectors with coloured dots and % values; `+N more` overflow note; tooltip on hover; replaces old bar-list rendering of `sector_breakdown`. Imports `PieChart, Pie, Cell, Tooltip as ReTooltip` from recharts.
+- [x] **Risk profile quiz** -- Full stack: `User.risk_profile` column (backend `models/user.py`); `UpdateProfileRequest.risk_profile` + `UserResponse.risk_profile` schemas; `update_user_name()` service accepts and saves it; `PATCH /auth/me` passes it through. Frontend: `User.risk_profile` in `AuthProvider`; `RiskProfileSection` component with 5-question step-by-step quiz, progress bar, `scoreToProfile()` scoring (Conservative/Income/Moderate/Aggressive by total score 0-15), profile badge with colour coding, plain-English description, retake button. Wired into Settings as its own `SectionCard`.
+- [x] **SHAP "What drove this?" panel** -- `app/page.tsx`: `FEATURE_DESCRIPTIONS` map covering 14 common ML feature names with plain-English explanations; `ShapPanel` component — collapsible (closed by default), shows best timeframe by Sharpe, reads `shap_importance` from `model-details` endpoint, renders top-5 SHAP features with violet/sky/slate bars proportional to impact, feature name + SHAP value + description per row; graceful fallback when SHAP not yet computed (shows feature list with "No SHAP yet" badge); sourced via dedicated SWR call `model-details-shap-{symbol}` (separate from model-info page SWR). Placed directly below `TimeframeGrid` inside the Technical Consensus section.
+
+### Migration note (cumulative)
+```bash
+alembic revision --autogenerate -m "add_default_symbol_risk_profile_to_users"
+alembic upgrade head
+```
+
+## ✅ Sprint 25 -- Complete
+
+### Delivered
+- [x] **Trade log table on backtesting** -- Backend: `TradeRecord` Pydantic schema (`entry_date`, `exit_date`, `entry_price`, `exit_price`, `return_pct`, `holding_days`, `side`); `backtesting_service.py` `run()` now walks the `position` series detecting entry/exit transitions and emits `List[TradeRecord]`; `BacktestResponse.trade_log` field. Frontend: `TradeRecord` interface + `trade_log?`/`benchmark_label?` added to `BacktestResponse` in `lib/api.ts`; `TradeLogTable` component in `backtesting/page.tsx` — collapsible (closed by default), paginated 10 rows/page with ←/→ controls, columns: # / Entry Date / Exit Date / Entry $ / Exit $ / Return % / Days Held, return % colour-coded emerald/rose, W/L summary in header. Rendered below the secondary stats row, above the Parameter Sweep panel.
+- [x] **Sentiment trend arrow on news page** -- `news-sentiment/page.tsx`: inline IIFE next to the "Sentiment over last 30 days" heading; sorts `data.series` by date, slices last 7 days (`recent`) and prior 7 days (`prior`), computes average `sentiment_score` for each window, derives `delta = avgRecent - avgPrior`; renders `↑ Improving` (emerald, `TrendingUp` icon) / `↓ Deteriorating` (rose, `TrendingDown` icon) / `— Flat` (slate, `Minus` icon) with delta in scaled pts; threshold 0.02 to suppress noise; silently hidden when fewer than 8 data points or fewer than 4 prior-window points.
+- [x] **Benchmark comparison toggle on backtesting** -- Backend: `BacktestRequest.benchmark` field (default `""`); `backtesting_service.py`: when `benchmark` is set and differs from the strategy symbol, fetches that ticker via `OHLCVFetcher`, aligns to the strategy date index via `reindex + ffill`, scales to `initial_capital`, overwrites `benchmark_equity` on the equity curve; `BENCHMARK_LABELS` dict maps SPY/QQQ/BTC-USD/GLD to display names; returns `BacktestResponse.benchmark_label`. Frontend: `benchmark?` field on `BacktestRequest` in `api.ts`; `BenchmarkStrip` pill component in `backtesting/page.tsx` config sidebar (Same Symbol / SPY / QQQ / BTC / GLD), placed below the strategy doc panel; equity curve section heading dynamically shows `result.benchmark_label ?? "Buy & Hold"`; `benchmark` state passed into `runBacktest` request.
 
 ## Files to copy from outputs after this session
 
@@ -133,3 +231,40 @@ frontend/components/WhatChangedToday.tsx        (NEW)
 frontend/components/FreshnessIndicator.tsx       (NEW)
 frontend/app/watchlist-overview/page.tsx         (NEW)
 ```
+
+---
+
+## ✅ Sprint 12 — Complete
+
+### Delivered
+- [x] **Backtesting: Strategy description cards** — `STRATEGY_DOCS` constant + `StrategyDocPanel` collapsible component added to `backtesting/page.tsx`. Replaces one-liner hints with full expandable panel: how-it-works explanation, entry/exit rules (emerald/rose), best-for/watch-out (sky/amber), parameter table with defaults and meanings. Works for all 3 strategies.
+- [x] **Watchlist Overview sparklines** — `GasSparkline` imported into `watchlist-overview/page.tsx`; 7-day sparkline inserted per card below component sub-bars, wrapped in `stopPropagation` div.
+- [x] **LLM Insight Card streaming** — Full SSE refactor of `LLMInsightCard.tsx`:
+  - Removed broken `useSWR` / missing `fetchLLMInsight` import path
+  - Wired existing `useStreamInsight` hook (was defined but unused)
+  - Sections now appear **progressively** as Ollama tokens arrive — no more 15-30s blank wait
+  - Typing cursor on the currently-streaming section
+  - Pulsing “Generating…” badge in header during stream
+  - Skeleton cards for sections not yet started
+  - Price target band appears as soon as `meta` event arrives (before sections complete)
+  - Regenerate button disabled during streaming, shows “Generating…” label
+  - Backend: `OllamaBackend.generate_stream()` async generator already added to `llm_service.py`
+  - Backend: `POST /generate-insight-stream` SSE endpoint already in `explanation.py`
+
+### No new migrations, no new Python deps
+
+## Sprint 13 — Next Up
+
+### High priority
+- [ ] Model-info deep-dive: regime-conditional accuracy tab (data-gated — needs ≥90 days of predictions)
+- [ ] Dashboard: portfolio-level GAS aggregate — weighted average GAS across watchlist
+- [ ] Admin GAS precompute trigger with per-symbol status progress bar
+
+### Medium priority
+- [ ] Explore page: sector heatmap + RRG chart surfaced at top level
+- [ ] Backtesting: add parameter sweep UI (try N values, show best Sharpe)
+- [ ] News sentiment page: article timeline with FinBERT label chips
+
+### Data-gated (Sprint 14+)
+- [ ] Meta-model: “when to trust the base model”
+- [ ] Feature Analysis: regime-conditional accuracy (≥90 days of predictions)

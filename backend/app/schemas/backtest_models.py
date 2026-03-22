@@ -13,6 +13,8 @@ class BacktestRequest(BaseModel):
     )
     initial_capital: float = Field(default=10000.0)
     slippage_pct: float = Field(default=0.001, description="Slippage percentage per trade (e.g. 0.001 = 0.1%)")
+    # Sprint 25 — benchmark comparison toggle
+    benchmark: str = Field(default="", description="Benchmark ticker for buy-and-hold comparison (e.g. SPY, QQQ, BTC-USD). Empty = same symbol.")
 
     # BUG-018 FIX: Server-side validation to prevent OOM, confusing empty results,
     # or pandas/SQLAlchemy errors from invalid date ranges.
@@ -58,9 +60,63 @@ class EquityPoint(BaseModel):
     equity: float
     benchmark_equity: Optional[float] = None  # Buy-and-hold comparison
 
+# Sprint 25 — Trade Log
+class TradeRecord(BaseModel):
+    entry_date:     str
+    exit_date:      str
+    entry_price:    float
+    exit_price:     float
+    return_pct:     float        # net return % for this trade
+    holding_days:   int
+    side:           str = "long" # currently all trades are long
+
 class BacktestResponse(BaseModel):
     request: BacktestRequest
     stats: BacktestStats
     equity_curve: List[EquityPoint]
+    trade_log: List[TradeRecord] = Field(default_factory=list)  # Sprint 25
     assumptions_applied: str = "Applied initial capital and slippage model."
     overfitting_warning: bool = False  # True when Sharpe > 1.2
+    benchmark_label: str = "Buy & Hold"  # Sprint 25 — display name of benchmark
+
+
+# ── Walk-Forward Validation ──────────────────────────────────────────────────
+
+class WalkForwardRequest(BaseModel):
+    symbol: str
+    strategy: str = "momentum"
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    initial_capital: float = 10000.0
+    slippage_pct: float = 0.001
+    # Walk-forward split config
+    n_splits: int = Field(default=5, ge=2, le=10, description="Number of in-sample/out-of-sample splits")
+    train_pct: float = Field(default=0.7, ge=0.5, le=0.9, description="Fraction of each window used for in-sample")
+
+
+class WalkForwardFold(BaseModel):
+    fold: int
+    train_start: str
+    train_end: str
+    test_start: str
+    test_end: str
+    # In-sample (training window) stats
+    in_sample_stats: BacktestStats
+    in_sample_equity: List[EquityPoint]
+    # Out-of-sample (test window) stats
+    out_of_sample_stats: BacktestStats
+    out_of_sample_equity: List[EquityPoint]
+
+
+class WalkForwardResponse(BaseModel):
+    request: WalkForwardRequest
+    folds: List[WalkForwardFold]
+    # Aggregated out-of-sample stats across all folds
+    oos_total_return_pct: float
+    oos_avg_sharpe: float
+    oos_avg_win_rate: float
+    oos_max_drawdown_pct: float
+    # Degradation: IS Sharpe - OOS Sharpe (positive = overfit signal)
+    avg_sharpe_degradation: float
+    # Combined OOS equity curve (folds stitched together)
+    combined_oos_equity: List[EquityPoint]
+    overfitting_warning: bool

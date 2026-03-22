@@ -225,3 +225,46 @@ async def get_portfolio_analysis(
     if "error" in metrics:
         raise HTTPException(status_code=400, detail=metrics["error"])
     return metrics
+
+
+@router.get("/{portfolio_id}/correlation")
+async def get_portfolio_correlation(
+    portfolio_id: int,
+    period: str = "6mo",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Sprint 19 -- Correlation matrix for portfolio positions.
+    Fetches `period` of daily close prices for each symbol and returns
+    a pairwise Pearson correlation matrix.
+
+    Response:
+    {
+      "symbols": ["AAPL", "MSFT", ...],
+      "matrix":  [[1.0, 0.82, ...], [0.82, 1.0, ...], ...],
+      "period":  "6mo"
+    }
+    """
+    from app.services.portfolio_correlation import calculate_portfolio_correlation  # noqa: PLC0415
+    portfolio = await _load_portfolio(db, portfolio_id, current_user.id)
+    result = await calculate_portfolio_correlation(portfolio, period)
+    return result
+
+
+@router.get("/{portfolio_id}/performance")
+async def get_portfolio_performance(
+    portfolio_id: int,
+    period: str = "1y",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Sprint 15 P3-PORT-02 -- Portfolio vs benchmark equity curve.
+    Returns normalised equity curves (start = 100) for the portfolio
+    and its configured benchmark (default SPY) over `period`.
+    """
+    from app.services.portfolio_performance import calculate_portfolio_performance  # noqa: PLC0415
+    portfolio = await _load_portfolio(db, portfolio_id, current_user.id)
+    result = await calculate_portfolio_performance(portfolio, period)
+    return result

@@ -4,7 +4,14 @@ import { useState, useEffect, useCallback } from "react";
 import {
   ShieldAlert, TrendingDown, TrendingUp, BarChart3, AlertTriangle,
   ChevronDown, ChevronUp, Loader2, RefreshCw, Info, Plus, Trash2, X,
+  Briefcase,
 } from "lucide-react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+function riskAuthHeaders(): HeadersInit {
+  const t = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  return { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) };
+}
 import {
   fetchScenarios, stressTestSymbol, stressTestSymbolMulti,
   stressTestPortfolio, stressTestPortfolioMulti,
@@ -413,6 +420,8 @@ export default function RiskPage() {
     { symbol: "SPY", weight: 0.3, value: 3000 },
     { symbol: "TLT", weight: 0.3, value: 3000 },
   ]);
+  const [savedPortfolios, setSavedPortfolios] = useState<{id: number; name: string; items: {symbol: string; weight: number}[]}[]>([]);
+  const [portImportOpen, setPortImportOpen] = useState(false);
   const [pScenario, setPScenario] = useState("");
   const [pAllScenarios, setPAllScenarios] = useState(false);
   const [pResults, setPResults] = useState<PortfolioStressDto[]>([]);
@@ -431,6 +440,15 @@ export default function RiskPage() {
       .catch(() => {})
       .finally(() => setScenariosLoading(false));
   }, []);
+
+  // Load saved portfolios for the import feature
+  useEffect(() => {
+    if (activeTab !== "portfolio") return;
+    fetch(`${API_BASE}/api/v1/portfolios/`, { headers: riskAuthHeaders() })
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => setSavedPortfolios(data.filter(p => p.items?.length > 0)))
+      .catch(() => {});
+  }, [activeTab]);
 
   const runSingle = async () => {
     if (!sSymbol || !sScenario) return;
@@ -648,7 +666,46 @@ export default function RiskPage() {
       {activeTab === "portfolio" && (
         <div className="space-y-5">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-slate-300">Portfolio Positions</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-300">Portfolio Positions</h3>
+              {/* Import from saved portfolios */}
+              {savedPortfolios.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setPortImportOpen(o => !o)}
+                    className="flex items-center gap-1.5 text-xs rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-slate-300 hover:bg-slate-800 transition-colors"
+                  >
+                    <Briefcase className="h-3.5 w-3.5 text-sky-400" />
+                    Import from Portfolio
+                    <ChevronDown className="h-3 w-3 text-slate-500" />
+                  </button>
+                  {portImportOpen && (
+                    <div className="absolute right-0 top-full mt-1 z-30 min-w-[220px] rounded-xl border border-slate-700 bg-slate-900 shadow-2xl py-1">
+                      <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">Saved Portfolios</p>
+                      {savedPortfolios.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            const totalW = p.items.reduce((s, i) => s + i.weight, 0) || 1;
+                            const totalVal = 10000;
+                            setPPositions(p.items.map(i => ({
+                              symbol: i.symbol,
+                              weight: i.weight / totalW,
+                              value: Math.round((i.weight / totalW) * totalVal),
+                            })));
+                            setPortImportOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
+                        >
+                          <span className="font-medium">{p.name}</span>
+                          <span className="ml-1.5 text-slate-500 text-xs">{p.items.length} positions</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <div className="grid grid-cols-[1fr_80px_110px_auto] gap-2">
               <span className="text-xs text-slate-500">Symbol</span>
               <span className="text-xs text-slate-500">Weight</span>

@@ -30,6 +30,8 @@ export interface SentimentTimeseriesDto {
   sentiment_7d: number | null;
   sentiment_30d: number | null;
   articles: NewsArticleDto[];
+  /** Sprint 11 (UX-TRUST-01) — ISO UTC timestamp of the most recent article */
+  fetched_at?: string | null;
 }
 
 export interface SentimentSourceBreakdownEntryDto {
@@ -121,6 +123,8 @@ export interface MacroLatestDto {
     score: number;
     label: "Supportive" | "Neutral" | "Stressed";
   } | null;
+  /** ISO timestamp of when this macro data was last refreshed from FRED */
+  fetched_at?: string | null;
 }
 
 export async function fetchNewsSentiment(
@@ -412,6 +416,19 @@ export interface BacktestRequest {
   initial_capital?: number;
   slippage_pct?: number;
   commission_pct?: number;
+  /** Sprint 25 — benchmark comparison toggle (e.g. "SPY", "QQQ", "BTC-USD", "GLD") */
+  benchmark?: string;
+}
+
+/** Sprint 25 — individual trade extracted from the backtest position series */
+export interface TradeRecord {
+  entry_date:   string;
+  exit_date:    string;
+  entry_price:  number;
+  exit_price:   number;
+  return_pct:   number;
+  holding_days: number;
+  side:         string;
 }
 
 export interface BacktestStats {
@@ -436,6 +453,8 @@ export interface BacktestResponse {
   request: BacktestRequest;
   stats: BacktestStats;
   equity_curve: EquityPoint[];
+  trade_log?: TradeRecord[];        // Sprint 25
+  benchmark_label?: string;         // Sprint 25
   assumptions_applied?: string;
   overfitting_warning?: boolean;
 }
@@ -1015,6 +1034,34 @@ export async function deleteStrategy(id: number): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error("Failed to delete strategy");
 }
 
+// ── Alert History ────────────────────────────────────────────────────────────
+
+export interface AlertHistoryDto {
+  id: number;
+  symbol: string;
+  alert_type: "price_above" | "price_below" | "gas_above" | "gas_below";
+  threshold: number;
+  delivery_channel: string;
+  triggered_value: number;
+  triggered_at: string;
+  is_active: boolean;
+  created_at: string;
+  message: string;
+}
+
+export interface AlertHistoryListDto {
+  history: AlertHistoryDto[];
+  total: number;
+}
+
+export async function fetchAlertHistory(limit = 50): Promise<AlertHistoryListDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/alerts/history?limit=${limit}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch alert history");
+  return res.json();
+}
+
 export async function acknowledgeAlert(id: number): Promise<AlertDto> {
   const res = await fetch(`${API_BASE_URL}/api/v1/alerts/${id}/ack`, {
     method: "POST",
@@ -1024,7 +1071,7 @@ export async function acknowledgeAlert(id: number): Promise<AlertDto> {
   return res.json();
 }
 
-export async function updateProfile(name: string): Promise<{ id: string; email: string; name: string | null; is_pro: boolean }> {
+export async function updateProfile(name: string): Promise<{ id: string; email: string; name: string | null; is_pro: boolean; default_symbol?: string | null }> {
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
     method: "PATCH",
     headers: authHeaders(),
@@ -1033,6 +1080,19 @@ export async function updateProfile(name: string): Promise<{ id: string; email: 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail ?? "Failed to update profile.");
+  }
+  return res.json();
+}
+
+export async function updateDefaultSymbol(symbol: string | null): Promise<{ default_symbol: string | null }> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ default_symbol: symbol }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to update default symbol.");
   }
   return res.json();
 }
@@ -2024,6 +2084,10 @@ export interface GasSnapshotDto {
   technical_signals: unknown[];
   computed_at: string;
   source: "live" | "cache" | "db_snapshot" | string;
+  // Signal grade (A+→F) — added Sprint 21
+  signal_grade?: string | null;
+  signal_grade_score?: number | null;
+  signal_tradeable?: boolean | null;
 }
 
 export async function fetchGasSnapshot(symbol: string): Promise<GasSnapshotDto> {
@@ -2579,4 +2643,69 @@ export async function fetchSymbolSearch(
   } catch {
     return [];   // graceful fallback — GlobalTickerSearch has its own static fallback
   }
+}
+
+// ── Walk-Forward Validation (Sprint 18) ────────────────────────────────────────
+
+export interface WalkForwardStats {
+  total_return_pct: number;
+  annualized_return_pct: number;
+  max_drawdown_pct: number;
+  sharpe_ratio: number;
+  sortino_ratio: number;
+  win_rate_pct: number;
+  profit_factor: number;
+  total_trades: number;
+  recovery_factor: number;
+}
+
+export interface WalkForwardEquityPoint {
+  date: string;
+  equity: number;
+  benchmark_equity: number | null;
+}
+
+export interface WalkForwardFold {
+  fold: number;
+  train_start: string;
+  train_end: string;
+  test_start: string;
+  test_end: string;
+  in_sample_stats: WalkForwardStats;
+  in_sample_equity: WalkForwardEquityPoint[];
+  out_of_sample_stats: WalkForwardStats;
+  out_of_sample_equity: WalkForwardEquityPoint[];
+}
+
+export interface WalkForwardResponse {
+  folds: WalkForwardFold[];
+  oos_total_return_pct: number;
+  oos_avg_sharpe: number;
+  oos_avg_win_rate: number;
+  oos_max_drawdown_pct: number;
+  avg_sharpe_degradation: number;
+  combined_oos_equity: WalkForwardEquityPoint[];
+  overfitting_warning: boolean;
+}
+
+export async function runWalkForward(payload: {
+  symbol: string;
+  strategy: string;
+  parameters: Record<string, number>;
+  initial_capital: number;
+  slippage_pct?: number;
+  n_splits?: number;
+  train_pct?: number;
+}): Promise<WalkForwardResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/backtesting/walk-forward`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Walk-forward failed" }));
+    throw new Error(err.detail ?? "Walk-forward failed");
+  }
+  return res.json();
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 import {
     downloadDataExport, deleteAccount, updateProfile, changePassword,
+    updateDefaultSymbol, updateProfile as updateProfileFull,
     setup2fa, enable2fa, disable2fa, get2faStatus,
     fetchEmailPreferences, updateEmailPreferences,
     fetchApiKeys, createApiKey, revokeApiKey, fetchApiKeyUsage,
@@ -477,6 +479,13 @@ function EmailPreferencesSection() {
             </div>
             {status && <StatusMessage type={status.type} message={status.message} />}
             <p className="text-xs text-slate-600">Unsubscribe at any time via the link in any email.</p>
+            <Link
+                href="/settings/notifications"
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-sky-400 transition-colors"
+            >
+                <Bell className="h-3.5 w-3.5" />
+                Full notification preferences &amp; alert management →
+            </Link>
         </div>
     );
 }
@@ -707,6 +716,123 @@ function DataPipelineSection() {
 
 // ─── Main page ─────────────────────────────────────────────────────
 
+// ─── Risk Profile Quiz — Sprint 24 ────────────────────────────────────────────────
+
+const QUIZ_QUESTIONS = [
+    { id: "horizon",       q: "What is your investment time horizon?",                         options: ["<1 year", "1–3 years", "3–10 years", "10+ years"] },
+    { id: "loss",         q: "If your portfolio dropped 20%, you would:",                      options: ["Sell everything", "Reduce exposure", "Hold and wait", "Buy more"] },
+    { id: "goal",         q: "Your primary investment goal is:",                               options: ["Preserve capital", "Steady income", "Moderate growth", "Maximum growth"] },
+    { id: "volatility",   q: "How comfortable are you with daily price swings?",               options: ["Very uncomfortable", "Slightly uncomfortable", "Neutral", "Comfortable"] },
+    { id: "experience",   q: "How would you describe your investing experience?",               options: ["Beginner", "Intermediate", "Experienced", "Professional"] },
+];
+
+function scoreToProfile(answers: number[]): string {
+    const total = answers.reduce((s, a) => s + a, 0);
+    if (total <= 3)  return "Conservative";
+    if (total <= 7)  return "Income";
+    if (total <= 11) return "Moderate";
+    return "Aggressive";
+}
+
+const PROFILE_COLORS: Record<string, string> = {
+    Conservative: "text-sky-400 bg-sky-950/40 border-sky-700/50",
+    Income:       "text-teal-400 bg-teal-950/40 border-teal-700/50",
+    Moderate:     "text-amber-400 bg-amber-950/40 border-amber-700/50",
+    Aggressive:   "text-rose-400 bg-rose-950/40 border-rose-700/50",
+};
+
+const PROFILE_DESC: Record<string, string> = {
+    Conservative: "Capital preservation first. You prefer low-volatility assets and accept modest returns.",
+    Income:       "You prioritise steady income (dividends, bonds) with modest growth potential.",
+    Moderate:     "You balance growth and risk, accepting some volatility for better long-term returns.",
+    Aggressive:   "Maximum long-term growth. You accept high volatility and short-term losses.",
+};
+
+function RiskProfileSection({ currentProfile, onSave }: {
+    currentProfile: string | null | undefined;
+    onSave: (profile: string) => Promise<void>;
+}) {
+    const [step, setStep] = useState<"display" | "quiz">("display");
+    const [answers, setAnswers] = useState<number[]>([]);
+    const [currentQ, setCurrentQ] = useState(0);
+    const [saving, setSaving] = useState(false);
+    const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+    const startQuiz = () => { setStep("quiz"); setAnswers([]); setCurrentQ(0); };
+    const cancelQuiz = () => setStep("display");
+
+    const pickAnswer = async (score: number) => {
+        const newAnswers = [...answers, score];
+        if (currentQ < QUIZ_QUESTIONS.length - 1) {
+            setAnswers(newAnswers);
+            setCurrentQ(currentQ + 1);
+        } else {
+            const profile = scoreToProfile(newAnswers);
+            setSaving(true);
+            try {
+                await onSave(profile);
+                setStep("display");
+                setStatus({ type: "success", message: `Risk profile set to ${profile}.` });
+                setTimeout(() => setStatus(null), 4000);
+            } catch {
+                setStatus({ type: "error", message: "Failed to save." });
+            } finally { setSaving(false); }
+        }
+    };
+
+    const profileClass = currentProfile ? (PROFILE_COLORS[currentProfile] ?? "text-slate-400 bg-slate-800 border-slate-700") : "";
+
+    return (
+        <div className="rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-4 space-y-3">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-300">Risk Profile</span>
+                    {currentProfile && (
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${profileClass}`}>
+                            {currentProfile}
+                        </span>
+                    )}
+                </div>
+                {step === "display" && (
+                    <button onClick={startQuiz} className="text-xs text-sky-400 hover:text-sky-300 transition-colors font-medium">
+                        {currentProfile ? "↻ Retake quiz" : "Take quiz"}
+                    </button>
+                )}
+            </div>
+
+            {step === "display" && currentProfile && (
+                <p className="text-xs text-slate-500 leading-relaxed">{PROFILE_DESC[currentProfile]}</p>
+            )}
+            {step === "display" && !currentProfile && (
+                <p className="text-xs text-slate-600">5 questions to determine your risk appetite. Used to personalise recommendations.</p>
+            )}
+
+            {step === "quiz" && (
+                <div className="space-y-4 pt-1">
+                    <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1 rounded-full bg-slate-800 overflow-hidden">
+                            <div className="h-full rounded-full bg-sky-500 transition-all duration-300"
+                                style={{ width: `${(currentQ / QUIZ_QUESTIONS.length) * 100}%` }} />
+                        </div>
+                        <span className="text-[10px] text-slate-600">{currentQ + 1}/{QUIZ_QUESTIONS.length}</span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-200">{QUIZ_QUESTIONS[currentQ].q}</p>
+                    <div className="space-y-2">
+                        {QUIZ_QUESTIONS[currentQ].options.map((opt, i) => (
+                            <button key={i} onClick={() => pickAnswer(i)} disabled={saving}
+                                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm text-slate-300 text-left hover:border-sky-600 hover:bg-sky-950/30 hover:text-sky-300 disabled:opacity-40 transition-all">
+                                {opt}
+                            </button>
+                        ))}
+                    </div>
+                    <button onClick={cancelQuiz} className="text-xs text-slate-600 hover:text-slate-400 transition-colors">Cancel</button>
+                </div>
+            )}
+            {status && <StatusMessage type={status.type} message={status.message} />}
+        </div>
+    );
+}
+
 export default function SettingsPage() {
     const { user, logout, updateUser } = useAuth();
     // is_admin is a typed field on the User interface in AuthProvider — no cast needed
@@ -715,6 +841,26 @@ export default function SettingsPage() {
     const [displayName, setDisplayName] = useState(user?.name ?? "");
     const [profileLoading, setProfileLoading] = useState(false);
     const [profileStatus, setProfileStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+    // Default symbol preference — Sprint 23
+    const [defaultSymbol, setDefaultSymbol] = useState(user?.default_symbol ?? "");
+    const [symbolSaving, setSymbolSaving] = useState(false);
+    const [symbolStatus, setSymbolStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+    const handleSaveDefaultSymbol = async () => {
+        setSymbolSaving(true); setSymbolStatus(null);
+        const sym = defaultSymbol.trim().toUpperCase() || null;
+        try {
+            await updateDefaultSymbol(sym);
+            updateUser({ default_symbol: sym });
+            setSymbolStatus({ type: "success", message: sym ? `Default ticker set to ${sym}.` : "Default ticker cleared." });
+        } catch (err: unknown) {
+            setSymbolStatus({ type: "error", message: err instanceof Error ? err.message : "Failed to save." });
+        } finally {
+            setSymbolSaving(false);
+            setTimeout(() => setSymbolStatus(null), 4000);
+        }
+    };
 
     const handleSaveProfile = async () => {
         setProfileLoading(true); setProfileStatus(null);
@@ -833,8 +979,65 @@ export default function SettingsPage() {
                     </SectionCard>
                 )}
 
+                {/* Risk Profile Quiz — Sprint 24 */}
+                <SectionCard title="Risk Profile">
+                    <RiskProfileSection
+                        currentProfile={user?.risk_profile}
+                        onSave={async (profile) => {
+                            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/api/v1/auth/me`, {
+                                method: "PATCH",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`,
+                                },
+                                body: JSON.stringify({ risk_profile: profile }),
+                            });
+                            if (!res.ok) throw new Error("Save failed");
+                            updateUser({ risk_profile: profile });
+                        }}
+                    />
+                </SectionCard>
+
                 {/* Preferences */}
                 <SectionCard title="Preferences">
+                    {/* Default ticker */}
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-slate-300">Default Ticker</span>
+                            <span className="text-[10px] text-slate-500 bg-slate-800 rounded-full px-2 py-0.5">Loads on dashboard open</span>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                            Set the symbol that loads automatically when you open the dashboard. Leave blank to keep the last-viewed symbol.
+                        </p>
+                        <div className="flex gap-2 items-center">
+                            <input
+                                type="text"
+                                value={defaultSymbol}
+                                onChange={(e) => setDefaultSymbol(e.target.value.toUpperCase())}
+                                placeholder="e.g. AAPL"
+                                maxLength={20}
+                                className="w-36 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase"
+                            />
+                            <button
+                                onClick={handleSaveDefaultSymbol}
+                                disabled={symbolSaving}
+                                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {symbolSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : "Save"}
+                            </button>
+                            {defaultSymbol && (
+                                <button
+                                    onClick={() => { setDefaultSymbol(""); }}
+                                    className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                        {symbolStatus && <StatusMessage type={symbolStatus.type} message={symbolStatus.message} />}
+                    </div>
+
+                    {/* Theme */}
                     <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3">
                         <div className="flex items-center gap-2">
                             <Palette className="h-4 w-4 text-slate-500" />

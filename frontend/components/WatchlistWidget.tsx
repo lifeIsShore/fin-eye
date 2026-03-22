@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import useSWR from "swr";
 import { searchTickers } from "@/lib/tickers";
 import { useSymbol } from "@/lib/symbolContext";
-import { Star, X, Plus, Loader2, BookmarkCheck } from "lucide-react";
+import { Star, X, Plus, Loader2, BookmarkCheck, RefreshCw, Zap } from "lucide-react";
 import {
     fetchWatchlist,
     addToWatchlist,
@@ -12,6 +12,28 @@ import {
     WatchlistItem,
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import GradeBadge from "@/components/GradeBadge";
+
+const API_BASE_WL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+interface GasQuick { gas_score: number; signal_grade?: string | null; signal_grade_score?: number | null; signal_tradeable?: boolean | null; }
+
+async function fetchGasBatch(symbols: string[]): Promise<Record<string, GasQuick>> {
+    if (symbols.length === 0) return {};
+    try {
+        const res = await fetch(`${API_BASE_WL}/api/v1/admin/gas/snapshots/batch`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ symbols }),
+            cache: "no-store",
+        });
+        if (!res.ok) return {};
+        const list: any[] = await res.json();
+        const map: Record<string, GasQuick> = {};
+        list.forEach((e) => { map[e.symbol] = { gas_score: e.gas_score, signal_grade: e.signal_grade, signal_grade_score: e.signal_grade_score, signal_tradeable: e.signal_tradeable }; });
+        return map;
+    } catch { return {}; }
+}
 
 // Matches all Yahoo Finance formats: equities, crypto, futures, indices, forex
 const TICKER_REGEX = /^[\^]?[A-Z0-9]{1,6}([-=][A-Z0-9]{1,4})?$/;
@@ -28,10 +50,46 @@ interface WatchlistWidgetProps {
 export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidgetProps) {
     const { user } = useAuth();
     const { setSymbol: setGlobalSymbol } = useSymbol();
-    const [input, setInput]     = useState("");
-    const [adding, setAdding]   = useState(false);
-    const [error, setError]     = useState<string | null>(null);
+    const [input, setInput]           = useState("");
+    const [adding, setAdding]         = useState(false);
+    const [error, setError]           = useState<string | null>(null);
     const [showSuggest, setShowSuggest] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
+
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+    const handleBulkRefresh = async () => {
+        if (!items || items.length === 0 || refreshing) return;
+        setRefreshing(true);
+        setRefreshMsg(null);
+        let succeeded = 0;
+        let failed = 0;
+        const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+        const headers: HeadersInit = {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        for (const item of items) {
+            try {
+                const res = await fetch(
+                    `${API_BASE}/api/v1/admin/gas/precompute/${encodeURIComponent(item.symbol)}`,
+                    { method: "POST", headers },
+                );
+                if (res.ok) succeeded++;
+                else failed++;
+            } catch {
+                failed++;
+            }
+        }
+        setRefreshing(false);
+        setRefreshMsg(
+            failed === 0
+                ? `GAS refreshed for ${succeeded} symbol${succeeded !== 1 ? "s" : ""}.`
+                : `${succeeded} refreshed, ${failed} failed.`,
+        );
+        setTimeout(() => setRefreshMsg(null), 4000);
+    };
     const inputRef   = useRef<HTMLInputElement>(null);
     const suggestRef = useRef<HTMLDivElement>(null);
 
@@ -43,6 +101,15 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
         user ? "watchlist" : null,
         fetchWatchlist,
         { refreshInterval: 0, revalidateOnFocus: false },
+    );
+
+    const watchlistSymbolsList = useMemo(() => (items ?? []).map((i) => i.symbol), [items]);
+
+    // GAS + grade batch fetch for sidebar badges (5-min refresh)
+    const { data: gasMap } = useSWR<Record<string, GasQuick>>(
+        watchlistSymbolsList.length > 0 ? ["watchlist-gas-quick", ...watchlistSymbolsList] : null,
+        () => fetchGasBatch(watchlistSymbolsList),
+        { refreshInterval: 5 * 60_000, revalidateOnFocus: false },
     );
 
     // Fetch trained symbols for suggestions
@@ -160,11 +227,34 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                 <Star className="h-4 w-4 text-amber-400" />
                 <h3 className="text-sm font-semibold text-slate-200">Watchlist</h3>
                 {items && items.length > 0 && (
-                    <span className="ml-auto rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-mono text-slate-400">
+                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-mono text-slate-400">
                         {items.length}
                     </span>
                 )}
+                {/* Bulk GAS refresh */}
+                {items && items.length > 0 && (
+                    <button
+                        onClick={handleBulkRefresh}
+                        disabled={refreshing}
+                        title="Refresh GAS for all watchlist symbols"
+                        className="ml-auto flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/50 px-2 py-1 text-[10px] font-medium text-slate-400 hover:text-sky-400 hover:border-slate-600 transition-colors disabled:opacity-40"
+                    >
+                        {refreshing
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <RefreshCw className="h-3 w-3" />}
+                        <span className="hidden sm:inline">{refreshing ? "Refreshing…" : "Refresh GAS"}</span>
+                    </button>
+                )}
             </div>
+            {/* Refresh feedback */}
+            {refreshMsg && (
+                <p className={`text-[10px] mb-2 px-1 ${
+                    refreshMsg.includes("failed") ? "text-amber-400" : "text-emerald-400"
+                }`}>
+                    <Zap className="inline h-2.5 w-2.5 mr-0.5" />
+                    {refreshMsg}
+                </p>
+            )}
 
             {/* Add form */}
             <form onSubmit={handleAdd} className="mb-1 space-y-1.5">
@@ -246,16 +336,35 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                                             : "border border-transparent hover:bg-slate-800 text-slate-300 hover:text-slate-100"
                                     }`}
                                 >
-                                    <span className="text-sm font-semibold tracking-wide">
-                                        {item.symbol}
-                                    </span>
-                                    <button
-                                        onClick={(e) => handleRemove(item.symbol, e)}
-                                        className="ml-2 rounded p-0.5 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400"
-                                        aria-label={`Remove ${item.symbol}`}
-                                    >
-                                        <X className="h-3 w-3" />
-                                    </button>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <span className="text-sm font-semibold tracking-wide flex-shrink-0">
+                                            {item.symbol}
+                                        </span>
+                                        {gasMap?.[item.symbol] && (
+                                            <GradeBadge
+                                                grade={gasMap[item.symbol].signal_grade}
+                                                size="xs"
+                                                showTooltip={false}
+                                            />
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        {gasMap?.[item.symbol] && (
+                                            <span className={`text-[11px] font-mono font-bold tabular-nums ${
+                                                gasMap[item.symbol].gas_score >= 65 ? "text-emerald-400" :
+                                                gasMap[item.symbol].gas_score >= 40 ? "text-amber-400" : "text-rose-400"
+                                            }`}>
+                                                {gasMap[item.symbol].gas_score.toFixed(0)}
+                                            </span>
+                                        )}
+                                        <button
+                                            onClick={(e) => handleRemove(item.symbol, e)}
+                                            className="rounded p-0.5 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400"
+                                            aria-label={`Remove ${item.symbol}`}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </div>
                                 </button>
                             </li>
                         );

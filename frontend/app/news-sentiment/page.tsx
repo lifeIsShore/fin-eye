@@ -7,7 +7,10 @@ import { SentimentChart } from "../../components/SentimentChart";
 import { ArticleList } from "../../components/ArticleList";
 import { SourceBreakdownTable } from "../../components/SourceBreakdownTable";
 import { PageBanner } from "../../components/ui/PageBanner";
-import { Newspaper } from "lucide-react";
+import FreshnessIndicator from "../../components/FreshnessIndicator";
+import SentimentKeywordCloud from "../../components/SentimentKeywordCloud";
+import ArticleTopicClusters from "../../components/ArticleTopicClusters";
+import { Newspaper, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { useSymbol } from "../../lib/symbolContext";
 
 const DEFAULT_SYMBOL = "AAPL";
@@ -88,9 +91,47 @@ export default function NewsSentimentPage() {
       <div className="grid gap-6 md:grid-cols-5">
         <section className="md:col-span-3 space-y-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-100">
-              Sentiment over last 30 days
-            </h3>
+            <div className="flex items-center gap-2.5">
+              <h3 className="text-sm font-semibold text-slate-100">
+                Sentiment over last 30 days
+              </h3>
+              {/* Sprint 25 — 7d vs prior-7d trend arrow */}
+              {data && (() => {
+                const series = data.series;
+                if (!series || series.length < 8) return null;
+                const sorted = [...series].sort((a, b) =>
+                  a.date < b.date ? -1 : 1
+                );
+                const recent = sorted.slice(-7);
+                const prior  = sorted.slice(-14, -7);
+                if (prior.length < 4) return null;
+                const avgRecent = recent.reduce((s, p) => s + p.sentiment_score, 0) / recent.length;
+                const avgPrior  = prior.reduce((s, p)  => s + p.sentiment_score, 0) / prior.length;
+                const delta = avgRecent - avgPrior;
+                if (Math.abs(delta) < 0.02) {
+                  return (
+                    <span className="flex items-center gap-1 text-xs text-slate-500">
+                      <Minus className="h-3 w-3" />
+                      Flat
+                    </span>
+                  );
+                }
+                const up = delta > 0;
+                return (
+                  <span className={`flex items-center gap-1 text-xs font-medium ${
+                    up ? "text-emerald-400" : "text-rose-400"
+                  }`}>
+                    {up
+                      ? <TrendingUp className="h-3.5 w-3.5" />
+                      : <TrendingDown className="h-3.5 w-3.5" />}
+                    {up ? "Improving" : "Deteriorating"}
+                    <span className="text-[10px] font-normal opacity-70">
+                      ({up ? "+" : ""}{(delta * 100).toFixed(1)} pts 7d)
+                    </span>
+                  </span>
+                );
+              })()}
+            </div>
             <p className="text-xs text-slate-500 uppercase tracking-wide">
               {symbol}
             </p>
@@ -150,12 +191,19 @@ export default function NewsSentimentPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <h3 className="text-sm font-semibold text-slate-100">
-            Recent headlines
-          </h3>
-          <p className="mb-2 mt-1 text-xs text-slate-500">
-            Headlines are scored using FinBERT; sentiment labels emphasise
-            educational interpretation only, not trade suggestions.
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h3 className="text-sm font-semibold text-slate-100">Recent headlines</h3>
+            {data?.fetched_at && (
+              <FreshnessIndicator
+                updatedAt={data.fetched_at}
+                label="Articles"
+                freshMinutes={60}
+                agingMinutes={240}
+              />
+            )}
+          </div>
+          <p className="mb-3 text-xs text-slate-500">
+            FinBERT-scored headlines. Tier 1 = major financial outlets. Confidence = FinBERT softmax score.
           </p>
           {data && <ArticleList articles={data.articles} />}
           {!data && !isLoading && !error && (
@@ -164,6 +212,16 @@ export default function NewsSentimentPage() {
             </p>
           )}
         </section>
+
+        {/* Keyword cloud */}
+        {data && data.articles?.length > 0 && (
+          <SentimentKeywordCloud articles={data.articles} symbol={symbol} />
+        )}
+
+        {/* Topic clusters -- Sprint 19 */}
+        {data && data.articles?.length > 0 && (
+          <ArticleTopicClusters articles={data.articles} symbol={symbol} />
+        )}
 
         <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
           <h3 className="text-sm font-semibold text-slate-100">

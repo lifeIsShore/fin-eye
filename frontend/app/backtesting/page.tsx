@@ -5,12 +5,16 @@ import {
   runBacktest,
   BacktestRequest,
   BacktestResponse,
+  TradeRecord,
   saveStrategy,
   fetchMyStrategies,
   fetchPublicStrategies,
   deleteStrategy,
   updateStrategy,
   StrategyDto,
+  runWalkForward,
+  WalkForwardResponse,
+  WalkForwardFold,
 } from "@/lib/api";
 import {
   LineChart,
@@ -23,6 +27,17 @@ import {
   Legend,
   AreaChart,
   Area,
+} from "recharts";
+import {
+  BarChart,
+  Bar,
+  Cell,
+  XAxis as RechartXAxis,
+  YAxis as RechartYAxis,
+  CartesianGrid as RechartGrid,
+  Tooltip as RechartTooltip,
+  ResponsiveContainer as RechartContainer,
+  ReferenceLine,
 } from "recharts";
 import {
   AlertTriangle,
@@ -38,6 +53,8 @@ import {
   ChevronUp,
   FlaskConical,
   ShieldAlert,
+  SlidersHorizontal,
+  Loader2,
 } from "lucide-react";
 import { PageBanner } from "@/components/ui/PageBanner";
 import { useSymbol } from "@/lib/symbolContext";
@@ -64,23 +81,20 @@ function RiskDisclaimerBar() {
 function OverfittingWarning({ triggered }: { triggered: boolean }) {
   return (
     <div
-      className={`rounded-xl border p-4 ${
-        triggered
+      className={`rounded-xl border p-4 ${triggered
           ? "border-red-500/40 bg-red-950/30"
           : "border-amber-500/30 bg-amber-950/20"
-      }`}
+        }`}
     >
       <div className="flex items-start gap-3">
         <AlertTriangle
-          className={`mt-0.5 h-5 w-5 flex-shrink-0 ${
-            triggered ? "text-red-400" : "text-amber-400"
-          }`}
+          className={`mt-0.5 h-5 w-5 flex-shrink-0 ${triggered ? "text-red-400" : "text-amber-400"
+            }`}
         />
         <div>
           <p
-            className={`text-sm font-semibold ${
-              triggered ? "text-red-300" : "text-amber-300"
-            }`}
+            className={`text-sm font-semibold ${triggered ? "text-red-300" : "text-amber-300"
+              }`}
           >
             {triggered
               ? "⚠ High Overfitting Risk Detected (Sharpe > 1.2)"
@@ -153,7 +167,7 @@ function buildMonthlyReturns(
     });
 }
 
-const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function MonthlyHeatmap({
   equityCurve,
@@ -240,9 +254,8 @@ function MonthlyHeatmap({
                     );
                   })}
                   <td
-                    className={`text-right font-mono tabular-nums pl-2 font-semibold ${
-                      annualRet >= 0 ? "text-emerald-400" : "text-rose-400"
-                    }`}
+                    className={`text-right font-mono tabular-nums pl-2 font-semibold ${annualRet >= 0 ? "text-emerald-400" : "text-rose-400"
+                      }`}
                   >
                     {annualRet >= 0 ? "+" : ""}
                     {(annualRet * 100).toFixed(1)}%
@@ -380,10 +393,10 @@ function StrategyCard({
     s.sharpe_ratio == null
       ? "text-slate-400"
       : s.sharpe_ratio >= 1
-      ? "text-emerald-400"
-      : s.sharpe_ratio >= 0.5
-      ? "text-amber-400"
-      : "text-rose-400";
+        ? "text-emerald-400"
+        : s.sharpe_ratio >= 0.5
+          ? "text-amber-400"
+          : "text-rose-400";
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 flex items-center justify-between gap-3">
@@ -418,9 +431,8 @@ function StrategyCard({
             <span>
               Return{" "}
               <span
-                className={`font-mono font-semibold ${
-                  s.total_return_pct >= 0 ? "text-emerald-400" : "text-rose-400"
-                }`}
+                className={`font-mono font-semibold ${s.total_return_pct >= 0 ? "text-emerald-400" : "text-rose-400"
+                  }`}
               >
                 {s.total_return_pct >= 0 ? "+" : ""}
                 {s.total_return_pct.toFixed(1)}%
@@ -470,11 +482,1068 @@ function StrategyCard({
   );
 }
 
+// ─── Strategy Description Cards (Sprint 12) ────────────────────────────────────
+
+const STRATEGY_DOCS: Record<string, {
+  title: string;
+  tagline: string;
+  howItWorks: string;
+  entryRule: string;
+  exitRule: string;
+  bestFor: string;
+  watchOut: string;
+  params: { name: string; default: string; meaning: string }[];
+}> = {
+  momentum: {
+    title: "Momentum (SMA Crossover + RSI Filter)",
+    tagline: "Ride trending markets by following moving average crossovers.",
+    howItWorks:
+      "Two Simple Moving Averages (a fast and a slow one) are computed on the closing price. When the fast SMA rises above the slow SMA, the market is considered to be in an uptrend — the strategy enters a long position. An RSI filter prevents buying into already-overbought conditions.",
+    entryRule: "Fast SMA > Slow SMA AND RSI > threshold",
+    exitRule: "Either condition fails (fast SMA drops below slow SMA, or RSI falls below threshold)",
+    bestFor: "Strong, sustained directional trends (bull markets, growth stocks).",
+    watchOut:
+      "Whipsaws in sideways markets — the SMA crossover generates many false signals when price oscillates without trend. Lagging by nature: you will always enter after the move has started.",
+    params: [
+      { name: "SMA Fast",           default: "10",  meaning: "Short-term trend lookback. Smaller = more reactive, more signals." },
+      { name: "SMA Slow",           default: "50",  meaning: "Long-term trend anchor. Larger = smoother, fewer signals." },
+      { name: "RSI Period",         default: "14",  meaning: "RSI momentum lookback in days." },
+      { name: "RSI Threshold",      default: "40",  meaning: "Minimum RSI to allow entry — filters near-oversold conditions." },
+    ],
+  },
+  mean_reversion: {
+    title: "Mean Reversion (Bollinger Band + RSI)",
+    tagline: "Buy oversold dips expecting price to snap back to the mean.",
+    howItWorks:
+      "Bollinger Bands define a statistical price envelope (mean ± N standard deviations). When price touches or breaks below the lower band AND the RSI is also oversold, the model assumes the move is exhausted and bets on a snap-back to the middle band. Each trade is time-limited to prevent being stuck in a prolonged downtrend.",
+    entryRule: "Close ≤ Lower Bollinger Band AND RSI ≤ oversold threshold",
+    exitRule: "Close returns to middle band OR RSI ≥ upper threshold OR max hold days reached",
+    bestFor: "Range-bound, mean-reverting assets with moderate volatility. Works well during consolidation phases.",
+    watchOut:
+      "Catastrophic in trending bear markets — you repeatedly buy dips that keep falling. Always check the GAS Regime indicator before using this strategy; avoid it in Risk-Off regimes.",
+    params: [
+      { name: "BB Period",          default: "20",  meaning: "Bollinger Band rolling window (standard = 20 days)." },
+      { name: "RSI Period",         default: "14",  meaning: "RSI lookback for oversold detection." },
+      { name: "RSI Oversold Entry", default: "30",  meaning: "Entry threshold — lower means more extreme oversold required." },
+      { name: "Hold Days",          default: "5",   meaning: "Maximum days to stay in a trade before forced exit." },
+    ],
+  },
+  macro_responsive: {
+    title: "Macro-Responsive (Volatility-Targeted)",
+    tagline: "Scale position size by inverse volatility — hold less when markets are stressed.",
+    howItWorks:
+      "Rather than a binary in/out signal, this strategy continuously adjusts position size based on the asset's recent realised volatility relative to a target annual volatility level. When markets are calm (low vol), sizing is increased up to 100%. When volatility spikes, position shrinks proportionally. A trend filter (price above a long SMA) prevents trading into confirmed downtrends.",
+    entryRule: "Price > Trend SMA (uptrend confirmed) → position size = vol_target / realised_vol (capped at 100%)",
+    exitRule: "Price drops below Trend SMA → position goes to 0%",
+    bestFor: "Risk-managed exposure to trending assets. Approximates a 'macro-aware' positioning strategy that shrinks during stressed regimes.",
+    watchOut:
+      "Realised volatility is a backward-looking proxy — vol can spike faster than position reduces. Fractional sizing means returns are more muted than a full-size momentum strategy in bull markets.",
+    params: [
+      { name: "Vol Period",         default: "20",  meaning: "Lookback for computing realised volatility." },
+      { name: "Trend MA Period",    default: "50",  meaning: "Only trade above this SMA — trend filter." },
+      { name: "Vol Target (%)",     default: "15",  meaning: "Annualised volatility target (e.g. 15 = 15% p.a.). Higher = more aggressive sizing." },
+    ],
+  },
+};
+
+function StrategyDocPanel({ strategy }: { strategy: string }) {
+  const [open, setOpen] = useState(false);
+  const doc = STRATEGY_DOCS[strategy];
+  if (!doc) return null;
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-800/30 transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <BookOpen className="h-4 w-4 text-violet-400 flex-shrink-0" />
+          <span className="text-sm font-semibold text-slate-200">How this strategy works</span>
+        </div>
+        {open
+          ? <ChevronUp className="h-4 w-4 text-slate-500 flex-shrink-0" />
+          : <ChevronDown className="h-4 w-4 text-slate-500 flex-shrink-0" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800 px-4 pb-4 pt-3 space-y-4 text-xs leading-relaxed">
+          {/* Title + tagline */}
+          <div>
+            <p className="text-sm font-bold text-slate-100">{doc.title}</p>
+            <p className="text-slate-400 mt-0.5 italic">{doc.tagline}</p>
+          </div>
+
+          {/* How it works */}
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">How it works</p>
+            <p className="text-slate-300">{doc.howItWorks}</p>
+          </div>
+
+          {/* Entry / Exit */}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="rounded-lg bg-emerald-950/30 border border-emerald-900/40 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 mb-1">Entry Rule</p>
+              <p className="text-emerald-300 font-mono text-[11px]">{doc.entryRule}</p>
+            </div>
+            <div className="rounded-lg bg-rose-950/30 border border-rose-900/40 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-500 mb-1">Exit Rule</p>
+              <p className="text-rose-300 font-mono text-[11px]">{doc.exitRule}</p>
+            </div>
+          </div>
+
+          {/* Best for / Watch out */}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="rounded-lg bg-sky-950/20 border border-sky-900/30 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-500 mb-1">✓ Best for</p>
+              <p className="text-slate-300">{doc.bestFor}</p>
+            </div>
+            <div className="rounded-lg bg-amber-950/20 border border-amber-900/30 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 mb-1">⚠ Watch out for</p>
+              <p className="text-slate-300">{doc.watchOut}</p>
+            </div>
+          </div>
+
+          {/* Parameter table */}
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Parameters</p>
+            <div className="rounded-lg border border-slate-800 overflow-hidden">
+              <table className="w-full text-[11px]">
+                <thead className="bg-slate-800/60">
+                  <tr>
+                    <th className="px-3 py-1.5 text-left text-slate-400 font-medium">Parameter</th>
+                    <th className="px-3 py-1.5 text-center text-slate-400 font-medium">Default</th>
+                    <th className="px-3 py-1.5 text-left text-slate-400 font-medium">Meaning</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {doc.params.map((p) => (
+                    <tr key={p.name}>
+                      <td className="px-3 py-1.5 font-mono text-sky-300 whitespace-nowrap">{p.name}</td>
+                      <td className="px-3 py-1.5 text-center font-mono text-slate-300">{p.default}</td>
+                      <td className="px-3 py-1.5 text-slate-400">{p.meaning}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Parameter Sweep Panel (Sprint 14 UX-BACKTEST-04) ─────────────────────────────
+
+// ─── Walk-Forward Validation Panel (Sprint 18) ─────────────────────────────────────
+
+function WalkForwardPanel({
+  symbol,
+  strategy,
+  baseParams,
+  initialCapital,
+}: {
+  symbol: string;
+  strategy: string;
+  baseParams: Record<string, number>;
+  initialCapital: number;
+}) {
+  const [open, setOpen]         = useState(false);
+  const [nSplits, setNSplits]   = useState(5);
+  const [running, setRunning]   = useState(false);
+  const [wfResult, setWfResult] = useState<WalkForwardResponse | null>(null);
+  const [wfError, setWfError]   = useState<string | null>(null);
+
+  const runWF = useCallback(async () => {
+    setRunning(true);
+    setWfError(null);
+    setWfResult(null);
+    try {
+      const res = await runWalkForward({
+        symbol: symbol.trim().toUpperCase(),
+        strategy,
+        parameters: baseParams,
+        initial_capital: initialCapital,
+        n_splits: nSplits,
+      });
+      setWfResult(res);
+    } catch (e: unknown) {
+      setWfError(e instanceof Error ? e.message : "Walk-forward failed");
+    } finally {
+      setRunning(false);
+    }
+  }, [symbol, strategy, baseParams, initialCapital, nSplits]);
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/30 overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/20 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-slate-200 font-semibold">
+          <Activity className="h-4 w-4 text-teal-400" />
+          Walk-Forward Validation
+          <span className="text-xs font-normal text-slate-500 ml-1">Out-of-sample reality check</span>
+        </div>
+        {open ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800 px-5 pb-5 pt-4 space-y-4">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Splits the full 10-year history into N anchored IS/OOS windows. Each fold uses everything
+            before the test window as in-sample training. The stitched out-of-sample equity curve
+            is the closest thing to a true live-trading simulation. High Sharpe degradation (IS−OOS) signals overfitting.
+          </p>
+
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Number of folds</p>
+              <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-0.5">
+                {[3, 4, 5, 6, 8].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => { setNSplits(n); setWfResult(null); }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      nSplits === n ? "bg-slate-700 text-slate-100" : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={runWF}
+              disabled={running}
+              className="flex items-center gap-2 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-semibold text-white transition-colors"
+            >
+              {running
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Running…</>
+                : <><Activity className="h-4 w-4" /> Run Walk-Forward</>}
+            </button>
+          </div>
+
+          {running && (
+            <p className="text-xs text-slate-400 flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
+              Running {nSplits} IS/OOS folds on 10 years of data… this may take 15–30s.
+            </p>
+          )}
+          {wfError && <p className="text-xs text-rose-400">{wfError}</p>}
+
+          {wfResult && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: "OOS Total Return", value: `${wfResult.oos_total_return_pct >= 0 ? "+" : ""}${wfResult.oos_total_return_pct.toFixed(1)}%`, color: wfResult.oos_total_return_pct >= 0 ? "text-emerald-400" : "text-rose-400" },
+                  { label: "Avg OOS Sharpe",   value: wfResult.oos_avg_sharpe.toFixed(2), color: wfResult.oos_avg_sharpe >= 0.5 ? "text-emerald-400" : wfResult.oos_avg_sharpe >= 0.2 ? "text-amber-400" : "text-rose-400" },
+                  { label: "Sharpe Degradation", value: wfResult.avg_sharpe_degradation.toFixed(2), color: wfResult.avg_sharpe_degradation < 0.2 ? "text-emerald-400" : wfResult.avg_sharpe_degradation < 0.5 ? "text-amber-400" : "text-rose-400" },
+                  { label: "Worst OOS DD",     value: `${wfResult.oos_max_drawdown_pct.toFixed(1)}%`, color: "text-rose-400" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                    <p className="text-[10px] text-slate-500">{label}</p>
+                    <p className={`text-xl font-bold mt-0.5 ${color}`}>{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {wfResult.overfitting_warning && (
+                <div className="flex items-start gap-3 rounded-xl border border-rose-700/40 bg-rose-950/20 px-4 py-3">
+                  <AlertTriangle className="h-4 w-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <p className="font-semibold text-rose-300">Overfitting signal detected</p>
+                    <p className="text-slate-400 mt-0.5">
+                      {wfResult.avg_sharpe_degradation > 0.4
+                        ? `IS→OOS Sharpe drops by ${wfResult.avg_sharpe_degradation.toFixed(2)} on average — strategy is likely curve-fitted.`
+                        : `OOS Sharpe of ${wfResult.oos_avg_sharpe.toFixed(2)} is too low to be reliable in live trading.`}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
+                <p className="text-xs font-semibold text-slate-300">IS vs OOS Sharpe per fold</p>
+                <p className="text-[10px] text-slate-600">Blue = in-sample. Teal = out-of-sample. Similar heights = strategy generalises well.</p>
+                <div className="space-y-2">
+                  {wfResult.folds.map(fold => {
+                    const maxS = Math.max(...wfResult.folds.flatMap(f => [f.in_sample_stats.sharpe_ratio, f.out_of_sample_stats.sharpe_ratio]), 0.01);
+                    const isW  = Math.max(0, (fold.in_sample_stats.sharpe_ratio / maxS) * 100);
+                    const oosW = Math.max(0, (fold.out_of_sample_stats.sharpe_ratio / maxS) * 100);
+                    const degraded = (fold.in_sample_stats.sharpe_ratio - fold.out_of_sample_stats.sharpe_ratio) > 0.5;
+                    return (
+                      <div key={fold.fold} className="space-y-0.5">
+                        <div className="flex justify-between text-[10px] text-slate-500">
+                          <span>Fold {fold.fold} · OOS: {fold.test_start} → {fold.test_end}</span>
+                          <span className={degraded ? "text-rose-400" : "text-slate-400"}>
+                            IS {fold.in_sample_stats.sharpe_ratio.toFixed(2)} → OOS {fold.out_of_sample_stats.sharpe_ratio.toFixed(2)}{degraded && " ⚠"}
+                          </span>
+                        </div>
+                        <div className="flex gap-0.5 h-4">
+                          <div className="rounded-sm bg-blue-500/70" style={{ width: `${isW}%`, minWidth: 2 }} />
+                          <div className={`rounded-sm ${oosW < isW * 0.5 ? "bg-rose-400/70" : "bg-teal-400/70"}`} style={{ width: `${oosW}%`, minWidth: oosW > 0 ? 2 : 0 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-4 text-[10px] text-slate-500 pt-1">
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-blue-500/70" /> In-sample</span>
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-teal-400/70" /> Out-of-sample</span>
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-rose-400/70" /> OOS &lt; 50% IS</span>
+                </div>
+              </div>
+
+              {wfResult.combined_oos_equity.length > 1 && (
+                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-2">
+                  <p className="text-xs font-semibold text-slate-300">Stitched OOS Equity Curve</p>
+                  <p className="text-[10px] text-slate-500">Compounded out-of-sample equity across all folds — the closest approximation to live trading.</p>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={wfResult.combined_oos_equity} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                        <XAxis dataKey="date" stroke="#475569" fontSize={10}
+                          tickFormatter={v => new Date(v).toLocaleDateString(undefined, { month: "short", year: "2-digit" })}
+                          interval="preserveStartEnd" />
+                        <YAxis stroke="#475569" fontSize={10} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} width={44} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px", fontSize: 12 }}
+                          formatter={(v: number) => [`${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, "OOS Equity"]}
+                          labelFormatter={l => new Date(l).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                        />
+                        <Line type="monotone" dataKey="equity" stroke="#2dd4bf" strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface SweepPoint {
+  paramValue: number;
+  sharpe: number;
+  totalReturn: number;
+  maxDrawdown: number;
+  trades: number;
+}
+
+const SWEEP_PARAMS_BY_STRATEGY: Record<string, { key: string; label: string; min: number; max: number; step: number }[]> = {
+  momentum: [
+    { key: "sma_fast",      label: "SMA Fast",        min: 5,  max: 50,  step: 5  },
+    { key: "sma_slow",      label: "SMA Slow",        min: 20, max: 200, step: 10 },
+    { key: "rsi_threshold", label: "RSI Threshold",   min: 20, max: 60,  step: 5  },
+  ],
+  mean_reversion: [
+    { key: "sma_fast",      label: "BB Period",       min: 10, max: 40,  step: 5  },
+    { key: "rsi_threshold", label: "RSI Oversold",    min: 20, max: 40,  step: 2  },
+    { key: "rsi_period",    label: "RSI Period",      min: 7,  max: 21,  step: 2  },
+  ],
+  macro_responsive: [
+    { key: "sma_fast",      label: "Vol Period",      min: 5,  max: 40,  step: 5  },
+    { key: "sma_slow",      label: "Trend MA",        min: 20, max: 100, step: 10 },
+    { key: "rsi_threshold", label: "Vol Target (%)",  min: 5,  max: 30,  step: 5  },
+  ],
+};
+
+function ParameterSweepPanel({
+  symbol,
+  strategy,
+  baseParams,
+  initialCapital,
+  startDate,
+  endDate,
+}: {
+  symbol: string;
+  strategy: string;
+  baseParams: Record<string, number>;
+  initialCapital: number;
+  startDate?: string;
+  endDate?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedParam, setSelectedParam] = useState(0);
+  const [metric, setMetric] = useState<"sharpe" | "totalReturn" | "maxDrawdown">("sharpe");
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState<SweepPoint[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const params = SWEEP_PARAMS_BY_STRATEGY[strategy] ?? [];
+  const param  = params[selectedParam];
+
+  const runSweep = useCallback(async () => {
+    if (!param) return;
+    setRunning(true);
+    setError(null);
+    setResults([]);
+
+    const values: number[] = [];
+    for (let v = param.min; v <= param.max; v += param.step) values.push(v);
+
+    const points: SweepPoint[] = [];
+    for (const val of values) {
+      try {
+        const req: BacktestRequest = {
+          symbol: symbol.trim().toUpperCase(),
+          strategy,
+          initial_capital: initialCapital,
+          start_date: startDate || undefined,
+          end_date:   endDate   || undefined,
+          parameters: { ...baseParams, [param.key]: val },
+        };
+        const res = await runBacktest(req);
+        points.push({
+          paramValue:  val,
+          sharpe:      res.stats.sharpe_ratio,
+          totalReturn: res.stats.total_return_pct,
+          maxDrawdown: Math.abs(res.stats.max_drawdown_pct),
+          trades:      res.stats.total_trades,
+        });
+      } catch {
+        points.push({ paramValue: val, sharpe: 0, totalReturn: 0, maxDrawdown: 0, trades: 0 });
+      }
+    }
+    setResults(points);
+    setRunning(false);
+  }, [param, symbol, strategy, initialCapital, startDate, endDate, baseParams]);
+
+  if (!params.length) return null;
+
+  const bestPoint = results.length > 0
+    ? [...results].sort((a, b) => {
+        if (metric === "sharpe")      return b.sharpe - a.sharpe;
+        if (metric === "totalReturn") return b.totalReturn - a.totalReturn;
+        return a.maxDrawdown - b.maxDrawdown;  // lower is better
+      })[0]
+    : null;
+
+  const METRIC_CONFIG = {
+    sharpe:      { label: "Sharpe Ratio",  color: "#3b82f6", fmt: (v: number) => v.toFixed(2) },
+    totalReturn: { label: "Total Return %", color: "#10b981", fmt: (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%` },
+    maxDrawdown: { label: "Max Drawdown %", color: "#f87171", fmt: (v: number) => `${v.toFixed(1)}%` },
+  };
+  const mc = METRIC_CONFIG[metric];
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/30 overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/20 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-slate-200 font-semibold">
+          <SlidersHorizontal className="h-4 w-4 text-violet-400" />
+          Parameter Sweep
+          <span className="text-xs font-normal text-slate-500 ml-1">Find optimal parameter values</span>
+        </div>
+        {open ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800 px-5 pb-5 pt-4 space-y-4">
+          <p className="text-xs text-slate-500">
+            Runs the backtest across a range of values for one parameter, holding all others constant.
+            Helps identify which value maximises your chosen metric. ⚠ In-sample only — results will overfit.
+          </p>
+
+          {/* Controls row */}
+          <div className="flex flex-wrap gap-3 items-end">
+            {/* Parameter selector */}
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Sweep parameter</p>
+              <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-0.5">
+                {params.map((p, i) => (
+                  <button
+                    key={p.key}
+                    onClick={() => { setSelectedParam(i); setResults([]); }}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      selectedParam === i ? "bg-slate-700 text-slate-100" : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Metric selector */}
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Optimise for</p>
+              <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-0.5">
+                {(["sharpe", "totalReturn", "maxDrawdown"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMetric(m)}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      metric === m ? "bg-slate-700 text-slate-100" : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    {METRIC_CONFIG[m].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={runSweep}
+              disabled={running}
+              className="flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-semibold text-white transition-colors"
+            >
+              {running ? <><Loader2 className="h-4 w-4 animate-spin" /> Running…</> : <><SlidersHorizontal className="h-4 w-4" /> Run Sweep</>}
+            </button>
+          </div>
+
+          {/* Range info */}
+          {param && (
+            <p className="text-[10px] text-slate-600">
+              Testing {param.label}: {param.min} → {param.max} (step {param.step}) — {Math.floor((param.max - param.min) / param.step) + 1} backtests
+            </p>
+          )}
+
+          {error && <p className="text-xs text-rose-400">{error}</p>}
+
+          {/* Progress during run */}
+          {running && (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400" />
+              Running {Math.floor((param?.max ?? 0 - param?.min ?? 0) / (param?.step ?? 1)) + 1} backtests…
+            </div>
+          )}
+
+          {/* Results chart */}
+          {results.length > 0 && (
+            <div className="space-y-3">
+              {/* Best value callout */}
+              {bestPoint && (
+                <div className="flex items-center gap-3 rounded-xl border border-violet-800/40 bg-violet-950/20 px-4 py-2.5">
+                  <SlidersHorizontal className="h-4 w-4 text-violet-400 flex-shrink-0" />
+                  <div className="text-xs">
+                    <span className="text-slate-400">Best {mc.label}: </span>
+                    <span className="font-bold text-violet-300">{param?.label} = {bestPoint.paramValue}</span>
+                    <span className="ml-2 text-slate-500">({mc.fmt(bestPoint[metric])})</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                <p className="text-xs font-semibold text-slate-300 mb-1">{mc.label} vs {param?.label}</p>
+                <p className="text-[10px] text-slate-600 mb-3">Each bar = one full backtest. Taller bar = better {mc.label}.</p>
+                <div className="h-48">
+                  <RechartContainer width="100%" height="100%">
+                    <BarChart data={results} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+                      <RechartGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                      <RechartXAxis
+                        dataKey="paramValue"
+                        stroke="#475569" fontSize={11}
+                        tickFormatter={(v) => String(v)}
+                      />
+                      <RechartYAxis
+                        stroke="#475569" fontSize={11}
+                        tickFormatter={(v) => mc.fmt(v)}
+                        width={52}
+                      />
+                      <RechartTooltip
+                        contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px", fontSize: 12 }}
+                        formatter={(v: number) => [mc.fmt(v), mc.label]}
+                        labelFormatter={(l) => `${param?.label} = ${l}`}
+                      />
+                      {metric === "sharpe" && <ReferenceLine y={1.0} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1} />}
+                      {metric === "sharpe" && <ReferenceLine y={1.2} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1} />}
+                      <Bar dataKey={metric} radius={[3, 3, 0, 0]} maxBarSize={40}>
+                        {results.map((r, i) => {
+                          const isBest = r.paramValue === bestPoint?.paramValue;
+                          return (
+                            <Cell
+                              key={i}
+                              fill={isBest ? "#a78bfa" : mc.color}
+                              fillOpacity={isBest ? 1 : 0.65}
+                            />
+                          );
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </RechartContainer>
+                </div>
+                {metric === "sharpe" && (
+                  <p className="text-[10px] text-slate-600 mt-2">
+                    <span className="text-amber-400">——</span> Sharpe 1.0 (good) &nbsp;
+                    <span className="text-rose-400">——</span> Sharpe 1.2 (overfit risk)
+                  </p>
+                )}
+              </div>
+
+              {/* Results table */}
+              <div className="rounded-xl border border-slate-800 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-900/60">
+                    <tr className="border-b border-slate-800 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2 text-left">{param?.label}</th>
+                      <th className="px-3 py-2 text-right">Sharpe</th>
+                      <th className="px-3 py-2 text-right">Return</th>
+                      <th className="px-3 py-2 text-right">Max DD</th>
+                      <th className="px-3 py-2 text-right">Trades</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {results.map((r) => {
+                      const isBest = r.paramValue === bestPoint?.paramValue;
+                      return (
+                        <tr key={r.paramValue} className={`hover:bg-slate-800/20 transition-colors ${
+                          isBest ? "bg-violet-950/20 border-l-2 border-violet-500" : ""
+                        }`}>
+                          <td className={`px-3 py-2 font-mono font-bold ${isBest ? "text-violet-300" : "text-slate-200"}`}>
+                            {r.paramValue}
+                            {isBest && <span className="ml-1.5 text-[9px] text-violet-400">★ best</span>}
+                          </td>
+                          <td className={`px-3 py-2 text-right font-mono ${
+                            r.sharpe >= 1 ? "text-emerald-400" : r.sharpe >= 0.5 ? "text-amber-400" : "text-rose-400"
+                          }`}>{r.sharpe.toFixed(2)}</td>
+                          <td className={`px-3 py-2 text-right font-mono ${
+                            r.totalReturn >= 0 ? "text-emerald-400" : "text-rose-400"
+                          }`}>{r.totalReturn >= 0 ? "+" : ""}{r.totalReturn.toFixed(1)}%</td>
+                          <td className="px-3 py-2 text-right font-mono text-rose-400">{r.maxDrawdown.toFixed(1)}%</td>
+                          <td className="px-3 py-2 text-right font-mono text-slate-400">{r.trades}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Walk-Forward Validation Panel (Sprint 18) ──────────────────────────────
+
+function WalkForwardPanel({
+  symbol,
+  strategy,
+  baseParams,
+  initialCapital,
+}: {
+  symbol: string;
+  strategy: string;
+  baseParams: Record<string, number>;
+  initialCapital: number;
+}) {
+  const [open, setOpen]       = useState(false);
+  const [nSplits, setNSplits] = useState(5);
+  const [running, setRunning] = useState(false);
+  const [result, setResult]   = useState<WalkForwardResponse | null>(null);
+  const [error, setError]     = useState<string | null>(null);
+
+  const handleRun = useCallback(async () => {
+    setRunning(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await runWalkForward({
+        symbol: symbol.trim().toUpperCase(),
+        strategy,
+        parameters: baseParams,
+        initial_capital: initialCapital,
+        n_splits: nSplits,
+      });
+      setResult(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Walk-forward failed");
+    } finally {
+      setRunning(false);
+    }
+  }, [symbol, strategy, baseParams, initialCapital, nSplits]);
+
+  const degradationColor = (d: number) =>
+    d > 0.8 ? "text-rose-400" : d > 0.4 ? "text-amber-400" : "text-emerald-400";
+  const sharpeColor = (s: number) =>
+    s >= 0.8 ? "text-emerald-400" : s >= 0.3 ? "text-amber-400" : "text-rose-400";
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/30 overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/20 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-slate-200 font-semibold">
+          <Activity className="h-4 w-4 text-teal-400" />
+          Walk-Forward Validation
+          <span className="text-xs font-normal text-slate-500 ml-1">Out-of-sample reality check</span>
+        </div>
+        {open ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800 px-5 pb-5 pt-4 space-y-4">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Anchored walk-forward splits the full price history into <strong className="text-slate-400">N folds</strong>.
+            Each fold trains on all prior data (in-sample) and tests on the next period (out-of-sample).
+            A large gap between IS and OOS Sharpe signals curve-fitting.
+          </p>
+
+          {/* Controls */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Number of folds</p>
+              <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-0.5">
+                {[3, 4, 5, 6, 8].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => { setNSplits(n); setResult(null); }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      nSplits === n ? "bg-slate-700 text-slate-100" : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={handleRun}
+              disabled={running}
+              className="flex items-center gap-2 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-semibold text-white transition-colors"
+            >
+              {running ? <><Loader2 className="h-4 w-4 animate-spin" /> Running…</> : <><Activity className="h-4 w-4" /> Run Walk-Forward</>}
+            </button>
+          </div>
+
+          {error && <p className="text-xs text-rose-400">{error}</p>}
+
+          {result && (
+            <div className="space-y-4">
+              {/* Summary KPIs */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: "OOS Total Return",  value: `${result.oos_total_return_pct >= 0 ? "+" : ""}${result.oos_total_return_pct.toFixed(1)}%`, color: result.oos_total_return_pct >= 0 ? "text-emerald-400" : "text-rose-400" },
+                  { label: "OOS Avg Sharpe",    value: result.oos_avg_sharpe.toFixed(2),   color: sharpeColor(result.oos_avg_sharpe) },
+                  { label: "OOS Max Drawdown",  value: `${result.oos_max_drawdown_pct.toFixed(1)}%`, color: "text-rose-400" },
+                  { label: "OOS Win Rate",      value: `${result.oos_avg_win_rate.toFixed(1)}%`, color: result.oos_avg_win_rate >= 50 ? "text-emerald-400" : "text-slate-300" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</p>
+                    <p className={`text-xl font-bold mt-0.5 ${color}`}>{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Overfitting / degradation banner */}
+              <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${
+                result.overfitting_warning
+                  ? "border-rose-800/50 bg-rose-950/20"
+                  : "border-emerald-800/30 bg-emerald-950/10"
+              }`}>
+                <AlertTriangle className={`h-4 w-4 flex-shrink-0 mt-0.5 ${
+                  result.overfitting_warning ? "text-rose-400" : "text-emerald-400"
+                }`} />
+                <div className="text-xs space-y-0.5">
+                  <p className={`font-semibold ${
+                    result.overfitting_warning ? "text-rose-300" : "text-emerald-300"
+                  }`}>
+                    {result.overfitting_warning
+                      ? "⚠ Overfitting signal detected"
+                      : "✓ Strategy shows reasonable OOS robustness"}
+                  </p>
+                  <p className="text-slate-400">
+                    Avg IS→OOS Sharpe degradation:{" "}
+                    <span className={`font-bold font-mono ${degradationColor(result.avg_sharpe_degradation)}`}>
+                      {result.avg_sharpe_degradation >= 0 ? "+" : ""}{result.avg_sharpe_degradation.toFixed(2)}
+                    </span>
+                    {" "}&nbsp;(threshold: &gt;0.4 = concern, &gt;0.8 = high risk)
+                  </p>
+                </div>
+              </div>
+
+              {/* OOS equity curve */}
+              {result.combined_oos_equity.length > 1 && (
+                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                  <p className="text-xs font-semibold text-slate-300 mb-0.5">Stitched OOS Equity Curve</p>
+                  <p className="text-[10px] text-slate-600 mb-3">All out-of-sample folds chained end-to-end — this is the closest proxy to live trading performance.</p>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={result.combined_oos_equity} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                        <XAxis dataKey="date" stroke="#475569" fontSize={10}
+                          tickFormatter={v => new Date(v).toLocaleDateString(undefined, { month: "short", year: "2-digit" })}
+                          interval="preserveStartEnd" />
+                        <YAxis stroke="#475569" fontSize={10}
+                          tickFormatter={v => `${(v / 1000).toFixed(0)}k`}
+                          domain={["auto", "auto"]} width={44} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px", fontSize: 11 }}
+                          labelFormatter={l => new Date(l).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                          formatter={(v: number) => [`${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, "OOS Equity"]}
+                        />
+                        <Line type="monotone" dataKey="equity" stroke="#2dd4bf" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: "#2dd4bf" }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* Per-fold IS vs OOS Sharpe comparison */}
+              <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
+                <p className="text-xs font-semibold text-slate-300">IS vs OOS Sharpe per Fold</p>
+                <p className="text-[10px] text-slate-600">Blue = in-sample (training). Teal = out-of-sample (test). Large gap = possible overfit.</p>
+                <div className="space-y-2">
+                  {result.folds.map(fold => {
+                    const maxSharpe = Math.max(
+                      ...result.folds.flatMap(f => [Math.abs(f.in_sample_stats.sharpe_ratio), Math.abs(f.out_of_sample_stats.sharpe_ratio)]),
+                      1,
+                    );
+                    const isBarPct  = Math.min(Math.abs(fold.in_sample_stats.sharpe_ratio)  / maxSharpe * 100, 100);
+                    const oosBarPct = Math.min(Math.abs(fold.out_of_sample_stats.sharpe_ratio) / maxSharpe * 100, 100);
+                    return (
+                      <div key={fold.fold} className="space-y-1">
+                        <div className="flex items-center justify-between text-[10px] text-slate-500">
+                          <span>Fold {fold.fold} &nbsp;<span className="text-slate-700">{fold.test_start} → {fold.test_end}</span></span>
+                          <span>
+                            IS {fold.in_sample_stats.sharpe_ratio.toFixed(2)}{" "}
+                            <span className="text-slate-700">vs</span>{" "}
+                            <span className={sharpeColor(fold.out_of_sample_stats.sharpe_ratio)}>
+                              OOS {fold.out_of_sample_stats.sharpe_ratio.toFixed(2)}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="h-2 bg-slate-800 rounded overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded" style={{ width: `${isBarPct}%` }} />
+                          </div>
+                          <div className="h-2 bg-slate-800 rounded overflow-hidden">
+                            <div className={`h-full rounded ${
+                              fold.out_of_sample_stats.sharpe_ratio >= 0.5 ? "bg-teal-500" :
+                              fold.out_of_sample_stats.sharpe_ratio >= 0 ? "bg-amber-500" : "bg-rose-500"
+                            }`} style={{ width: `${oosBarPct}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-4 text-[10px] text-slate-600 pt-1">
+                  <span><span className="inline-block w-2 h-2 rounded-sm bg-blue-500 mr-1" />In-sample</span>
+                  <span><span className="inline-block w-2 h-2 rounded-sm bg-teal-500 mr-1" />Out-of-sample</span>
+                </div>
+              </div>
+
+              {/* Fold details table */}
+              <div className="rounded-xl border border-slate-800 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-900/60">
+                    <tr className="border-b border-slate-800 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2 text-left">Fold</th>
+                      <th className="px-3 py-2 text-left">OOS Window</th>
+                      <th className="px-3 py-2 text-right">IS Sharpe</th>
+                      <th className="px-3 py-2 text-right">OOS Sharpe</th>
+                      <th className="px-3 py-2 text-right">OOS Return</th>
+                      <th className="px-3 py-2 text-right">OOS DD</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {result.folds.map(fold => (
+                      <tr key={fold.fold} className="hover:bg-slate-800/20">
+                        <td className="px-3 py-2 font-mono font-bold text-slate-300">{fold.fold}</td>
+                        <td className="px-3 py-2 text-slate-500 text-[10px]">
+                          {fold.test_start.slice(0, 7)} → {fold.test_end.slice(0, 7)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-slate-400">{fold.in_sample_stats.sharpe_ratio.toFixed(2)}</td>
+                        <td className={`px-3 py-2 text-right font-mono font-semibold ${sharpeColor(fold.out_of_sample_stats.sharpe_ratio)}`}>
+                          {fold.out_of_sample_stats.sharpe_ratio.toFixed(2)}
+                        </td>
+                        <td className={`px-3 py-2 text-right font-mono ${
+                          fold.out_of_sample_stats.total_return_pct >= 0 ? "text-emerald-400" : "text-rose-400"
+                        }`}>
+                          {fold.out_of_sample_stats.total_return_pct >= 0 ? "+" : ""}{fold.out_of_sample_stats.total_return_pct.toFixed(1)}%
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-rose-400">{fold.out_of_sample_stats.max_drawdown_pct.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sprint 25: Benchmark Comparison Pill Strip ─────────────────────────────
+
+const BENCHMARK_OPTIONS = [
+  { value: "",        label: "Same Symbol" },
+  { value: "SPY",     label: "SPY" },
+  { value: "QQQ",     label: "QQQ" },
+  { value: "BTC-USD", label: "BTC" },
+  { value: "GLD",     label: "GLD" },
+] as const;
+
+function BenchmarkStrip({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="block text-xs font-medium text-slate-400">
+        Benchmark
+      </label>
+      <div className="flex flex-wrap gap-1 rounded-lg border border-slate-700 bg-slate-950 p-1">
+        {BENCHMARK_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={`flex-1 min-w-0 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+              value === opt.value
+                ? "bg-blue-600 text-white"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Sprint 25: Trade Log Table ───────────────────────────────────────────────
+
+const TRADE_LOG_PAGE_SIZE = 10;
+
+function TradeLogTable({ trades }: { trades: TradeRecord[] }) {
+  const [page, setPage]     = useState(0);
+  const [open, setOpen]     = useState(false);
+
+  if (!trades || trades.length === 0) return null;
+
+  const totalPages = Math.ceil(trades.length / TRADE_LOG_PAGE_SIZE);
+  const slice = trades.slice(
+    page * TRADE_LOG_PAGE_SIZE,
+    (page + 1) * TRADE_LOG_PAGE_SIZE,
+  );
+
+  const wins   = trades.filter((t) => t.return_pct > 0).length;
+  const losses = trades.filter((t) => t.return_pct < 0).length;
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-800/20 transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <TrendingUp className="h-4 w-4 text-blue-400" />
+          <span className="text-sm font-semibold text-slate-200">Trade Log</span>
+          <span className="text-xs text-slate-500">
+            {trades.length} trades &middot;
+            <span className="text-emerald-400 ml-1">{wins}W</span>
+            {" / "}
+            <span className="text-rose-400">{losses}L</span>
+          </span>
+        </div>
+        {open
+          ? <ChevronUp className="h-4 w-4 text-slate-500" />
+          : <ChevronDown className="h-4 w-4 text-slate-500" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-900/60">
+                <tr className="border-b border-slate-800 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-2 text-left">#</th>
+                  <th className="px-4 py-2 text-left">Entry Date</th>
+                  <th className="px-4 py-2 text-left">Exit Date</th>
+                  <th className="px-4 py-2 text-right">Entry $</th>
+                  <th className="px-4 py-2 text-right">Exit $</th>
+                  <th className="px-4 py-2 text-right">Return %</th>
+                  <th className="px-4 py-2 text-right">Days</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {slice.map((t, i) => {
+                  const idx = page * TRADE_LOG_PAGE_SIZE + i + 1;
+                  const positive = t.return_pct >= 0;
+                  return (
+                    <tr
+                      key={idx}
+                      className="hover:bg-slate-800/20 transition-colors"
+                    >
+                      <td className="px-4 py-2 text-slate-600 font-mono">{idx}</td>
+                      <td className="px-4 py-2 text-slate-400 font-mono">{t.entry_date}</td>
+                      <td className="px-4 py-2 text-slate-400 font-mono">{t.exit_date}</td>
+                      <td className="px-4 py-2 text-right font-mono text-slate-300">
+                        ${t.entry_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono text-slate-300">
+                        ${t.exit_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td
+                        className={`px-4 py-2 text-right font-mono font-semibold ${
+                          positive ? "text-emerald-400" : "text-rose-400"
+                        }`}
+                      >
+                        {positive ? "+" : ""}{t.return_pct.toFixed(2)}%
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono text-slate-500">
+                        {t.holding_days}d
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-slate-800">
+              <p className="text-[10px] text-slate-600">
+                Page {page + 1} of {totalPages} &middot; {trades.length} trades
+              </p>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="px-2.5 py-1 rounded-md text-xs text-slate-400 hover:text-slate-200 disabled:opacity-30 border border-slate-800 hover:border-slate-700 transition"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="px-2.5 py-1 rounded-md text-xs text-slate-400 hover:text-slate-200 disabled:opacity-30 border border-slate-800 hover:border-slate-700 transition"
+                >
+                  →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BacktestingPage() {
   const { symbol: globalSymbol } = useSymbol();
   const [symbol, setSymbol] = useState(globalSymbol || "TSLA");
+  const [strategy, setStrategy] = useState("momentum");
   const [initialCapital, setInitialCapital] = useState("10000");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -482,6 +1551,8 @@ export default function BacktestingPage() {
   const [smaSlow, setSmaSlow] = useState("50");
   const [rsiPeriod, setRsiPeriod] = useState("14");
   const [rsiThreshold, setRsiThreshold] = useState("40");
+
+  const [benchmark, setBenchmark] = useState(""); // Sprint 25
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -526,7 +1597,7 @@ export default function BacktestingPage() {
     setResult(null);
     const req: BacktestRequest = {
       symbol: symbol.trim().toUpperCase(),
-      strategy: "momentum",
+      strategy: strategy,
       initial_capital: Number(initialCapital),
       start_date: startDate || undefined,
       end_date: endDate || undefined,
@@ -536,6 +1607,7 @@ export default function BacktestingPage() {
         rsi_period: Number(rsiPeriod),
         rsi_threshold: Number(rsiThreshold),
       },
+      benchmark: benchmark || undefined, // Sprint 25
     };
     try {
       const data = await runBacktest(req);
@@ -659,10 +1731,22 @@ export default function BacktestingPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-400">
                   Strategy
                 </label>
-                <div className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-300">
-                  Momentum (SMA Crossover + RSI)
-                </div>
+                <select
+                  value={strategy}
+                  onChange={(e) => { setStrategy(e.target.value); setResult(null); }}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="momentum">Momentum (SMA + RSI)</option>
+                  <option value="mean_reversion">Mean Reversion (Bollinger + RSI)</option>
+                  <option value="macro_responsive">Macro-Responsive (Vol-Targeted)</option>
+                </select>
               </div>
+
+              {/* Strategy description card */}
+              <StrategyDocPanel strategy={strategy} />
+
+              {/* Sprint 25 — benchmark toggle */}
+              <BenchmarkStrip value={benchmark} onChange={setBenchmark} />
 
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-400">
@@ -708,46 +1792,45 @@ export default function BacktestingPage() {
                   Parameters
                 </h4>
                 <div className="space-y-3">
-                  {[
-                    {
-                      label: "SMA Fast",
-                      val: smaFast,
-                      set: setSmaFast,
-                      tip: "Short-term MA period",
-                    },
-                    {
-                      label: "SMA Slow",
-                      val: smaSlow,
-                      set: setSmaSlow,
-                      tip: "Long-term MA period",
-                    },
-                    {
-                      label: "RSI Period",
-                      val: rsiPeriod,
-                      set: setRsiPeriod,
-                      tip: "RSI lookback",
-                    },
-                    {
-                      label: "RSI Threshold (Buy >)",
-                      val: rsiThreshold,
-                      set: setRsiThreshold,
-                      tip: "Minimum RSI to enter",
-                    },
+                  {strategy === "momentum" && [
+                    { label: "SMA Fast", val: smaFast, set: setSmaFast, tip: "Short-term MA period" },
+                    { label: "SMA Slow", val: smaSlow, set: setSmaSlow, tip: "Long-term MA period" },
+                    { label: "RSI Period", val: rsiPeriod, set: setRsiPeriod, tip: "RSI lookback" },
+                    { label: "RSI Threshold (Buy >)", val: rsiThreshold, set: setRsiThreshold, tip: "Min RSI to enter" },
                   ].map(({ label, val, set, tip }) => (
                     <div key={label}>
                       <label className="mb-1 flex items-center gap-1 text-xs text-slate-400">
-                        {label}
-                        <span title={tip}>
-                          <Info className="h-3 w-3 text-slate-600" />
-                        </span>
+                        {label}<span title={tip}><Info className="h-3 w-3 text-slate-600" /></span>
                       </label>
-                      <input
-                        type="number"
-                        value={val}
-                        min={2}
-                        onChange={(e) => set(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100"
-                      />
+                      <input type="number" value={val} min={2} onChange={(e) => set(e.target.value)}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100" />
+                    </div>
+                  ))}
+                  {strategy === "mean_reversion" && [
+                    { label: "BB Period", val: smaFast, set: setSmaFast, tip: "Bollinger Band lookback (default 20)" },
+                    { label: "BB Std Dev", val: "2", set: () => { }, tip: "Standard deviations for bands" },
+                    { label: "RSI Period", val: rsiPeriod, set: setRsiPeriod, tip: "RSI lookback" },
+                    { label: "RSI Oversold (entry <)", val: rsiThreshold, set: setRsiThreshold, tip: "Entry when RSI below this" },
+                  ].map(({ label, val, set, tip }) => (
+                    <div key={label}>
+                      <label className="mb-1 flex items-center gap-1 text-xs text-slate-400">
+                        {label}<span title={tip}><Info className="h-3 w-3 text-slate-600" /></span>
+                      </label>
+                      <input type="number" value={val} min={2} onChange={(e) => (set as (v: string) => void)(e.target.value)}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100" />
+                    </div>
+                  ))}
+                  {strategy === "macro_responsive" && [
+                    { label: "Vol Period", val: smaFast, set: setSmaFast, tip: "Realised vol lookback (default 20)" },
+                    { label: "Trend MA Period", val: smaSlow, set: setSmaSlow, tip: "Only trade above this SMA" },
+                    { label: "Vol Target (%)", val: rsiThreshold, set: setRsiThreshold, tip: "Annual vol target (e.g. 15)" },
+                  ].map(({ label, val, set, tip }) => (
+                    <div key={label}>
+                      <label className="mb-1 flex items-center gap-1 text-xs text-slate-400">
+                        {label}<span title={tip}><Info className="h-3 w-3 text-slate-600" /></span>
+                      </label>
+                      <input type="number" value={val} min={2} onChange={(e) => (set as (v: string) => void)(e.target.value)}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100" />
                     </div>
                   ))}
                 </div>
@@ -852,7 +1935,11 @@ export default function BacktestingPage() {
                   Equity Curve
                 </h3>
                 <p className="mb-4 text-xs text-slate-500">
-                  Strategy (blue) vs Buy &amp; Hold benchmark (slate)
+                  Strategy (blue) vs{" "}
+                  <span className="text-slate-400 font-medium">
+                    {result.benchmark_label ?? "Buy & Hold"}
+                  </span>{" "}
+                  benchmark (slate)
                 </p>
                 <div className="h-[320px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -979,6 +2066,40 @@ export default function BacktestingPage() {
                   {result.assumptions_applied}
                 </p>
               )}
+
+              {/* Sprint 25 — Trade Log */}
+              {result.trade_log && result.trade_log.length > 0 && (
+                <TradeLogTable trades={result.trade_log} />
+              )}
+
+              {/* Parameter Sweep — Sprint 14 UX-BACKTEST-04 */}
+              <ParameterSweepPanel
+                symbol={symbol}
+                strategy={strategy}
+                baseParams={{
+                  sma_fast:      Number(smaFast),
+                  sma_slow:      Number(smaSlow),
+                  rsi_period:    Number(rsiPeriod),
+                  rsi_threshold: Number(rsiThreshold),
+                }}
+                initialCapital={Number(initialCapital)}
+                startDate={startDate || undefined}
+                endDate={endDate || undefined}
+              />
+
+              {/* Walk-Forward Validation — Sprint 18 */}
+              <WalkForwardPanel
+                symbol={symbol}
+                strategy={strategy}
+                baseParams={{
+                  sma_fast:      Number(smaFast),
+                  sma_slow:      Number(smaSlow),
+                  rsi_period:    Number(rsiPeriod),
+                  rsi_threshold: Number(rsiThreshold),
+                }}
+                initialCapital={Number(initialCapital)}
+              />
+              {/* end Sprint 18 walk-forward */}
             </div>
           )}
         </div>
@@ -1011,11 +2132,10 @@ export default function BacktestingPage() {
                 <button
                   key={tab}
                   onClick={() => setLibTab(tab)}
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${
-                    libTab === tab
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${libTab === tab
                       ? "bg-slate-700 text-slate-100"
                       : "text-slate-500 hover:text-slate-300"
-                  }`}
+                    }`}
                 >
                   {tab === "mine" ? "My Strategies" : "Community"}
                 </button>

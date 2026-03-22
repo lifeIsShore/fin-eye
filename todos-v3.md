@@ -70,7 +70,7 @@ The dashboard `page.tsx` is wired correctly but has several gaps that affect fir
 - [ ] 🟠 **SWR error boundaries** (UX-PERF-01) — Wrap each dashboard widget in an ErrorBoundary. Currently if `fetchGasSnapshot` throws, the entire page crashes. Each section should fail independently with its own fallback UI.
 - [ ] 🟠 **Standardised semantic colours** (UX-UI-05) — Audit all components. Enforce: Bullish = `emerald-400`, Bearish = `rose-400`, Neutral = `amber-400`. Currently mixed across `TimeframeGrid`, `RegimeWidget`, `MarketWeatherWidget`, `StrategyCard`.
 - [ ] 🟡 **"What Changed Today" widget** (UX-GROWTH-02) — A panel below the main dashboard showing `AAPL GAS: 62→71 ↑` and `TSLA Regime: Risk-Off→Risk-On` for all watchlist symbols. Gives power users a reason to return daily.
-- [ ] 🟡 **Score Change Explainer banner** (UX-EDU-03) — When GAS changes by >5 points between refreshes, show a brief inline banner: "GAS ↑ 8 pts — Macro score improved (VIX fell to 14)".
+- [x] ✅ **Score Change Explainer banner (UX-EDU-03)** — Implemented Sprint 22: dismissable GAS change banner in `page.tsx`.
 - [ ] 🟡 **Responsive dashboard grid** (UX-UI-04) — Test and fix the `lg:grid-cols-2` layout at 375px (iPhone SE). Ensure single-column reflow is clean on mobile.
 - [ ] ⚡ **Background refresh indicator** (UX-PERF) — Show a subtle spinner on the GAS widget when SWR is revalidating in the background (`isValidating === true`). Currently users don't know a silent refresh is happening.
 
@@ -80,9 +80,9 @@ The dashboard `page.tsx` is wired correctly but has several gaps that affect fir
 
 `WatchlistWidget.tsx` exists and is wired to the backend, but the experience is minimal.
 
-- [ ] 🟠 **Watchlist Overview page** (POLISH-01) — New route `/watchlist-overview` showing a compact GAS card for every watchlist symbol: ticker, company name, GAS score, colour indicator, Market Weather label, conflict flag. Sort by GAS desc by default. This eliminates the need to click through every symbol manually.
+- [x] ✅ **Watchlist Overview page (POLISH-01)** — Implemented Sprint 10: `/watchlist-overview` with GAS cards, sort modes, sparklines, compare mode (Sprint 19), grade filter (Sprint 22).
 - [ ] 🟠 **Auto-create default alert rules on watchlist add** (POLISH-03) — When a symbol is added to watchlist, automatically create two alert rules: GAS crosses below 35 and GAS crosses above 65. Max 1 alert per symbol per 4-hour window.
-- [ ] 🟡 **Mini GAS badge on watchlist items** (todos.md §5) — Show the current GAS score (coloured number) next to each ticker in the watchlist sidebar, not just the ticker name.
+- [x] ✅ **Mini GAS badge on watchlist items** — Implemented Sprint 22: GAS score + `GradeBadge` per item in `WatchlistWidget.tsx`.
 - [ ] 🟡 **Drag-to-reorder watchlist** (todos.md §5) — Allow users to reorder their watchlist items by dragging.
 
 ---
@@ -103,11 +103,11 @@ The dashboard `page.tsx` is wired correctly but has several gaps that affect fir
 
 The macro page (`/macro`) exists and fetches from `/api/v1/macro`. Several high-value features are missing.
 
-- [ ] 🟠 **Fed Meeting countdown timer** (UX-MACRO-01) — Prominent "Next Fed Decision in X days" element. Traders check this constantly. Low implementation cost, high perceived value.
+- [x] ✅ **Fed Meeting countdown timer (UX-MACRO-01)** — Implemented Sprint 21: `FomcCountdown` on macro page.
 - [ ] 🟠 **Full economic calendar (2-week forward)** (UX-MACRO-02) — List of upcoming macro events (NFP, CPI, FOMC, ECB, GDP) with expected vs prior values. The `/events` endpoint and model already exist in the backend.
 - [ ] 🟡 **Macro Regime label + history** (todos.md §9) — Show "Current regime: Goldilocks. Active since Jan 2025 (72 days)" and the previous regime name.
 - [ ] 🟡 **Central bank comparison panel** (todos.md §9) — Fed, ECB, BoE rates side-by-side. Particularly relevant for EU users tracking EUR/USD macro divergence.
-- [ ] ⚡ **Yield curve inversion alert banner** (todos.md §9) — If the 2Y–10Y spread is negative, auto-display an educational banner explaining yield curve inversion historically.
+- [x] ✅ **Yield curve inversion alert banner** — Implemented Sprint 23: auto-displays amber banner when spread < 0.
 
 ---
 
@@ -186,8 +186,8 @@ Users making time-sensitive decisions need to know they're seeing current data.
 The `/settings` page exists but is minimal.
 
 - [ ] 🟠 **Notification Preferences page** (UX-SETTINGS-01) — Central settings page for: alert thresholds, email frequency, preferred timezone, default ticker, preferred default timeframe. Currently users have no way to configure these.
-- [ ] 🟡 **Default ticker preference** (todos.md §14) — Let users set a default ticker that loads on dashboard open instead of always AAPL. Power users have a primary symbol they track — making it their "home" creates habitual return visits.
-- [ ] 🟡 **Risk profile quiz** (PLAN-01) — 5-question quiz that classifies users as Aggressive / Moderate / Conservative / Income. GAS alert thresholds automatically adjust per profile. Stored on user record and accessible from Settings.
+- [x] ✅ **Default ticker preference** — Implemented Sprint 23: `User.default_symbol` DB column + `PATCH /auth/me` + Settings UI + `seedDefaultOnce()` in SymbolContext.
+- [x] ✅ **Risk profile quiz (PLAN-01)** — Implemented Sprint 24: 5-question quiz → 4 profiles, `User.risk_profile` DB column, Settings `RiskProfileSection`.
 - [ ] 🟡 **Dark / light mode toggle** (POLISH-05) — Defaults to OS preference. Manual toggle stored in `localStorage`. WCAG AA contrast for both modes.
 - [ ] 🟢 **Currency preference (USD/EUR)** (todos.md §14) — Allow users to toggle display currency. EU users seeing "$10,000" initial capital in backtesting creates subtle friction.
 
@@ -220,11 +220,11 @@ These directly drive DAU and reduce early churn.
 
 `/portfolios` and `portfolio.py` (backend model) exist.
 
-- [ ] 🟠 **Portfolio-level weighted GAS** (P2-PORT-01) — Show a weighted average GAS across all portfolio holdings (weighted by position size).
+- [x] ✅ **Portfolio-level weighted GAS (P2-PORT-01)** — Implemented Sprint 13: `PortfolioGasBanner` with weighted GAS + symbol breakdown.
 - [ ] 🟠 **Rebalancing calculator** (PLAN-03) — Input current holdings + target allocation %. Output: Buy/Sell/Hold per symbol with approximate trade size. CSV export. Link from portfolio page.
-- [ ] 🟠 **Correlation heatmap** (IND-COMPOSITE-02) — 30-day rolling pairwise correlations for all watchlist symbols as a heatmap. Diversification Score above the heatmap. Updates when watchlist changes.
+- [x] ✅ **Correlation heatmap (IND-COMPOSITE-02)** — Implemented Sprint 19: `CorrelationMatrix` in portfolio page with Pearson heatmap + period picker.
 - [ ] 🟡 **DCA simulator** (PLAN-04) — Side-by-side comparison of DCA vs lump-sum for a chosen symbol and date range. CAGR, max drawdown, total invested for both.
-- [ ] 🟡 **Sector breakdown pie** (P2-PORT-01) — Show sector allocation % based on portfolio holdings.
+- [x] ✅ **Sector breakdown pie (P2-PORT-01)** — Implemented Sprint 24: `SectorPieChart` donut chart in portfolio analytics.
 
 ---
 
@@ -244,8 +244,8 @@ The ML pipeline already supports any yfinance symbol. These are configuration an
 
 These are blocked until the DB is seeded and models are trained (see section 1).
 
-- [ ] 🟠 **SHAP feature importance panel** (ASSET-ML-03) — For the selected symbol, compute SHAP values for the XGBoost winner and display the top 5 driving features in a "What's driving this?" collapsible panel on the dashboard.
-- [ ] 🟡 **Model drift detection** (ASSET-ML-02) — Add `model_performance_log` table. Daily comparison of predictions to realised outcomes. Alert when 30-day live Sharpe drops >20% below training Sharpe. `/admin/ml/drift-report` endpoint.
+- [x] ✅ **SHAP feature importance panel (ASSET-ML-03)** — Implemented Sprint 24: `ShapPanel` collapsible below `TimeframeGrid` on dashboard. Top-5 SHAP features with bars + plain-English descriptions.
+- [x] ✅ **Model drift detection (ASSET-ML-02)** — Implemented Sprint 6: `ModelDriftAlert` model + `drift_service.py` + Drift tab on model-info page + `/admin/ml/drift-alerts`.
 - [ ] 🟡 **Bayesian hyperparameter optimisation** (ASSET-ML-02) — Add `optuna` to requirements. Run during training to select optimal hyperparameters per model per timeframe instead of hard-coded defaults.
 - [ ] 🟡 **LSTM model implementation** (BUG-006) — The PRD specifies 4 competing models; only 3 are implemented. Add LSTM with attention using PyTorch (already in requirements). Treat as the 4th competitor in the ensemble.
 

@@ -47,9 +47,9 @@ either Anthropic API (`claude-sonnet`) or OpenAI. The `.env.example` already has
 
 **Recommended:** Option A for production (Anthropic), Option C for local dev fallback.
 
-- [ ] 🔴 `BE` Add `ANTHROPIC_API_KEY` to `backend/.env.example`
-- [ ] 🔴 `BE` Add `anthropic>=0.25.0` to `requirements.txt`
-- [ ] 🔴 `BE` Rewrite `llm_service.py` to support two backends:
+- [x] ✅ `BE` `ANTHROPIC_API_KEY` in `.env.example` — Done Sprint 0
+- [x] ✅ `BE` `anthropic>=0.25.0` in `requirements.txt` — Done Sprint 0
+- [x] ✅ `BE` `llm_service.py` rewritten with two backends — Done Sprint 0: `AnthropicBackend` primary + `OllamaBackend` fallback.
   - Primary: Anthropic API (`/v1/messages`) — used when `ANTHROPIC_API_KEY` is set
   - Fallback: Ollama — used when Anthropic key is missing (local dev)
   - Shared interface: `async def generate_investment_insight(inputs: InsightInput) -> InsightOutput`
@@ -68,18 +68,14 @@ either Anthropic API (`claude-sonnet`) or OpenAI. The `.env.example` already has
 
 None of these exist yet. They need to be built as part of todos-v5 implementation.
 
-- [ ] 🔴 `BE` Stub all three endpoints in `technical.py` (return placeholder data first,
-  wire real logic in later sprints) so the frontend doesn't 404
+- [x] ✅ `BE` All three endpoints in `technical.py` — Done Sprint 1+: `model-details`, `prediction-stats`, `price-targets` all fully implemented.
 
 ### A3. `MLPrediction` model does not exist
 
 **What was found:** `backend/app/models/` has no `ml_prediction.py`.
 The prediction database (todos-v5 Phase 5) has zero backend groundwork.
 
-- [ ] 🔴 `DB` Create `backend/app/models/ml_prediction.py` with the SQLAlchemy model
-  (full schema in todos-v5 Phase 5.1)
-- [ ] 🔴 `DB` Create Alembic migration for `ml_predictions` table
-- [ ] 🔴 `BE` Register model in `backend/app/models/__init__.py` so Alembic detects it
+- [x] ✅ `DB` `ml_prediction.py` model + Alembic migration — Done Sprint 2. Registered in `__init__.py`.
 
 ### A4. `requirements.txt` is missing all todos-v5 ML dependencies
 
@@ -91,13 +87,7 @@ The prediction database (todos-v5 Phase 5) has zero backend groundwork.
 
 These need to be added before any ML improvement work begins.
 
-- [ ] 🔴 `BE` Add to `requirements.txt`:
-  ```
-  lightgbm>=4.3.0
-  optuna>=3.6.0
-  shap>=0.45.0
-  anthropic>=0.25.0
-  ```
+- [x] ✅ `BE` `lightgbm`, `optuna`, `shap`, `anthropic` added to `requirements.txt` — Done Sprint 0.
 
 ---
 
@@ -114,8 +104,7 @@ import {
 ```
 Let me verify this file:
 
-- [ ] 🟠 `FE` Verify `frontend/lib/api_bulk.ts` exists and has all 4 functions.
-  If missing → create it with the correct endpoint calls matching `admin_bulk.py`.
+- [x] ✅ `FE` `frontend/lib/api_bulk.ts` exists and is complete — Verified Sprint 0+.
 
 ### B2. `admin_bulk.py` endpoint — verify it has `ticker-status/{symbol}`
 
@@ -124,8 +113,7 @@ Let me verify this file:
 `GET /api/v1/admin/ticker-status/{symbol}` (todos-v4 Phase 8.1).
 Need to verify this endpoint exists.
 
-- [ ] 🟠 `BE` Read `admin_bulk.py` and verify `GET /api/v1/admin/ticker-status/{symbol}` is implemented.
-  If missing → implement it (schema in todos-v4 Phase 8.1).
+- [x] ✅ `BE` `GET /api/v1/admin/ticker-status/{symbol}` exists in `admin_bulk.py` — Verified.
 
 ### B3. LLM insight is not shown on the dashboard page
 
@@ -135,12 +123,7 @@ Need to verify this endpoint exists.
 
 The `llm_service.py` exists but there is no frontend component rendering LLM output.
 
-- [ ] 🟠 `FE` Create `frontend/components/LLMInsightCard.tsx` — the investment manager
-  output card (todos-v5 Phase 3.4). Wire it to `fetchExplanationSummary` or a new
-  dedicated endpoint.
-- [ ] 🟠 `BE` Add `POST /api/v1/llm/insight/{symbol}` endpoint that calls the new
-  structured LLM prompt and returns the 6-section output.
-- [ ] 🟠 `FE` Add `<LLMInsightCard symbol={activeSymbol} />` to `page.tsx`
+- [x] ✅ `FE`+`BE` `LLMInsightCard.tsx` — Done Sprint 1+12: built with SSE streaming, progressive section rendering, wired to dashboard.
 
 ### B4. `ModelDetailsPanel.tsx` does not exist
 
@@ -148,7 +131,7 @@ The `llm_service.py` exists but there is no frontend component rendering LLM out
 with confidence/Sharpe explanations, but there is no `ModelDetailsPanel.tsx` for
 the deep dev transparency layer (todos-v5 Phase 2.2). This is a net-new component.
 
-- [ ] 🟠 `FE` Create `frontend/components/ModelDetailsPanel.tsx` (todos-v5 Phase 2.2)
+- [x] ✅ `FE` `ModelDetailsPanel.tsx` — Done Sprint 4: side drawer with 4 tabs.
 
 ### B5. `TimeframeGrid` already has most of Layer 1 and Layer 2 built
 
@@ -190,8 +173,7 @@ These two systems need to be reconciled into one shared utility.
 todos-v5 Phase 2.3 calls for a standalone deep-dive page. No such route exists in
 `frontend/app/`. This is a net-new page.
 
-- [ ] 🟡 `FE` Create `frontend/app/model-info/[symbol]/page.tsx` (todos-v5 Phase 2.3)
-  — can be Sprint 5, not urgent
+- [x] ✅ `FE` `app/model-info/[symbol]/page.tsx` — Done Sprint 6: 7-tab deep-dive page.
 
 ---
 

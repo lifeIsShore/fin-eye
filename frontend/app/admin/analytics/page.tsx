@@ -173,45 +173,133 @@ function DauChart({ data }: { data: AnalyticsDauPoint[] }) {
 // ─── Funnel Visualiser ────────────────────────────────────────────────────────
 
 function FunnelChart({ steps }: { steps: AnalyticsFunnelStep[] }) {
+  if (!steps.length) return <p className="text-gray-600 text-sm">No funnel data.</p>;
+
   const maxUsers = Math.max(...steps.map((s) => s.unique_users), 1);
+
+  // SVG waterfall layout
+  const LABEL_W = 190;
+  const RIGHT_W = 120;
+  const BAR_H   = 28;
+  const GAP     = 12;
+  const CONN_H  = GAP;
+  const SVG_W   = 700;
+  const CHART_W = SVG_W - LABEL_W - RIGHT_W;
+  const SVG_H   = steps.length * (BAR_H + GAP) + GAP;
+
+  // colour by conversion rate
+  function barFill(pct: number | null): string {
+    if (pct === null) return "#6366f1";
+    if (pct > 60) return "#10b981";
+    if (pct > 30) return "#f59e0b";
+    return "#ef4444";
+  }
 
   return (
     <div className="space-y-2">
-      {steps.map((step, i) => {
-        const barPct = (step.unique_users / maxUsers) * 100;
-        return (
-          <div key={step.event_name} className="group">
-            <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-              <span>{step.label}</span>
-              <span className="font-mono">
-                {step.unique_users.toLocaleString()} users
-                {step.conversion_from_previous_pct !== null && (
-                  <span
-                    className={`ml-2 font-semibold ${
-                      step.conversion_from_previous_pct > 50
-                        ? "text-green-400"
-                        : step.conversion_from_previous_pct > 20
-                        ? "text-yellow-400"
-                        : "text-red-400"
-                    }`}
-                  >
-                    ↓ {step.conversion_from_previous_pct}%
-                  </span>
+      <div className="w-full overflow-x-auto">
+        <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="w-full" style={{ minWidth: 360 }}>
+          {steps.map((step, i) => {
+            const barW   = Math.max(4, (step.unique_users / maxUsers) * CHART_W);
+            const prevBarW = i > 0
+              ? Math.max(4, (steps[i - 1].unique_users / maxUsers) * CHART_W)
+              : barW;
+            const y      = GAP + i * (BAR_H + GAP);
+            const pct    = step.conversion_from_previous_pct;
+            const dropPx = i > 0 ? prevBarW - barW : 0;
+            const fill   = barFill(pct);
+            const dropped = i > 0 ? steps[i - 1].unique_users - step.unique_users : 0;
+
+            return (
+              <g key={step.event_name}>
+                {/* Step label */}
+                <text
+                  x={LABEL_W - 10}
+                  y={y + BAR_H / 2 + 4}
+                  textAnchor="end"
+                  fill="#9ca3af"
+                  fontSize={10}
+                >
+                  {step.label.length > 24 ? step.label.slice(0, 22) + "…" : step.label}
+                </text>
+
+                {/* Drop-off grey connector above this bar */}
+                {i > 0 && dropPx > 2 && (
+                  <>
+                    <rect
+                      x={LABEL_W + barW}
+                      y={y - CONN_H}
+                      width={dropPx}
+                      height={CONN_H}
+                      fill="#374151"
+                      opacity={0.55}
+                      rx={2}
+                    />
+                    {dropPx > 44 && dropped > 0 && (
+                      <text
+                        x={LABEL_W + barW + dropPx / 2}
+                        y={y - CONN_H / 2 + 3.5}
+                        textAnchor="middle"
+                        fill="#6b7280"
+                        fontSize={8.5}
+                      >
+                        -{dropped.toLocaleString()}
+                      </text>
+                    )}
+                  </>
                 )}
-              </span>
-            </div>
-            <div className="relative h-7 bg-gray-800 rounded overflow-hidden">
-              <div
-                className="absolute inset-y-0 left-0 bg-indigo-600 transition-all duration-500 rounded"
-                style={{ width: `${barPct}%` }}
-              />
-              <span className="absolute inset-0 flex items-center px-3 text-xs text-white font-mono">
-                {step.total_occurrences.toLocaleString()} events
-              </span>
-            </div>
-          </div>
-        );
-      })}
+
+                {/* Main bar */}
+                <rect
+                  x={LABEL_W}
+                  y={y}
+                  width={barW}
+                  height={BAR_H}
+                  rx={4}
+                  fill={fill}
+                  opacity={0.82}
+                />
+
+                {/* User count + conversion label on the right */}
+                <text x={LABEL_W + barW + 8} y={y + BAR_H / 2 + 4} fill="#e5e7eb" fontSize={10}>
+                  {step.unique_users.toLocaleString()}
+                </text>
+                {pct !== null && (
+                  <text
+                    x={LABEL_W + barW + 8}
+                    y={y + BAR_H / 2 + 16}
+                    fill={fill}
+                    fontSize={9}
+                    fontWeight="600"
+                  >
+                    {pct.toFixed(0)}% kept
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-5 text-xs text-gray-500 pt-1">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded-sm bg-green-500 opacity-80" />
+          &gt;60% kept
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded-sm bg-yellow-500 opacity-80" />
+          30–60% kept
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded-sm bg-red-500 opacity-80" />
+          &lt;30% kept
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded-sm bg-gray-700 opacity-80" />
+          users lost (drop-off)
+        </span>
+      </div>
     </div>
   );
 }

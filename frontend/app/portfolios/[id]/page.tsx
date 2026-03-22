@@ -1,14 +1,20 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import React from "react";
 import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "../../../components/AuthProvider";
 import {
     ChevronLeft, Plus, Trash2, Loader2, CheckCircle2,
     Pencil, Check, X, Info, Target, BarChart2, Globe,
-    Clock, TrendingUp, FileText, Bookmark,
+    Clock, TrendingUp, FileText, Bookmark, Zap, RefreshCw,
 } from "lucide-react";
+import {
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+    Legend, ResponsiveContainer, ReferenceLine,
+    PieChart, Pie, Cell, Tooltip as ReTooltip,
+} from "recharts";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -158,7 +164,503 @@ function InlineSelect({
     );
 }
 
-// ── Metric bar ────────────────────────────────────────────────────────────────
+// ── Performance Chart (Sprint 15 P3-PORT-02) ───────────────────────────────────────────────────────
+
+interface PerfData {
+    dates: string[];
+    portfolio: number[];
+    benchmark: (number | null)[];
+    benchmark_symbol: string;
+    period: string;
+    portfolio_return_pct: number;
+    benchmark_return_pct: number;
+    alpha_pct: number;
+    error: string | null;
+}
+
+const PERF_PERIODS = ["1mo", "3mo", "6mo", "1y", "2y", "5y"] as const;
+type PerfPeriod = typeof PERF_PERIODS[number];
+
+function PerformanceChart({
+    portfolioId, benchmark, hasItems,
+}: {
+    portfolioId: string;
+    benchmark: string | null | undefined;
+    hasItems: boolean;
+}) {
+    const [period, setPeriod] = React.useState<PerfPeriod>("1y");
+
+    const { data, isLoading, error } = useSWR<PerfData>(
+        hasItems ? `${API}/api/v1/portfolios/${portfolioId}/performance?period=${period}` : null,
+        fetcher,
+        { revalidateOnFocus: false, shouldRetryOnError: false, keepPreviousData: true },
+    );
+
+    if (!hasItems) return null;
+
+    const chartData = (data?.dates ?? []).map((d, i) => ({
+        date: d,
+        portfolio: data?.portfolio[i] ?? null,
+        benchmark: data?.benchmark?.[i] ?? null,
+    }));
+
+    const benchSym = benchmark ?? data?.benchmark_symbol ?? "SPY";
+    const portRet  = data?.portfolio_return_pct ?? 0;
+    const benchRet = data?.benchmark_return_pct ?? 0;
+    const alpha    = data?.alpha_pct ?? 0;
+
+    return (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-sky-400" />
+                    <h2 className="text-sm font-bold text-slate-100">Portfolio vs Benchmark</h2>
+                    <span className="text-[10px] text-slate-500">Normalised to 100</span>
+                </div>
+                <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 p-0.5">
+                    {PERF_PERIODS.map((p) => (
+                        <button
+                            key={p}
+                            onClick={() => setPeriod(p)}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                                period === p ? "bg-slate-700 text-slate-100" : "text-slate-500 hover:text-slate-300"
+                            }`}
+                        >
+                            {p}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {data && !data.error && (
+                <div className="flex flex-wrap gap-4">
+                    <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
+                        <span className="text-xs text-slate-400">Portfolio</span>
+                        <span className={`text-sm font-bold tabular-nums ${portRet >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                            {portRet >= 0 ? "+" : ""}{portRet.toFixed(1)}%
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
+                        <span className="text-xs text-slate-400">{benchSym}</span>
+                        <span className={`text-sm font-bold tabular-nums ${benchRet >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                            {benchRet >= 0 ? "+" : ""}{benchRet.toFixed(1)}%
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">Alpha</span>
+                        <span className={`text-sm font-bold tabular-nums ${alpha >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                            {alpha >= 0 ? "+" : ""}{alpha.toFixed(1)}%
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {isLoading && !data && <div className="h-56 rounded-xl bg-slate-800/40 animate-pulse" />}
+            {(error || data?.error) && (
+                <div className="rounded-xl border border-amber-800/30 bg-amber-950/15 px-4 py-3 text-xs text-amber-400">
+                    {data?.error ?? "Could not load performance data. Ensure price data is available for the selected period."}
+                </div>
+            )}
+            {chartData.length > 0 && (
+                <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                            <XAxis dataKey="date" stroke="#475569" fontSize={10}
+                                tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: "short", year: "2-digit" })}
+                                interval="preserveStartEnd" />
+                            <YAxis stroke="#475569" fontSize={10} tickFormatter={(v) => `${v.toFixed(0)}`} width={38} domain={["auto", "auto"]} />
+                            <Tooltip
+                                contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px", fontSize: 11 }}
+                                labelFormatter={(l) => new Date(l).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                                formatter={(v: number, name: string) => [
+                                    `${v?.toFixed(1)} (${(v - 100) >= 0 ? "+" : ""}${(v - 100)?.toFixed(1)}%)`,
+                                    name === "portfolio" ? "Portfolio" : benchSym,
+                                ]}
+                            />
+                            <Legend formatter={(v) => v === "portfolio" ? "Portfolio" : benchSym} wrapperStyle={{ fontSize: 11, color: "#94a3b8" }} />
+                            <ReferenceLine y={100} stroke="#334155" strokeDasharray="4 2" />
+                            <Line type="monotone" dataKey="portfolio" stroke="#38bdf8" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: "#38bdf8" }} />
+                            <Line type="monotone" dataKey="benchmark" stroke="#475569" strokeWidth={1.5} strokeDasharray="4 2" dot={false} activeDot={{ r: 3 }} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+            )}
+            <p className="text-[10px] text-slate-700">
+                Daily close prices from Yahoo Finance. Portfolio = weighted sum of constituent returns. Educational only.
+            </p>
+        </div>
+    );
+}
+
+// ── Portfolio GAS Banner ───────────────────────────────────────────────────────────────────────────
+
+function PortfolioGasBanner({
+    analysis, isLoading, onRefresh, symbolCount,
+}: {
+    analysis: any;
+    isLoading: boolean;
+    onRefresh: () => void;
+    symbolCount: number;
+}) {
+    if (symbolCount === 0) return null;
+
+    const gas: number | null = analysis?.weighted_gas ?? null;
+    const breakdown: { symbol: string; gas_score: number; weight_pct: number }[] =
+        analysis?.symbol_gas_breakdown ?? [];
+
+    const scoreColor = (s: number) =>
+        s >= 65 ? "text-emerald-400" : s >= 40 ? "text-amber-400" : "text-rose-400";
+    const barColor = (s: number) =>
+        s >= 65 ? "bg-emerald-500" : s >= 40 ? "bg-amber-500" : "bg-rose-500";
+    const label = (s: number) =>
+        s >= 75 ? "Strong Tailwind" : s >= 60 ? "Mild Support" : s >= 45 ? "Mixed Signals" : s >= 30 ? "Headwind" : "High Instability";
+
+    return (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-sky-400" />
+                    <h2 className="text-sm font-bold text-slate-100">Portfolio GAS Aggregate</h2>
+                    <span className="text-[10px] text-slate-500">Weighted across {symbolCount} asset{symbolCount !== 1 ? "s" : ""}</span>
+                </div>
+                <button onClick={onRefresh} disabled={isLoading}
+                    className="p-1.5 rounded-lg text-slate-600 hover:text-slate-400 hover:bg-slate-800 transition-colors disabled:opacity-40">
+                    <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                </button>
+            </div>
+
+            {isLoading && !analysis && (
+                <div className="flex items-center gap-3 animate-pulse">
+                    <div className="h-14 w-14 rounded-xl bg-slate-800" />
+                    <div className="space-y-2 flex-1">
+                        <div className="h-4 w-32 rounded bg-slate-800" />
+                        <div className="h-2 w-full rounded-full bg-slate-800" />
+                    </div>
+                </div>
+            )}
+
+            {gas != null && (
+                <div className="flex items-start gap-5">
+                    <div className="flex-shrink-0 text-center">
+                        <div className={`text-5xl font-black tabular-nums ${scoreColor(gas)}`}>{gas.toFixed(0)}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">/ 100</div>
+                        <div className={`text-xs font-semibold mt-1 ${scoreColor(gas)}`}>{label(gas)}</div>
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-2">
+                        {breakdown.length > 0 ? breakdown.map((row) => (
+                            <div key={row.symbol} className="space-y-0.5">
+                                <div className="flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono font-bold text-slate-200 w-14 truncate">{row.symbol}</span>
+                                        <span className="text-slate-600 text-[10px]">{row.weight_pct.toFixed(0)}% weight</span>
+                                    </div>
+                                    <span className={`font-mono font-semibold tabular-nums ${scoreColor(row.gas_score)}`}>{row.gas_score.toFixed(0)}</span>
+                                </div>
+                                <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                                    <div className={`h-full rounded-full ${barColor(row.gas_score)}`} style={{ width: `${Math.min(100, row.gas_score)}%` }} />
+                                </div>
+                            </div>
+                        )) : (
+                            <div className="space-y-1.5">
+                                <p className="text-xs text-slate-500">Weighted GAS across all positions.</p>
+                                <div className="h-2.5 rounded-full bg-slate-800 overflow-hidden">
+                                    <div className={`h-full rounded-full ${barColor(gas)}`} style={{ width: `${Math.min(100, gas)}%` }} />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+            <p className="text-[10px] text-slate-600 border-t border-slate-800/50 pt-3">
+                GAS = (Technical × 40%) + (Sentiment × 30%) + (Macro × 30%). Weighted by portfolio allocation. Educational only.
+            </p>
+        </div>
+    );
+}
+
+// ── Target Return Progress (Sprint 17) ──────────────────────────────────────────────────────────────
+
+function TargetReturnProgress({
+    portfolioId, targetReturnPct,
+}: { portfolioId: string; targetReturnPct: number }) {
+    const { data } = useSWR<PerfData>(
+        `${API}/api/v1/portfolios/${portfolioId}/performance?period=1y`,
+        fetcher,
+        { revalidateOnFocus: false, shouldRetryOnError: false, keepPreviousData: true },
+    );
+
+    const ytdReturn = React.useMemo(() => {
+        if (!data?.dates || !data.portfolio || data.portfolio.length < 2) return null;
+        const yr = new Date().getFullYear();
+        const idx = data.dates.findIndex(d => new Date(d).getFullYear() >= yr);
+        const start = idx >= 0 ? data.portfolio[idx] : data.portfolio[0];
+        const end   = data.portfolio[data.portfolio.length - 1];
+        if (!start || !end) return null;
+        return ((end / start) - 1) * 100;
+    }, [data]);
+
+    const now       = new Date();
+    const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86_400_000);
+    const proRata   = (dayOfYear / 365) * targetReturnPct;
+    const fillPct   = ytdReturn != null && targetReturnPct > 0
+        ? Math.min(100, Math.max(0, (ytdReturn / targetReturnPct) * 100))
+        : 0;
+    const onTrack = ytdReturn != null && proRata > 0 && ytdReturn >= proRata * 0.8;
+    const ahead   = ytdReturn != null && proRata > 0 && ytdReturn >= proRata * 1.2;
+
+    return (
+        <div className="rounded-lg bg-slate-800/50 border border-slate-700/50 px-3 py-3 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-medium">Target Return</span>
+                <span className="text-emerald-400 font-semibold tabular-nums">{targetReturnPct}% p.a.</span>
+            </div>
+            {ytdReturn != null ? (
+                <>
+                    <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] text-slate-500">
+                            <span>YTD actual</span>
+                            <span className={`font-semibold tabular-nums ${
+                                ytdReturn >= 0 ? "text-emerald-400" : "text-rose-400"
+                            }`}>{ytdReturn >= 0 ? "+" : ""}{ytdReturn.toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-700 overflow-hidden relative">
+                            {proRata > 0 && (
+                                <div
+                                    className="absolute top-0 bottom-0 w-0.5 bg-slate-300/40"
+                                    style={{ left: `${Math.min((proRata / Math.max(targetReturnPct, 1)) * 100, 97)}%` }}
+                                    title={`On-pace: ${proRata.toFixed(1)}%`}
+                                />
+                            )}
+                            <div
+                                className={`h-full rounded-full transition-all duration-700 ${
+                                    ahead ? "bg-emerald-400" : onTrack ? "bg-emerald-600" : ytdReturn >= 0 ? "bg-amber-500" : "bg-rose-500"
+                                }`}
+                                style={{ width: `${fillPct}%` }}
+                            />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-slate-700">
+                            <span>0%</span>
+                            {proRata > 0 && <span className="text-slate-600">pace {proRata.toFixed(1)}%</span>}
+                            <span>{targetReturnPct}%</span>
+                        </div>
+                    </div>
+                    <p className={`text-[10px] font-medium ${
+                        ahead ? "text-emerald-400" : onTrack ? "text-teal-400" : "text-amber-400"
+                    }`}>
+                        {ahead ? "✔ Ahead of pace" : onTrack ? "✔ On track" : "Behind pace — see chart above"}
+                    </p>
+                </>
+            ) : (
+                <p className="text-[10px] text-slate-600">Loading performance data…</p>
+            )}
+        </div>
+    );
+}
+
+// ── Metric bar ─────────────────────────────────────────────────────────────────────────────────────
+
+// -- Correlation Matrix Heatmap (Sprint 19) --
+
+interface CorrelationData {
+    symbols: string[];
+    matrix: number[][];
+    period: string;
+    n_days?: number;
+    error: string | null;
+}
+
+const CORR_PERIODS = ["1mo", "3mo", "6mo", "1y"] as const;
+type CorrPeriod = typeof CORR_PERIODS[number];
+
+function corrColor(v: number): string {
+    if (v >= 0.8)  return "#064e3b";
+    if (v >= 0.6)  return "#065f46";
+    if (v >= 0.4)  return "#166534";
+    if (v >= 0.2)  return "#14532d";
+    if (v >= 0.05) return "#1a3a28";
+    if (v > -0.05) return "#1e293b";
+    if (v >= -0.2) return "#3b1a1a";
+    if (v >= -0.4) return "#5c1717";
+    if (v >= -0.6) return "#7f1d1d";
+    return "#450a0a";
+}
+
+function corrTextColor(v: number): string {
+    if (Math.abs(v) > 0.5) return "text-slate-100";
+    if (Math.abs(v) > 0.2) return "text-slate-300";
+    return "text-slate-500";
+}
+
+function CorrelationMatrix({ portfolioId, hasItems }: { portfolioId: string; hasItems: boolean }) {
+    const [corrPeriod, setCorrPeriod] = React.useState<CorrPeriod>("6mo");
+
+    const { data: corrData, isLoading: corrLoading, error: corrErr } = useSWR<CorrelationData>(
+        hasItems ? `${API}/api/v1/portfolios/${portfolioId}/correlation?period=${corrPeriod}` : null,
+        fetcher,
+        { revalidateOnFocus: false, shouldRetryOnError: false, keepPreviousData: true },
+    );
+
+    if (!hasItems) return null;
+
+    const symbols = corrData?.symbols ?? [];
+    const matrix  = corrData?.matrix  ?? [];
+
+    return (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <BarChart2 className="h-4 w-4 text-violet-400" />
+                    <h2 className="text-sm font-bold text-slate-100">Correlation Matrix</h2>
+                    <span className="text-[10px] text-slate-500">Pairwise Pearson &middot; daily close prices</span>
+                </div>
+                <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 p-0.5">
+                    {CORR_PERIODS.map((p) => (
+                        <button
+                            key={p}
+                            onClick={() => setCorrPeriod(p)}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                                corrPeriod === p ? "bg-slate-700 text-slate-100" : "text-slate-500 hover:text-slate-300"
+                            }`}
+                        >
+                            {p}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {corrLoading && !corrData && (
+                <div className="h-40 rounded-xl bg-slate-800/40 animate-pulse" />
+            )}
+
+            {(corrErr || corrData?.error) && (
+                <div className="rounded-xl border border-amber-800/30 bg-amber-950/15 px-4 py-3 text-xs text-amber-400">
+                    {corrData?.error ?? "Could not load correlation data."}
+                </div>
+            )}
+
+            {symbols.length >= 2 && matrix.length > 0 && (
+                <>
+                    <div className="overflow-x-auto">
+                        <table className="text-xs border-separate border-spacing-1">
+                            <thead>
+                                <tr>
+                                    <th className="w-16" />
+                                    {symbols.map((s) => (
+                                        <th key={s} className="text-center font-mono text-[10px] text-slate-400 pb-1 px-1 min-w-[52px]">
+                                            {s}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {symbols.map((row, ri) => (
+                                    <tr key={row}>
+                                        <td className="font-mono text-[10px] text-slate-400 pr-2 text-right whitespace-nowrap">{row}</td>
+                                        {symbols.map((col, ci) => {
+                                            const v = matrix[ri]?.[ci] ?? 0;
+                                            const isDiag = ri === ci;
+                                            return (
+                                                <td
+                                                    key={col}
+                                                    className={`rounded text-center tabular-nums font-mono py-2 px-1 ${
+                                                        isDiag ? "text-slate-600" : corrTextColor(v)
+                                                    }`}
+                                                    style={{ backgroundColor: isDiag ? "#0f172a" : corrColor(v), fontSize: "10px" }}
+                                                    title={`${row} vs ${col}: ${v.toFixed(3)}`}
+                                                >
+                                                    {isDiag ? "1.00" : v.toFixed(2)}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                        <span>Low (&minus;1)</span>
+                        <div className="flex gap-0.5">
+                            {[-1, -0.6, -0.2, 0.2, 0.6, 1].map((v) => (
+                                <div key={v} className="h-3 w-5 rounded-sm" style={{ backgroundColor: corrColor(v) }} />
+                            ))}
+                        </div>
+                        <span>High (+1)</span>
+                        {corrData?.n_days && (
+                            <span className="ml-auto text-slate-700">{corrData.n_days} trading days</span>
+                        )}
+                    </div>
+
+                    <p className="text-[10px] text-slate-700">
+                        Pearson correlation of daily returns. 1.0 = perfectly correlated, 0 = uncorrelated, &minus;1 = inverse. Lower average off-diagonal = better diversification.
+                    </p>
+                </>
+            )}
+        </div>
+    );
+}
+
+// ── Sector Pie Chart — Sprint 24 ────────────────────────────────────────────────────────────────
+
+const SECTOR_COLORS = [
+    "#38bdf8", "#34d399", "#f59e0b", "#f87171", "#a78bfa",
+    "#fb923c", "#2dd4bf", "#e879f9", "#94a3b8", "#86efac",
+];
+
+function SectorPieChart({ breakdown }: { breakdown: Record<string, number> }) {
+    const data = Object.entries(breakdown)
+        .filter(([, v]) => v > 0)
+        .sort(([, a], [, b]) => b - a)
+        .map(([name, value], i) => ({ name, value, color: SECTOR_COLORS[i % SECTOR_COLORS.length] }));
+
+    if (data.length === 0) return null;
+
+    return (
+        <div className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sector Exposure</h3>
+            <div className="flex items-center gap-4">
+                <div className="flex-shrink-0">
+                    <PieChart width={120} height={120}>
+                        <Pie
+                            data={data}
+                            dataKey="value"
+                            nameKey="name"
+                            cx={60}
+                            cy={60}
+                            innerRadius={34}
+                            outerRadius={56}
+                            strokeWidth={0}
+                            isAnimationActive={false}
+                        >
+                            {data.map((entry, i) => (
+                                <Cell key={i} fill={entry.color} />
+                            ))}
+                        </Pie>
+                        <ReTooltip
+                            contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, fontSize: 11 }}
+                            formatter={(v: number) => [`${v.toFixed(1)}%`, ""]}
+                        />
+                    </PieChart>
+                </div>
+                <div className="flex-1 min-w-0 space-y-1.5">
+                    {data.slice(0, 6).map((entry) => (
+                        <div key={entry.name} className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: entry.color }} />
+                            <span className="text-xs text-slate-400 truncate flex-1">{entry.name}</span>
+                            <span className="text-xs font-mono text-slate-300 tabular-nums">{entry.value.toFixed(1)}%</span>
+                        </div>
+                    ))}
+                    {data.length > 6 && (
+                        <p className="text-[10px] text-slate-600">+{data.length - 6} more</p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
 
 function MetricBar({ label, value, max = 100, description }: {
     label: string; value: number; max?: number; description: string;
@@ -182,7 +684,7 @@ function MetricBar({ label, value, max = 100, description }: {
     );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// ── Page ───────────────────────────────────────────────────────────────────────────────────────────
 
 export default function PortfolioDetailPage() {
     const params = useParams();
@@ -190,8 +692,8 @@ export default function PortfolioDetailPage() {
     const { user } = useAuth();
     const id = params.id as string;
 
-    const [symbol, setSymbol]   = useState("");
-    const [weight, setWeight]   = useState<number | "">("");
+    const [symbol, setSymbol]     = useState("");
+    const [weight, setWeight]     = useState<number | "">("");
     const [isAdding, setIsAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
 
@@ -200,7 +702,7 @@ export default function PortfolioDetailPage() {
         fetcher,
     );
 
-    const { data: analysis, error: analysisError, isLoading: analysisLoading } = useSWR(
+    const { data: analysis, error: analysisError, isLoading: analysisLoading, mutate: mutateAnalysis } = useSWR(
         user && id && portfolio?.items?.length > 0
             ? `${API}/api/v1/portfolios/${id}/analysis` : null,
         fetcher,
@@ -242,9 +744,8 @@ export default function PortfolioDetailPage() {
     );
 
     const totalWeight = portfolio.items?.reduce((s: number, i: any) => s + i.weight, 0) ?? 0;
-    const weightOk = Math.abs(totalWeight - 1.0) < 0.001;
+    const weightOk    = Math.abs(totalWeight - 1.0) < 0.001;
 
-    // ── Colour maps for selects ────────────────────────────────────────────
     const strategyColors: Record<string, string> = {
         Growth: "text-emerald-400", Income: "text-sky-400", Hedge: "text-violet-400",
         Speculative: "text-rose-400", Index: "text-blue-400", Crypto: "text-amber-400",
@@ -257,22 +758,18 @@ export default function PortfolioDetailPage() {
     return (
         <div className="space-y-6 max-w-7xl">
 
-            {/* ── Back + Header ───────────────────────────────────────────── */}
+            {/* Back + Header */}
             <div>
                 <button onClick={() => router.push("/portfolios")}
                     className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-300 transition-colors mb-3">
                     <ChevronLeft className="h-4 w-4" /> Back to Portfolios
                 </button>
-
-                {/* Editable name */}
                 <InlineText
                     value={portfolio.name}
                     placeholder="Portfolio name"
                     onSave={name => save({ name })}
                     className="text-3xl font-black text-slate-100"
                 />
-
-                {/* Editable description */}
                 <div className="mt-1">
                     <InlineText
                         value={portfolio.description}
@@ -283,14 +780,31 @@ export default function PortfolioDetailPage() {
                 </div>
             </div>
 
-            {/* ── Profile card ────────────────────────────────────────────── */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">
-                    Portfolio Profile
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-5">
+            {/* Performance vs Benchmark chart */}
+            <PerformanceChart
+                portfolioId={id}
+                benchmark={portfolio.benchmark}
+                hasItems={(portfolio.items?.length ?? 0) > 0}
+            />
 
-                    {/* Strategy */}
+            {/* Correlation Matrix -- Sprint 19 */}
+            <CorrelationMatrix
+                portfolioId={id}
+                hasItems={(portfolio.items?.length ?? 0) >= 2}
+            />
+
+            {/* GAS Aggregate Banner */}
+            <PortfolioGasBanner
+                analysis={analysis}
+                isLoading={analysisLoading}
+                onRefresh={() => mutateAnalysis()}
+                symbolCount={portfolio.items?.length ?? 0}
+            />
+
+            {/* Profile card */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">Portfolio Profile</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-5">
                     <div>
                         <div className="flex items-center gap-1.5 mb-1.5">
                             <Bookmark className="h-3.5 w-3.5 text-slate-600" />
@@ -300,8 +814,6 @@ export default function PortfolioDetailPage() {
                             placeholder="Set strategy" colorMap={strategyColors}
                             onSave={strategy_tag => save({ strategy_tag })} />
                     </div>
-
-                    {/* Risk */}
                     <div>
                         <div className="flex items-center gap-1.5 mb-1.5">
                             <BarChart2 className="h-3.5 w-3.5 text-slate-600" />
@@ -311,8 +823,6 @@ export default function PortfolioDetailPage() {
                             placeholder="Set risk" colorMap={riskColors}
                             onSave={risk_tolerance => save({ risk_tolerance })} />
                     </div>
-
-                    {/* Horizon */}
                     <div>
                         <div className="flex items-center gap-1.5 mb-1.5">
                             <Clock className="h-3.5 w-3.5 text-slate-600" />
@@ -322,8 +832,6 @@ export default function PortfolioDetailPage() {
                             placeholder="Set horizon"
                             onSave={horizon => save({ horizon })} />
                     </div>
-
-                    {/* Currency */}
                     <div>
                         <div className="flex items-center gap-1.5 mb-1.5">
                             <Globe className="h-3.5 w-3.5 text-slate-600" />
@@ -333,8 +841,6 @@ export default function PortfolioDetailPage() {
                             placeholder="USD"
                             onSave={base_currency => save({ base_currency })} />
                     </div>
-
-                    {/* Target return */}
                     <div>
                         <div className="flex items-center gap-1.5 mb-1.5">
                             <Target className="h-3.5 w-3.5 text-slate-600" />
@@ -350,8 +856,6 @@ export default function PortfolioDetailPage() {
                             <span className="text-[10px] text-slate-600">% per year</span>
                         )}
                     </div>
-
-                    {/* Benchmark */}
                     <div>
                         <div className="flex items-center gap-1.5 mb-1.5">
                             <TrendingUp className="h-3.5 w-3.5 text-slate-600" />
@@ -364,10 +868,7 @@ export default function PortfolioDetailPage() {
                             className="text-sm font-mono"
                         />
                     </div>
-
                 </div>
-
-                {/* Notes — full width */}
                 <div className="mt-5 pt-4 border-t border-slate-800">
                     <div className="flex items-center gap-1.5 mb-2">
                         <FileText className="h-3.5 w-3.5 text-slate-600" />
@@ -383,27 +884,21 @@ export default function PortfolioDetailPage() {
                 </div>
             </div>
 
-            {/* ── Main grid: allocations + analytics ──────────────────────── */}
+            {/* Main grid: allocations + analytics */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {/* LEFT: Allocation table */}
                 <div className="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/50 p-6 space-y-5">
                     <h2 className="text-base font-bold text-slate-100">Allocation Mapping</h2>
-
-                    {/* Add form */}
                     <form onSubmit={handleAddItem} className="flex gap-2">
-                        <input
-                            type="text" placeholder="Ticker (e.g. AAPL)" value={symbol}
+                        <input type="text" placeholder="Ticker (e.g. AAPL)" value={symbol}
                             onChange={e => setSymbol(e.target.value.toUpperCase())}
                             className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500/20"
-                            required
-                        />
-                        <input
-                            type="number" step="0.01" min="0.001" max="1" placeholder="Weight (0–1)" value={weight}
+                            required />
+                        <input type="number" step="0.01" min="0.001" max="1" placeholder="Weight (0–1)" value={weight}
                             onChange={e => setWeight(e.target.valueAsNumber || "")}
                             className="w-36 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500/20"
-                            required
-                        />
+                            required />
                         <button type="submit" disabled={isAdding}
                             className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50 transition-colors">
                             {isAdding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
@@ -411,8 +906,6 @@ export default function PortfolioDetailPage() {
                         </button>
                     </form>
                     {addError && <p className="text-xs text-rose-400">{addError}</p>}
-
-                    {/* Table */}
                     <div className="overflow-x-auto rounded-lg border border-slate-800">
                         <table className="min-w-full divide-y divide-slate-800">
                             <thead className="bg-slate-900/80">
@@ -457,8 +950,6 @@ export default function PortfolioDetailPage() {
                             </tbody>
                         </table>
                     </div>
-
-                    {/* Weight status */}
                     {portfolio.items?.length > 0 && (
                         <div className={`flex items-center gap-2 text-xs font-medium rounded-lg px-3 py-2 border ${
                             weightOk
@@ -476,7 +967,6 @@ export default function PortfolioDetailPage() {
                 {/* RIGHT: Analytics */}
                 <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 space-y-6">
                     <h2 className="text-base font-bold text-slate-100">Quantitative Analytics</h2>
-
                     {portfolio.items?.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
                             <BarChart2 className="h-8 w-8 text-slate-700" />
@@ -496,57 +986,21 @@ export default function PortfolioDetailPage() {
                             <MetricBar
                                 label="Portfolio GAS"
                                 value={analysis.weighted_gas}
-                                description="Weighted average Global Alignment Score across your constituents. Above 60 = broadly bullish signal environment."
+                                description="Weighted average Global Alignment Score. Above 60 = broadly bullish signal environment."
                             />
                             <MetricBar
                                 label="Diversification"
                                 value={analysis.diversification_score}
-                                description="Based on inter-asset price correlation (6mo). Higher = less concentrated risk. Below 40 suggests high overlap."
+                                description="Based on inter-asset price correlation (6mo). Higher = less concentrated risk."
                             />
-
-                            {/* Sector breakdown */}
                             {Object.keys(analysis.sector_breakdown ?? {}).length > 0 && (
-                                <div>
-                                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-                                        Sector Exposure
-                                    </h3>
-                                    <div className="space-y-2.5">
-                                        {Object.entries(analysis.sector_breakdown)
-                                            .sort(([, a]: any, [, b]: any) => b - a)
-                                            .map(([sector, pct]: any) => (
-                                                <div key={sector}>
-                                                    <div className="flex justify-between text-xs mb-1">
-                                                        <span className="text-slate-400 truncate max-w-[130px]">{sector}</span>
-                                                        <span className="text-slate-200 font-mono">{pct.toFixed(1)}%</span>
-                                                    </div>
-                                                    <div className="w-full bg-slate-800 rounded-full h-1.5">
-                                                        <div className="bg-sky-500/70 h-1.5 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
-                                                    </div>
-                                                </div>
-                                            ))
-                                        }
-                                    </div>
-                                </div>
+                                <SectorPieChart breakdown={analysis.sector_breakdown} />
                             )}
-
-                            {/* Benchmark hint */}
-                            {portfolio.benchmark && (
-                                <div className="rounded-lg bg-slate-800/50 border border-slate-700/50 px-3 py-2.5">
-                                    <p className="text-xs text-slate-500">
-                                        Benchmark: <span className="text-slate-300 font-mono font-semibold">{portfolio.benchmark}</span>
-                                        <span className="ml-1.5 text-slate-600">— comparison charts coming soon</span>
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Target return hint */}
                             {portfolio.target_return != null && (
-                                <div className="rounded-lg bg-slate-800/50 border border-slate-700/50 px-3 py-2.5">
-                                    <p className="text-xs text-slate-500">
-                                        Target: <span className="text-emerald-400 font-semibold">{portfolio.target_return}% p.a.</span>
-                                        <span className="ml-1.5 text-slate-600">— return tracking coming soon</span>
-                                    </p>
-                                </div>
+                                <TargetReturnProgress
+                                    portfolioId={id}
+                                    targetReturnPct={portfolio.target_return}
+                                />
                             )}
                         </div>
                     ) : null}

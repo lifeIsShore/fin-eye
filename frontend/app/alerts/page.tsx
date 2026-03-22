@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   fetchAlerts,
+  fetchAlertHistory,
   createAlert,
   deleteAlert,
   fetchTriggeredAlerts,
   acknowledgeAlert,
   AlertDto,
+  AlertHistoryDto,
   TriggeredAlertDto,
   AlertCreatePayload,
 } from "@/lib/api";
@@ -34,11 +36,23 @@ const ALERT_TYPE_COLORS: Record<string, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+type PageView = "active" | "history";
+
+const ALERT_TYPE_COLORS_HISTORY: Record<string, string> = {
+  price_above: "bg-emerald-900/30 text-emerald-300 border-emerald-800/40",
+  price_below: "bg-rose-900/30 text-rose-300 border-rose-800/40",
+  gas_above:   "bg-sky-900/30 text-sky-300 border-sky-800/40",
+  gas_below:   "bg-amber-900/30 text-amber-300 border-amber-800/40",
+};
+
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertDto[]>([]);
   const [triggered, setTriggered] = useState<TriggeredAlertDto[]>([]);
+  const [history, setHistory] = useState<AlertHistoryDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<PageView>("active");
 
   // Form state
   const [symbol, setSymbol] = useState("AAPL");
@@ -63,6 +77,18 @@ export default function AlertsPage() {
     }
   }, []);
 
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const data = await fetchAlertHistory(50);
+      setHistory(data.history);
+    } catch {
+      // silently fail — history is non-critical
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     load();
     // Poll triggered alerts every 30s
@@ -74,6 +100,10 @@ export default function AlertsPage() {
     }, 30_000);
     return () => clearInterval(interval);
   }, [load]);
+
+  useEffect(() => {
+    if (view === "history") loadHistory();
+  }, [view, loadHistory]);
 
   const handleCreate = async () => {
     setFormError(null);
@@ -122,6 +152,24 @@ export default function AlertsPage() {
         badge="Live Monitoring"
         badgeColor="amber"
       />
+
+      {/* View switcher */}
+      <div className="flex gap-1 border-b border-gray-800 max-w-3xl">
+        {(["active", "history"] as PageView[]).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${
+              view === v
+                ? "border-amber-500 text-amber-400"
+                : "border-transparent text-gray-500 hover:text-gray-300"
+            }`}
+          >
+            {v === "active" ? `🔔 Active Alerts (${alerts.length})` : `📋 History`}
+          </button>
+        ))}
+      </div>
+
       <div className="max-w-3xl space-y-8">
 
         {/* Triggered banner */}
@@ -314,10 +362,104 @@ export default function AlertsPage() {
         </div>
 
         {/* Footer note */}
-        <p className="text-xs text-gray-600 text-center">
-          Alerts are evaluated every 5 minutes during US market hours (9am–5pm ET).
-          Email alerts are sent via Resend and arrive within minutes of the threshold being breached.
-        </p>
+        {view === "active" && (
+          <p className="text-xs text-gray-600 text-center">
+            Alerts are evaluated every 5 minutes during US market hours (9am–5pm ET).
+            Email alerts are sent via Resend and arrive within minutes of the threshold being breached.
+          </p>
+        )}
+
+        {/* History view */}
+        {view === "history" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
+                Trigger History ({history.length})
+              </h2>
+              <button
+                onClick={loadHistory}
+                disabled={historyLoading}
+                className="text-xs text-gray-500 hover:text-gray-300 transition"
+              >
+                {historyLoading ? "Loading…" : "↻ Refresh"}
+              </button>
+            </div>
+
+            {historyLoading && (
+              <p className="text-gray-500 text-sm">Loading history…</p>
+            )}
+
+            {!historyLoading && history.length === 0 && (
+              <div className="text-center py-12 text-gray-600 text-sm rounded-xl border border-gray-800">
+                No alert history yet. Alerts will appear here once they fire.
+              </div>
+            )}
+
+            {!historyLoading && history.length > 0 && (
+              <div className="rounded-xl border border-gray-800 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-800 text-gray-500">
+                        <th className="text-left px-4 py-2.5 font-medium">Time</th>
+                        <th className="text-left px-3 py-2.5 font-medium">Symbol</th>
+                        <th className="text-left px-3 py-2.5 font-medium">Condition</th>
+                        <th className="text-right px-3 py-2.5 font-medium">Threshold</th>
+                        <th className="text-right px-3 py-2.5 font-medium">Actual</th>
+                        <th className="text-center px-3 py-2.5 font-medium">Via</th>
+                        <th className="text-center px-4 py-2.5 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((h) => (
+                        <tr
+                          key={h.id}
+                          className="border-b border-gray-900 last:border-0 hover:bg-gray-900/40"
+                        >
+                          <td className="px-4 py-2.5 text-gray-400 whitespace-nowrap">
+                            {new Date(h.triggered_at).toLocaleString("en-DE", {
+                              month: "short",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                          <td className="px-3 py-2.5 font-bold text-white">{h.symbol}</td>
+                          <td className="px-3 py-2.5">
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                ALERT_TYPE_COLORS_HISTORY[h.alert_type] ??
+                                "bg-gray-800 text-gray-400 border-gray-700"
+                              }`}
+                            >
+                              {ALERT_TYPE_LABELS[h.alert_type as AlertType] ?? h.alert_type}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono text-gray-300">
+                            {h.threshold.toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono font-bold text-amber-300">
+                            {h.triggered_value.toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2.5 text-center text-gray-500">
+                            {h.delivery_channel === "email" ? "✉️" : "🔔"}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            {h.is_active ? (
+                              <span className="text-[10px] text-amber-400 font-semibold">Active</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-600">Dismissed</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -93,6 +93,21 @@ async def get_triggered_alerts(db: AsyncSession, user: User) -> List[Alert]:
     return list(result.scalars().all())
 
 
+async def get_alert_history(
+    db: AsyncSession,
+    user: User,
+    limit: int = 50,
+) -> List[Alert]:
+    """Return last `limit` alerts that have ever been triggered (fired + dismissed)."""
+    result = await db.execute(
+        select(Alert).where(
+            Alert.user_id == user.id,
+            Alert.triggered_at != None,  # noqa: E711
+        ).order_by(Alert.triggered_at.desc()).limit(limit)
+    )
+    return list(result.scalars().all())
+
+
 async def evaluate_alerts_for_symbol(
     db: AsyncSession,
     symbol: str,

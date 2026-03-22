@@ -68,3 +68,24 @@ class TriggeredAlertResponse(BaseModel):
     message: str
 
     model_config = {"from_attributes": True}
+
+
+class AlertHistoryResponse(BaseModel):
+    """One entry in the alert history log (triggered + dismissed)."""
+    id: int
+    symbol: str
+    alert_type: str
+    threshold: float
+    delivery_channel: str
+    triggered_value: float
+    triggered_at: datetime
+    is_active: bool          # False = dismissed/acknowledged, True = still showing
+    created_at: datetime
+    message: str
+
+    model_config = {"from_attributes": True}
+
+
+class AlertHistoryListResponse(BaseModel):
+    history: List[AlertHistoryResponse]
+    total: int

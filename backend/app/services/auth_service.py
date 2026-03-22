@@ -72,14 +72,21 @@ async def update_user_name(
     db: AsyncSession,
     user: User,
     name: Optional[str],
+    default_symbol: Optional[str] = None,
+    risk_profile: Optional[str] = None,
 ) -> User:
     """
-    Update the user's display name and persist the change.
+    Update the user's display name, default_symbol, and risk_profile. Persist the change.
     """
-    user.name = name
+    if name is not None:
+        user.name = name
+    if default_symbol is not None:
+        user.default_symbol = default_symbol.strip().upper() if default_symbol.strip() else None
+    if risk_profile is not None:
+        user.risk_profile = risk_profile or None
     await db.commit()
     await db.refresh(user)
-    logger.info("Updated display name for user id=%s", user.id)
+    logger.info("Updated profile for user id=%s", user.id)
     return user
 
 

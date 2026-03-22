@@ -34,6 +34,10 @@ export interface GasBatchEntry {
   computed_at:      string;
   prev_gas_score:   number | null;
   delta:            number | null;
+  // Signal grade — Sprint 21
+  signal_grade?:       string | null;
+  signal_grade_score?: number | null;
+  signal_tradeable?:   boolean | null;
 }
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
