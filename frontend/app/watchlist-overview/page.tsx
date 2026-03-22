@@ -98,7 +98,7 @@ function gradeRank(g: string | null | undefined): number {
 function passesGradeFilter(entry: GasBatchEntry, filter: GradeFilter): boolean {
   if (filter === "all") return true;
   const g = entry.signal_grade;
-  if (!g) return filter === "all";
+  if (!g) return false;
   if (filter === "A+")      return g === "A+";
   if (filter === "A_above") return gradeRank(g) <= 1;  // A+ or A
   if (filter === "B_above") return gradeRank(g) <= 2;  // A+, A, B
@@ -491,7 +491,7 @@ export default function WatchlistOverviewPage() {
                   isSelectedB ? "border-violet-500 ring-1 ring-violet-500/40" :
                   compareMode ? "border-slate-700 hover:border-sky-700" :
                   "border-slate-800 hover:border-slate-600"
-                } bg-slate-900/40 hover:bg-slate-900/70 p-4 text-left transition-all space-y-3 group relative`
+                } bg-slate-900/40 hover:bg-slate-900/70 p-4 text-left transition-all space-y-3 group relative`}
               >
                 {/* Compare badge */}
                 {isSelectedA && (

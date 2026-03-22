@@ -66,7 +66,9 @@ async def get_news_sentiment_timeseries(
             source=row.source,
             published_at=row.published_at,
             sentiment_score=row.sentiment_score,
-            url=getattr(row, "url", None),   # Phase 5.1 — include URL for click-through
+            sentiment_label=getattr(row, "sentiment_label", None),  # Phase 5.1 FinBERT label
+            finbert_score=getattr(row, "finbert_score", None),       # Phase 5.1 FinBERT confidence
+            url=getattr(row, "url", None),                           # Phase 5.1 URL click-through
         )
         for row in article_rows
     ]

@@ -579,6 +579,8 @@ export default function DashboardPage() {
     { refreshInterval: 120_000, shouldRetryOnError: false, keepPreviousData: true },
   );
 
+  const signals = techData?.signals ?? [];
+
   const { data: sentData } = useSWR(
     `sent-${activeSymbol}`,
     () => fetchNewsSentiment(activeSymbol),
@@ -638,7 +640,6 @@ export default function DashboardPage() {
   const macroLabel = macroData?.macro_score?.label ?? "Neutral";
   const vixLevel = macroData?.data?.vix?.value ?? null;
   const yieldSpread = macroData?.data?.yield_spread_10y_2y?.value ?? null;
-  const signals = techData?.signals ?? [];
   const isLoading = gasLoading && !gasSnapshot && !gasError;
   const currentPrice = priceData?.price ?? 0;
 

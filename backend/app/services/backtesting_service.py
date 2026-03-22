@@ -153,9 +153,13 @@ class BacktestingEngine:
             entry_idx:   int | None   = None
             entry_price: float | None = None
 
+            # Use 0.05 threshold to handle fractional positions (macro_responsive)
+            # without generating spurious micro-trades on every sizing adjustment
+            ENTRY_THRESHOLD = 0.05
+
             for i, (date_key, pos_val) in enumerate(pos.items()):
                 was_flat   = (entry_idx is None)
-                is_long    = float(pos_val) > 0
+                is_long    = float(pos_val) >= ENTRY_THRESHOLD
 
                 if was_flat and is_long:
                     # Entered a new trade
@@ -337,7 +341,7 @@ class BacktestingEngine:
         # ── Daily returns and 20-day realised vol ────────────────────────────
         df["ret"]    = df["close"].pct_change()
         df["rvol"]   = df["ret"].rolling(window=vol_period).std() * np.sqrt(252)
-        df["rvol"]   = df["rvol"].fillna(method="bfill").clip(lower=0.01)
+        df["rvol"]   = df["rvol"].bfill().clip(lower=0.01)
 
         # ── Trend filter: only trade in uptrends ─────────────────────────────
         df["sma_trend"] = df["close"].rolling(window=sma_trend_len).mean()
@@ -556,21 +560,22 @@ class WalkForwardEngine:
             is_stats  = BacktestStats(**is_stats_dict)
             oos_stats = BacktestStats(**oos_stats_dict)
 
-            # Build equity point lists
+            # Build equity point lists (defined outside loop to avoid closure rebind)
             def _equity_points(df_r: pd.DataFrame) -> list[EquityPoint]:
-                return [
-                    EquityPoint(
+                pts = []
+                for idx, row in df_r.iterrows():
+                    if "equity" not in df_r.columns or not pd.notna(row.get("equity")):
+                        continue
+                    pts.append(EquityPoint(
                         date=str(idx),
                         equity=float(row["equity"]),
                         benchmark_equity=(
                             float(row["benchmark_equity"])
-                            if "benchmark_equity" in row and pd.notna(row["benchmark_equity"])
+                            if "benchmark_equity" in df_r.columns and pd.notna(row.get("benchmark_equity"))
                             else None
                         ),
-                    )
-                    for idx, row in df_r.iterrows()
-                    if "equity" in row and pd.notna(row["equity"])
-                ]
+                    ))
+                return pts
 
             is_equity_pts  = _equity_points(df_is_res)
             oos_equity_pts = _equity_points(df_oos_res)

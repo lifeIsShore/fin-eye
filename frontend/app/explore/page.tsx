@@ -368,7 +368,7 @@ const MACRO_TILES: {
   { key: "vix",                 label: "VIX",            format: (v) => v.toFixed(1)         },
 ];
 
-function macroTileColor(key: string, v: number | null): string {
+function macroTileColor(key: string | number, v: number | null): string {
   if (v === null) return "text-slate-500";
   switch (key) {
     case "fed_funds_rate":      return v > 4.5 ? "text-rose-400" : v < 2 ? "text-emerald-400" : "text-amber-400";
@@ -380,7 +380,7 @@ function macroTileColor(key: string, v: number | null): string {
   }
 }
 
-function macroTileBorder(key: string, v: number | null): string {
+function macroTileBorder(key: string | number, v: number | null): string {
   if (v === null) return "border-slate-800";
   switch (key) {
     case "fed_funds_rate":      return v > 4.5 ? "border-rose-900/50" : v < 2 ? "border-emerald-900/50" : "border-amber-900/50";

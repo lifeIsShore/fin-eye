@@ -1,0 +1,24 @@
+app/backtesting/page.tsx(641,10): error TS2393: Duplicate function implementation.
+app/backtesting/page.tsx(1127,10): error TS2393: Duplicate function implementation.
+app/explore/page.tsx(442,48): error TS2345: Argument of type 'string | number' is not assignable to parameter of type 'string'.
+  Type 'number' is not assignable to type 'string'.
+app/explore/page.tsx(443,49): error TS2345: Argument of type 'string | number' is not assignable to parameter of type 'string'.
+  Type 'number' is not assignable to type 'string'.
+app/fed-policy/page.tsx(150,36): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ lower: string; upper: string; mid: string; dff: string; }'.
+app/fed-policy/page.tsx(231,13): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: TooltipProps<ValueType, "SOFR" | "DFF"> | Readonly<TooltipProps<ValueType, "SOFR" | "DFF">>): Tooltip<...>', gave the following error.
+    Type '(v: number | null, name: string) => [string, "SOFR" | "DFF"]' is not assignable to type 'Formatter<ValueType, "SOFR" | "DFF">'.
+      Types of parameters 'v' and 'value' are incompatible.
+        Type 'ValueType' is not assignable to type 'number | null'.
+          Type 'string' is not assignable to type 'number'.
+  Overload 2 of 2, '(props: TooltipProps<ValueType, "SOFR" | "DFF">, context: any): Tooltip<ValueType, "SOFR" | "DFF">', gave the following error.
+    Type '(v: number | null, name: string) => [string, "SOFR" | "DFF"]' is not assignable to type 'Formatter<ValueType, "SOFR" | "DFF">'.
+app/macro/page.tsx(572,26): error TS18046: 'val' is of type 'unknown'.
+app/macro/page.tsx(573,25): error TS18046: 'val' is of type 'unknown'.
+app/macro/page.tsx(574,35): error TS18046: 'val' is of type 'unknown'.
+app/page.tsx(612,5): error TS2448: Block-scoped variable 'signals' used before its declaration.
+app/page.tsx(612,5): error TS2454: Variable 'signals' is used before being assigned.
+app/page.tsx(622,7): error TS2448: Block-scoped variable 'signals' used before its declaration.
+app/page.tsx(622,7): error TS2454: Variable 'signals' is used before being assigned.
+app/watchlist-overview/page.tsx(101,18): error TS2367: This comparison appears to be unintentional because the types '"A+" | "A_above" | "B_above" | "tradeable"' and '"all"' have no overlap.
+lib/api_llm.ts(65,8): error TS2304: Cannot find name 'API_BASE_URL'.

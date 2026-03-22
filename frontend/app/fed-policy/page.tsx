@@ -149,7 +149,7 @@ function RateHistoryChart({ data }: { data: FedPolicyDto }) {
             wrapperStyle={{ fontSize: "11px", color: "#94a3b8", paddingTop: "8px" }}
             formatter={(value) => ({
               lower: "Target Lower", upper: "Target Upper", mid: "Midpoint", dff: "Effective (DFF)"
-            }[value] ?? value)}
+            }[String(value) as "lower" | "upper" | "mid" | "dff"] ?? value)}
           />
           {/* Shaded range band */}
           <Line type="stepAfter" dataKey="lower" stroke="#3b82f6" strokeWidth={1} dot={false} strokeDasharray="4 2" name="lower" />
@@ -228,7 +228,7 @@ function SofrChart({ sofr, dff }: { sofr: RatePointDto[]; dff: RatePointDto[] })
           <Tooltip
             contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px" }}
             labelStyle={{ color: "#94a3b8", fontSize: 11 }}
-            formatter={(v: number | null, name: string) => [v != null ? `${v.toFixed(3)}%` : "—", name === "sofr" ? "SOFR" : "DFF"]}
+            formatter={(v: any, name: string) => [typeof v === "number" ? `${v.toFixed(3)}%` : "—", name === "sofr" ? "SOFR" : "DFF"]}
           />
           <Legend wrapperStyle={{ fontSize: "11px", color: "#94a3b8", paddingTop: "8px" }}
             formatter={(v) => v === "sofr" ? "SOFR" : "Effective FFR"} />

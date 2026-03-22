@@ -23,6 +23,9 @@ class NewsData(BaseModel):
     symbol: str
     title: str
     sentiment_score: Optional[float] = None
+    # Phase 5.1 — FinBERT label + confidence score
+    sentiment_label: Optional[str] = None
+    finbert_score: Optional[float] = None
     source: Optional[str] = None
     published_at: datetime
     # Phase 5.1 — URL for article click-through

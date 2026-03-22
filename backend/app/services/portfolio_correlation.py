@@ -79,9 +79,11 @@ async def calculate_portfolio_correlation(
             "error": f"Price data unavailable for most symbols in the {period} window.",
         }
 
-    # Align on common dates (inner join of all series)
+    # Align on common dates — ffill gaps first (handles minor missing days like
+    # public holidays), then drop rows still missing after fill.
     df = pd.DataFrame({sym: close_series[sym] for sym in valid_symbols})
-    df = df.dropna()  # keep only rows where ALL symbols have data
+    df = df.ffill().bfill()   # fill short gaps (weekends already excluded by yfinance)
+    df = df.dropna()          # drop any rows still missing after fill
 
     if len(df) < 10:
         return {

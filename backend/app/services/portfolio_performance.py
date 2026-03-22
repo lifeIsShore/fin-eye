@@ -124,9 +124,10 @@ async def calculate_portfolio_performance(portfolio: Any, period: str = "1y") ->
                        for v in combined["benchmark"].tolist()]
 
     # ── Summary stats ─────────────────────────────────────────────────────────
-    port_ret   = round((port_vals[-1] / port_vals[0] - 1) * 100, 2)  if port_vals  else 0.0
+    port_ret   = round((port_vals[-1] / port_vals[0] - 1) * 100, 2) \
+                 if port_vals and port_vals[0] and port_vals[0] != 0 else 0.0
     bench_ret  = round((bench_vals[-1] / bench_vals[0] - 1) * 100, 2) \
-                 if bench_vals and bench_vals[-1] is not None and bench_vals[0] is not None else 0.0
+                 if bench_vals and bench_vals[-1] is not None and bench_vals[0] is not None and bench_vals[0] != 0 else 0.0
     alpha      = round(port_ret - bench_ret, 2)
 
     return {

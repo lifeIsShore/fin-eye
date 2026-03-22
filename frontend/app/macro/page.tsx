@@ -565,7 +565,7 @@ export default function MacroPage() {
             </Card>
 
             <div className="md:col-span-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {Object.entries(indicators).slice(0, 6).map(([key, val]) => (
+              {Object.entries(indicators).slice(0, 6).map(([key, val]: [string, any]) => (
                 <IndicatorCard
                   key={key}
                   title={CORE_LABEL_MAP[key] ?? key}

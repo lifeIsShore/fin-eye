@@ -63,7 +63,7 @@ async def create(
 )
 async def list_all(
     active_only: bool = False,
-    current_user: Annotated[User, Depends(get_current_user)] = None,
+    current_user: Annotated[User, Depends(get_current_user)] = None,  # noqa: B008
     db: AsyncSession = Depends(get_db),
 ) -> AlertListResponse:
     alerts = await list_alerts(db, current_user, active_only=active_only)
@@ -93,7 +93,7 @@ async def remove(
 )
 async def history(
     limit: int = 50,
-    current_user: Annotated[User, Depends(get_current_user)] = None,
+    current_user: Annotated[User, Depends(get_current_user)] = None,  # noqa: B008
     db: AsyncSession = Depends(get_db),
 ) -> AlertHistoryListResponse:
     alerts = await get_alert_history(db, current_user, limit=min(limit, 100))
