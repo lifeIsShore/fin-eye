@@ -1,4 +1,5 @@
 "use client";
+import { ShieldAlert } from "lucide-react";
 
 import React, { useState, useCallback } from "react";
 import useSWR from "swr";
@@ -25,6 +26,24 @@ const STRATEGY_LABELS: Record<string, string> = {
     collar: "Collar",
     stock_put_etf: "Put + Inverse ETF",
 };
+
+// ─── Inline risk disclaimer bar (todos-v3.md UX-LEGAL-01) ────────────────────
+
+function HedgeRiskDisclaimerBar() {
+    return (
+        <div className="rounded-xl border border-amber-700/30 bg-amber-950/15 px-4 py-3 flex items-start gap-3">
+            <ShieldAlert className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-300/80 leading-relaxed">
+                <span className="font-semibold text-amber-300">Educational use only.</span>{" "}
+                Hedging simulations use historical beta and correlation data. Actual hedge
+                effectiveness varies with market conditions and option pricing. This tool
+                is not investment advice — consult a qualified financial professional
+                before implementing any hedging strategy.
+            </p>
+        </div>
+    );
+}
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -468,17 +487,19 @@ export default function HedgePage() {
                 </p>
             </header>
 
+            {/* Inline risk disclaimer — UX-LEGAL-01 */}
+            <HedgeRiskDisclaimerBar />
+
             {/* ── Mode Tabs ──────────────────────────────────────────────────── */}
             <div className="flex gap-1 rounded-xl border border-slate-800 bg-slate-900/50 p-1 w-fit">
                 {(["basic", "advanced"] as Tab[]).map((t) => (
                     <button
                         key={t}
                         onClick={() => setActiveTab(t)}
-                        className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                            activeTab === t
+                        className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === t
                                 ? "bg-sky-600 text-white"
                                 : "text-slate-400 hover:text-slate-200"
-                        }`}
+                            }`}
                     >
                         {t === "basic" ? "Basic" : "Advanced (Multi-leg)"}
                     </button>

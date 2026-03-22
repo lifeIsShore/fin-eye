@@ -4,13 +4,6 @@ app/services/drift_service.py
 Sprint 6 — todos-v5 Phase 5.5
 
 Model drift detection and alert management.
-
-A model is considered "drifted" when its rolling 30-day live accuracy drops
-more than DRIFT_THRESHOLD_PP percentage points below its training/validation
-accuracy. This indicates the model has stopped working for the current market
-regime and should be retrained.
-
-Called by the scheduler after each outcome resolution batch.
 """
 
 from __future__ import annotations
@@ -21,7 +14,7 @@ import json
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ml_prediction import MLPrediction
@@ -29,14 +22,9 @@ from app.models.model_drift_alert import ModelDriftAlert, DRIFT_THRESHOLD_PP
 
 logger = logging.getLogger(__name__)
 
-# How often to re-alert on a still-drifted model (avoid spam)
 _REPEAT_ALERT_COOLDOWN_DAYS = 3
-
-# Critical threshold — if delta > this, mark severity = "critical"
-_CRITICAL_THRESHOLD_PP = 20.0
-
-# Minimum resolved predictions to bother computing drift
-_MIN_PREDICTIONS = 20
+_CRITICAL_THRESHOLD_PP      = 20.0
+_MIN_PREDICTIONS            = 20
 
 
 async def detect_and_record_drift(
@@ -47,17 +35,6 @@ async def detect_and_record_drift(
 ) -> dict:
     """
     Main drift detection job. Called hourly after resolve_pending_outcomes().
-
-    Steps:
-      1. Find all (symbol, timeframe) pairs with ≥ MIN_PREDICTIONS resolved outcomes
-         in the last 30 days
-      2. Compute their rolling 30-day live accuracy
-      3. Compare to validation accuracy from the JSONL registry
-      4. If delta > DRIFT_THRESHOLD_PP and no recent alert exists → create alert
-      5. If auto_retrain=True (from settings), set alert.auto_retrain = True
-         and trigger background retraining
-
-    Returns a summary dict: { checked, drifted, alerts_created, auto_retrains }
     """
     if registry_file is None:
         from app.services.ml_pipeline import REGISTRY_FILE  # noqa: PLC0415
@@ -66,14 +43,14 @@ async def detect_and_record_drift(
     val_accuracies = _load_val_accuracies(registry_file)
     cutoff_30d     = datetime.now(timezone.utc) - timedelta(days=30)
 
-    # ── Step 1: compute rolling 30-day accuracy per symbol/timeframe ──────────
+    # Use case() with SQLAlchemy 2.x syntax (no func.cast needed)
     rows = await db.execute(
         select(
             MLPrediction.symbol,
             MLPrediction.timeframe,
             func.count().label("n"),
             func.sum(
-                func.cast(MLPrediction.was_correct, sa_int())
+                case((MLPrediction.was_correct == True, 1), else_=0)  # noqa: E712
             ).label("correct"),
         )
         .where(
@@ -89,22 +66,21 @@ async def detect_and_record_drift(
     for row in rows:
         checked += 1
         sym, tf, n, correct = row.symbol, row.timeframe, int(row.n), int(row.correct or 0)
-        live_acc_pct  = (correct / n) * 100.0
-        val_acc_pct   = val_accuracies.get((sym, tf))
+        live_acc_pct = (correct / n) * 100.0
+        val_acc_pct  = val_accuracies.get((sym, tf))
 
         if val_acc_pct is None:
             logger.debug("No validation accuracy found for %s/%s in registry", sym, tf)
             continue
 
-        delta_pp = val_acc_pct - live_acc_pct   # positive = degraded
+        delta_pp = val_acc_pct - live_acc_pct
 
         if delta_pp <= DRIFT_THRESHOLD_PP:
-            continue  # model is fine
+            continue
 
         drifted += 1
         severity = "critical" if delta_pp >= _CRITICAL_THRESHOLD_PP else "warning"
 
-        # Check cooldown — don't spam alerts
         recent_alert = await db.execute(
             select(ModelDriftAlert)
             .where(
@@ -119,14 +95,14 @@ async def detect_and_record_drift(
             continue
 
         alert = ModelDriftAlert(
-            symbol               = sym,
-            timeframe            = tf,
-            val_accuracy_pct     = round(val_acc_pct, 2),
-            live_accuracy_pct    = round(live_acc_pct, 2),
-            delta_pp             = round(delta_pp, 2),
-            n_live_predictions   = n,
-            severity             = severity,
-            auto_retrain         = auto_retrain,
+            symbol              = sym,
+            timeframe           = tf,
+            val_accuracy_pct    = round(val_acc_pct, 2),
+            live_accuracy_pct   = round(live_acc_pct, 2),
+            delta_pp            = round(delta_pp, 2),
+            n_live_predictions  = n,
+            severity            = severity,
+            auto_retrain        = auto_retrain,
         )
         db.add(alert)
         alerts_created += 1
@@ -138,7 +114,6 @@ async def detect_and_record_drift(
 
         if auto_retrain:
             auto_retrains += 1
-            # Fire background retrain — non-blocking
             try:
                 await _trigger_retrain_async(sym, tf)
             except Exception as exc:
@@ -156,11 +131,6 @@ async def detect_and_record_drift(
 
 
 def _load_val_accuracies(registry_file: str) -> dict[tuple[str, str], float]:
-    """
-    Read the latest champion record per (symbol, timeframe) from the JSONL registry
-    and extract the winner model's validation accuracy.
-    Returns { (symbol, tf): accuracy_pct }.
-    """
     if not os.path.exists(registry_file):
         return {}
 
@@ -194,7 +164,6 @@ def _load_val_accuracies(registry_file: str) -> dict[tuple[str, str], float]:
 
 
 async def _trigger_retrain_async(symbol: str, timeframe: str) -> None:
-    """Fire-and-forget retrain for a drifted model."""
     import asyncio  # noqa: PLC0415
     from app.services.market_data import OHLCVFetcher  # noqa: PLC0415
     from app.services.ml_pipeline import run_training_pipeline  # noqa: PLC0415
@@ -219,9 +188,6 @@ async def _trigger_retrain_async(symbol: str, timeframe: str) -> None:
 
 
 async def get_drift_report(db: AsyncSession, *, unacked_only: bool = False) -> list[dict]:
-    """
-    Return all drift alerts for the admin drift report endpoint.
-    """
     q = select(ModelDriftAlert).order_by(ModelDriftAlert.detected_at.desc())
     if unacked_only:
         q = q.where(ModelDriftAlert.acknowledged == False)  # noqa: E712
@@ -229,19 +195,19 @@ async def get_drift_report(db: AsyncSession, *, unacked_only: bool = False) -> l
     alerts = rows.scalars().all()
     return [
         {
-            "id":                  a.id,
-            "symbol":              a.symbol,
-            "timeframe":           a.timeframe,
-            "val_accuracy_pct":    a.val_accuracy_pct,
-            "live_accuracy_pct":   a.live_accuracy_pct,
-            "delta_pp":            a.delta_pp,
-            "n_live_predictions":  a.n_live_predictions,
-            "severity":            a.severity,
-            "auto_retrain":        a.auto_retrain,
-            "retrained_at":        a.retrained_at.isoformat() if a.retrained_at else None,
-            "acknowledged":        a.acknowledged,
-            "detected_at":         a.detected_at.isoformat(),
-            "resolved_at":         a.resolved_at.isoformat() if a.resolved_at else None,
+            "id":                 a.id,
+            "symbol":             a.symbol,
+            "timeframe":          a.timeframe,
+            "val_accuracy_pct":   a.val_accuracy_pct,
+            "live_accuracy_pct":  a.live_accuracy_pct,
+            "delta_pp":           a.delta_pp,
+            "n_live_predictions": a.n_live_predictions,
+            "severity":           a.severity,
+            "auto_retrain":       a.auto_retrain,
+            "retrained_at":       a.retrained_at.isoformat() if a.retrained_at else None,
+            "acknowledged":       a.acknowledged,
+            "detected_at":        a.detected_at.isoformat(),
+            "resolved_at":        a.resolved_at.isoformat() if a.resolved_at else None,
         }
         for a in alerts
     ]
@@ -255,8 +221,3 @@ async def acknowledge_drift_alert(db: AsyncSession, alert_id: int) -> bool:
     row.ack_at       = datetime.now(timezone.utc)
     await db.flush()
     return True
-
-
-def sa_int():
-    from sqlalchemy import Integer
-    return Integer()

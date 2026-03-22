@@ -10,17 +10,17 @@ export interface SentimentAggregatePoint {
 }
 
 export interface NewsArticleDto {
-  symbol:          string;
-  title:           string;
+  symbol: string;
+  title: string;
   sentiment_score: number | null;
   // Phase 5.1 — FinBERT label ('bullish' | 'bearish' | 'neutral'), null if not scored
   sentiment_label: string | null;
   // Phase 5.1 — raw FinBERT confidence (0–1), null if not scored
-  finbert_score:   number | null;
-  source:          string | null;
-  published_at:    string;
+  finbert_score: number | null;
+  source: string | null;
+  published_at: string;
   // Phase 5.7 — clickable article URL (always present for Finnhub articles)
-  url:             string | null;
+  url: string | null;
 }
 
 export interface SentimentTimeseriesDto {
@@ -2424,42 +2424,42 @@ export interface IndicatorSummary {
 }
 
 export interface EvaluateResponseDto {
-  dates:   string[];
-  values:  (number | null)[];
-  type:    "continuous" | "signal";
+  dates: string[];
+  values: (number | null)[];
+  type: "continuous" | "signal";
   summary: IndicatorSummary;
 }
 
 export interface ValidateResponseDto {
-  valid:  boolean;
+  valid: boolean;
   errors: string[];
 }
 
 export interface CustomIndicatorDto {
-  id:          number;
-  name:        string;
+  id: number;
+  name: string;
   description: string | null;
-  formula:     FormulaNode;
-  created_at:  string;
-  updated_at:  string;
+  formula: FormulaNode;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CatalogParam {
-  name:    string;
+  name: string;
   default: number;
-  min:     number;
-  max:     number;
-  type:    "int" | "float";
+  min: number;
+  max: number;
+  type: "int" | "float";
 }
 
 export interface CatalogEntry {
-  fn:          string;
-  label:       string;
-  category:    string;
-  params:      CatalogParam[];
-  outputs:     string[];
+  fn: string;
+  label: string;
+  category: string;
+  params: CatalogParam[];
+  outputs: string[];
   description: string;
-  example:     FormulaNode;
+  example: FormulaNode;
 }
 
 export async function fetchIndicatorCatalog(): Promise<CatalogEntry[]> {
@@ -2530,4 +2530,53 @@ export async function evaluateSavedIndicator(
   );
   if (!res.ok) throw new Error("Evaluation failed");
   return res.json();
+}
+
+// ── GAS History — 7-day sparkline (todos-v3.md UX-GROWTH-01) ────────────────
+
+export interface GasHistoryPoint {
+  computed_at: string;
+  gas_score: number;
+  weather_label: string;
+  regime: string;
+  component_scores: GasComponentScores;
+}
+
+export async function fetchGasHistory(
+  symbol: string,
+  limit = 7,
+): Promise<GasHistoryPoint[]> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/admin/gas/history/${encodeURIComponent(symbol.toUpperCase())}?limit=${limit}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) return [];   // graceful empty — sparkline just won't render
+  return res.json() as Promise<GasHistoryPoint[]>;
+}
+
+// ── Symbol search / autocomplete (todos-v3.md POLISH-02) ─────────────────────
+
+export interface SymbolResultDto {
+  symbol: string;
+  description: string;
+  type: string;
+  exchange: string;
+  trained: boolean;
+}
+
+export async function fetchSymbolSearch(
+  query: string,
+  limit = 8,
+): Promise<SymbolResultDto[]> {
+  if (!query.trim()) return [];
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/api/v1/symbols/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) throw new Error("search failed");
+    return res.json();
+  } catch {
+    return [];   // graceful fallback — GlobalTickerSearch has its own static fallback
+  }
 }

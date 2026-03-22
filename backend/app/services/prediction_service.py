@@ -7,20 +7,6 @@ Three responsibilities:
   1. store_prediction()         — called from technical_service on every inference
   2. resolve_pending_outcomes() — hourly cron: fills in actual price + correctness
   3. get_prediction_stats()     — per-symbol live accuracy stats for the frontend
-
-Why this matters (from the brainstorm):
-  Training accuracy tells you how the model performed on historical held-out data.
-  Live accuracy tells you how it performs RIGHT NOW on real market data.
-  These diverge over time as market regimes shift. The prediction database
-  is what bridges that gap — it's the feedback loop that makes the system
-  self-aware about its own reliability.
-
-Data flow:
-  technical_service.generate_timeframe_signal()
-      → store_prediction()  [stores signal + feature values]
-      → waits N periods     [horizon_ends_at passes]
-      → resolve_pending_outcomes()  [cron fills in actual outcome]
-      → get_prediction_stats()  [frontend shows live accuracy]
 """
 
 from __future__ import annotations
@@ -29,7 +15,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, Integer, case
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,8 +24,6 @@ from app.models.ml_prediction import MLPrediction
 logger = logging.getLogger(__name__)
 
 # ── Horizon delta helpers ─────────────────────────────────────────────────────
-# Maps timeframe + horizon_periods → approximate real-time duration.
-# Used to compute horizon_ends_at at prediction time.
 
 _PERIOD_DURATION: dict[str, timedelta] = {
     "1h":  timedelta(hours=1),
@@ -63,8 +47,8 @@ async def store_prediction(
     symbol:              str,
     timeframe:           str,
     model_name:          str,
-    predicted_direction: int,            # 1 = UP, 0 = DOWN
-    confidence:          float,          # 0.5–1.0
+    predicted_direction: int,
+    confidence:          float,
     horizon_periods:     int,
     price_at_prediction: float,
     expected_return:     Optional[float]      = None,
@@ -75,18 +59,12 @@ async def store_prediction(
     market_regime:       Optional[str]        = None,
 ) -> Optional[MLPrediction]:
     """
-    Store one prediction row.
-
-    Idempotent — uses ON CONFLICT DO NOTHING on (symbol, timeframe, prediction_date)
-    so calling this multiple times in the same day for the same symbol/timeframe
-    only stores the FIRST prediction of the day. This prevents a heavily-requested
-    symbol from filling the table with thousands of identical rows.
-
-    Returns the stored prediction, or None if a duplicate was skipped.
+    Store one prediction row. Idempotent via ON CONFLICT DO NOTHING on
+    (symbol, timeframe, prediction_date). Returns None if duplicate skipped.
     """
-    now            = datetime.now(timezone.utc)
+    now             = datetime.now(timezone.utc)
     prediction_date = now.date()
-    horizon_end    = _horizon_ends(timeframe, horizon_periods, now)
+    horizon_end     = _horizon_ends(timeframe, horizon_periods, now)
 
     row = {
         "symbol":               symbol.upper(),
@@ -148,10 +126,6 @@ async def resolve_pending_outcomes(
     """
     Find all predictions where horizon_ends_at <= now and outcome not yet resolved.
     Fetch current price for each symbol and fill in actual outcome.
-
-    Called by the APScheduler hourly cron in scheduler.py.
-
-    Returns a summary dict: { resolved: N, failed: N, skipped: N }
     """
     now = datetime.now(timezone.utc)
 
@@ -171,7 +145,6 @@ async def resolve_pending_outcomes(
     if not pending:
         return {"resolved": 0, "failed": 0, "skipped": 0}
 
-    # Group by symbol so we fetch each price once, not once per row
     symbols_needed = list({p.symbol for p in pending})
     prices: dict[str, Optional[float]] = {}
 
@@ -209,7 +182,7 @@ async def resolve_pending_outcomes(
     if resolved > 0:
         await db.flush()
         logger.info(
-            "Outcome resolution: %d resolved, %d failed, %d skipped (no price)",
+            "Outcome resolution: %d resolved, %d failed, %d skipped",
             resolved, failed, skipped,
         )
 
@@ -217,7 +190,6 @@ async def resolve_pending_outcomes(
 
 
 async def _fetch_price_async(symbol: str) -> Optional[float]:
-    """Fetch the latest closing price. Runs yfinance in the default executor."""
     import asyncio
     loop = asyncio.get_running_loop()
 
@@ -241,43 +213,32 @@ async def get_prediction_stats(
     db: AsyncSession,
     symbol: str,
     *,
-    min_resolved: int = 10,    # don't return stats until we have meaningful data
+    min_resolved: int = 10,
 ) -> dict:
     """
     Compute live accuracy statistics for a symbol across all timeframes.
-
-    Returns per-timeframe:
-      - total_resolved      — how many predictions have been resolved
-      - correct             — how many were correct
-      - live_accuracy       — correct / total_resolved
-      - avg_return_correct  — average actual_return when model was right
-      - avg_return_wrong    — average actual_return when model was wrong
-      - recent_30d_accuracy — accuracy over the last 30 days only
-      - by_regime           — accuracy broken down by market regime
-
-    If fewer than min_resolved rows exist for a timeframe, accuracy is returned
-    as null (not enough data yet).
     """
     sym = symbol.upper()
 
     # ── Per-timeframe aggregate ───────────────────────────────────────────────
+    # Use case() with new SQLAlchemy 2.x syntax: case(condition, value)
+    correct_expr = func.sum(
+        case((MLPrediction.was_correct == True, 1), else_=0)  # noqa: E712
+    )
+    avg_ret_correct_expr = func.avg(
+        case((MLPrediction.was_correct == True, MLPrediction.actual_return), else_=None)  # noqa: E712
+    )
+    avg_ret_wrong_expr = func.avg(
+        case((MLPrediction.was_correct == False, MLPrediction.actual_return), else_=None)  # noqa: E712
+    )
+
     tf_rows = await db.execute(
         select(
             MLPrediction.timeframe,
             func.count().label("total"),
-            func.sum(func.cast(MLPrediction.was_correct, sa_int())).label("correct"),
-            func.avg(
-                func.case(
-                    (MLPrediction.was_correct == True, MLPrediction.actual_return),  # noqa: E712
-                    else_=None,
-                )
-            ).label("avg_ret_correct"),
-            func.avg(
-                func.case(
-                    (MLPrediction.was_correct == False, MLPrediction.actual_return),  # noqa: E712
-                    else_=None,
-                )
-            ).label("avg_ret_wrong"),
+            correct_expr.label("correct"),
+            avg_ret_correct_expr.label("avg_ret_correct"),
+            avg_ret_wrong_expr.label("avg_ret_wrong"),
         )
         .where(
             MLPrediction.symbol == sym,
@@ -304,7 +265,9 @@ async def get_prediction_stats(
         select(
             MLPrediction.timeframe,
             func.count().label("total"),
-            func.sum(func.cast(MLPrediction.was_correct, sa_int())).label("correct"),
+            func.sum(
+                case((MLPrediction.was_correct == True, 1), else_=0)  # noqa: E712
+            ).label("correct"),
         )
         .where(
             MLPrediction.symbol == sym,
@@ -322,7 +285,6 @@ async def get_prediction_stats(
         tf_stats[tf]["recent_30d_accuracy"] = (
             round(correct / total, 4) if total >= min_resolved else None
         )
-        # Trend direction
         overall = tf_stats[tf].get("live_accuracy")
         recent  = tf_stats[tf].get("recent_30d_accuracy")
         if overall and recent:
@@ -337,7 +299,9 @@ async def get_prediction_stats(
             MLPrediction.timeframe,
             MLPrediction.market_regime_at_prediction,
             func.count().label("n"),
-            func.sum(func.cast(MLPrediction.was_correct, sa_int())).label("correct"),
+            func.sum(
+                case((MLPrediction.was_correct == True, 1), else_=0)  # noqa: E712
+            ).label("correct"),
         )
         .where(
             MLPrediction.symbol == sym,
@@ -369,25 +333,19 @@ async def get_prediction_stats(
             best_tf  = tf
 
     # ── Overall model health ──────────────────────────────────────────────────
-    total_all   = sum(s["total_resolved"] for s in tf_stats.values())
-    has_enough  = any(s.get("live_accuracy") is not None for s in tf_stats.values())
+    total_all  = sum(s["total_resolved"] for s in tf_stats.values())
+    has_enough = any(s.get("live_accuracy") is not None for s in tf_stats.values())
     model_health = "insufficient_data" if not has_enough else (
-        "good"      if best_acc >= 0.55 else
-        "marginal"  if best_acc >= 0.50 else
+        "good"     if best_acc >= 0.55 else
+        "marginal" if best_acc >= 0.50 else
         "poor"
     )
 
     return {
-        "symbol":                   sym,
-        "available":                bool(tf_stats),
-        "total_resolved_all_tfs":   total_all,
-        "timeframes":               tf_stats,
+        "symbol":                    sym,
+        "available":                 bool(tf_stats),
+        "total_resolved_all_tfs":    total_all,
+        "timeframes":                tf_stats,
         "best_performing_timeframe": best_tf,
-        "model_health":             model_health,
+        "model_health":              model_health,
     }
-
-
-def sa_int():
-    """Helper — returns SQLAlchemy Integer type for cast."""
-    from sqlalchemy import Integer
-    return Integer()

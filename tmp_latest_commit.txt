@@ -1,0 +1,54 @@
+commit 68df4b14de87d943aa80dc303528803ba810d0a4
+Author: LifeIsShore <ahmtyagmur03@gmail.com>
+Date:   Sat Mar 21 23:31:02 2026 +0100
+
+    todo5 phase 1 (not tested)
+
+A	SPRINT_PROGRESS.md
+M	backend/.env
+M	backend/.env.example
+A	backend/alembic/versions/v5_001_ml_predictions.py
+A	backend/alembic/versions/v6_001_model_drift_alerts.py
+M	backend/app/api/v1/auth.py
+M	backend/app/api/v1/endpoints/admin_gas.py
+A	backend/app/api/v1/endpoints/admin_ml.py
+M	backend/app/api/v1/endpoints/explanation.py
+M	backend/app/api/v1/endpoints/technical.py
+M	backend/app/config.py
+M	backend/app/core/security.py
+M	backend/app/main.py
+A	backend/app/middleware/security_headers.py
+M	backend/app/models/__init__.py
+A	backend/app/models/ml_prediction.py
+A	backend/app/models/model_drift_alert.py
+A	backend/app/services/auth_security.py
+A	backend/app/services/drift_service.py
+M	backend/app/services/ml_pipeline.py
+A	backend/app/services/optuna_tuner.py
+A	backend/app/services/prediction_service.py
+A	backend/app/services/price_target_service.py
+M	backend/app/services/scheduler.py
+M	backend/app/services/technical_models.py
+M	backend/app/services/technical_service.py
+M	backend/data/models/model_registry.jsonl
+A	backend/drop_ml_predictions.py
+A	backend/drop_model_drift_alerts.py
+M	backend/requirements.txt
+M	frontend/app/auth/login/page.tsx
+M	frontend/app/layout.tsx
+A	frontend/app/model-info/[symbol]/page.tsx
+M	frontend/app/page.tsx
+M	frontend/components/AuthProvider.tsx
+A	frontend/components/GasSparkline.tsx
+A	frontend/components/LLMInsightCard.tsx
+M	frontend/components/MarketWeatherWidget.tsx
+A	frontend/components/ModelDetailsPanel.tsx
+A	frontend/components/PriceTargetCard.tsx
+A	frontend/components/Skeletons.tsx
+M	frontend/components/TimeframeGrid.tsx
+A	frontend/components/ToastProvider.tsx
+A	frontend/lib/api_admin_ml.ts
+A	frontend/lib/api_llm.ts
+A	frontend/lib/api_llm_types.ts
+A	frontend/lib/api_model_details.ts
+A	frontend/lib/api_price.ts

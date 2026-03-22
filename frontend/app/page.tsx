@@ -16,6 +16,7 @@ import {
 import { triggerTrainSymbol } from "../lib/api_bulk";
 import { fetchLatestPrice } from "../lib/api_price";
 import { useAuth } from "../components/AuthProvider";
+import { useToast } from "../components/ToastProvider";
 import MarketWeatherWidget from "../components/MarketWeatherWidget";
 import RegimeWidget from "../components/RegimeWidget";
 import TimeframeGrid from "../components/TimeframeGrid";
@@ -64,8 +65,8 @@ function buildWhyBullets(
   const bullets: string[] = [];
   const bullishTfs = signals.filter((s) => s.direction === "Bullish").length;
   const bearishTfs = signals.filter((s) => s.direction === "Bearish").length;
-  const total      = signals.length;
-  const techDir    = directionLabel(techScore);
+  const total = signals.length;
+  const techDir = directionLabel(techScore);
 
   if (total > 0) {
     bullets.push(
@@ -81,10 +82,10 @@ function buildWhyBullets(
 
   if (sent30d !== null) {
     const sentLabel =
-      sent30d > 0.3   ? "strongly positive" :
-      sent30d > 0.05  ? "mildly positive"   :
-      sent30d > -0.05 ? "neutral"            :
-      sent30d > -0.3  ? "mildly negative"   : "strongly negative";
+      sent30d > 0.3 ? "strongly positive" :
+        sent30d > 0.05 ? "mildly positive" :
+          sent30d > -0.05 ? "neutral" :
+            sent30d > -0.3 ? "mildly negative" : "strongly negative";
     bullets.push(
       `📰 News sentiment over the past 30 days is ${sentLabel} ` +
       `(score: ${sent30d >= 0 ? "+" : ""}${sent30d.toFixed(2)} on a −1 to +1 scale).`,
@@ -95,8 +96,8 @@ function buildWhyBullets(
 
   const macroComment =
     macroScore >= 60 ? "This provides a supportive backdrop for equities." :
-    macroScore < 40  ? "Macro conditions add headwinds to risk assets."     :
-                       "Macro conditions are broadly neutral.";
+      macroScore < 40 ? "Macro conditions add headwinds to risk assets." :
+        "Macro conditions are broadly neutral.";
   bullets.push(
     `🌐 Macro backdrop is '${macroLabel}' (score: ${macroScore.toFixed(0)}/100). ${macroComment}`,
   );
@@ -120,7 +121,7 @@ function detectConflicts(
   const scores: Record<string, number> = {
     Technical: techScore,
     Sentiment: sentScore0100,
-    Macro:     macroScore,
+    Macro: macroScore,
   };
   const pairs: [string, string][] = [
     ["Technical", "Sentiment"],
@@ -132,23 +133,23 @@ function detectConflicts(
     const sa = scores[a]; const sb = scores[b];
     if ((sa > 65 && sb < 35) || (sb > 65 && sa < 35)) {
       conflicts.push({
-        layers:    `${a} vs ${b}`,
+        layers: `${a} vs ${b}`,
         magnitude: `${Math.abs(sa - sb).toFixed(0)} points apart (${sa.toFixed(0)} vs ${sb.toFixed(0)})`,
-        message:   `${a} is ${directionLabel(sa).toLowerCase()} while ${b} is ${directionLabel(sb).toLowerCase()}. This divergence suggests elevated uncertainty — exercise extra caution.`,
+        message: `${a} is ${directionLabel(sa).toLowerCase()} while ${b} is ${directionLabel(sb).toLowerCase()}. This divergence suggests elevated uncertainty — exercise extra caution.`,
       });
     }
   }
 
   if (signals.length > 0) {
-    const bullish   = signals.filter((s) => s.direction === "Bullish").length;
-    const bearish   = signals.filter((s) => s.direction === "Bearish").length;
-    const dominant  = Math.max(bullish, bearish);
+    const bullish = signals.filter((s) => s.direction === "Bullish").length;
+    const bearish = signals.filter((s) => s.direction === "Bearish").length;
+    const dominant = Math.max(bullish, bearish);
     const agreement = dominant / signals.length;
     if (agreement < 0.4) {
       conflicts.push({
-        layers:    "Timeframe Agreement",
+        layers: "Timeframe Agreement",
         magnitude: `${(agreement * 100).toFixed(0)}% agreement across ${signals.length} timeframes`,
-        message:   `Only ${dominant} of ${signals.length} timeframes agree on direction. Low cross-timeframe consensus increases signal uncertainty.`,
+        message: `Only ${dominant} of ${signals.length} timeframes agree on direction. Low cross-timeframe consensus increases signal uncertainty.`,
       });
     }
   }
@@ -192,8 +193,8 @@ function TrainNowEmptyState({
   onTrainStarted: () => void;
 }) {
   const [loading, setLoading] = useState(false);
-  const [done, setDone]       = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleTrain = useCallback(async () => {
     setLoading(true);
@@ -334,8 +335,8 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
   const isStale = ageMin !== null && ageMin * 60_000 > STALE_THRESHOLD_MS;
   const ageLabel = ageMin === null ? "age unknown" : ageMin < 1 ? "just now" : `${ageMin}m ago`;
   const sourceColor =
-    snapshot.source === "cache"       ? "text-emerald-400" :
-    snapshot.source === "db_snapshot" ? "text-sky-400"     : "text-amber-400";
+    snapshot.source === "cache" ? "text-emerald-400" :
+      snapshot.source === "db_snapshot" ? "text-sky-400" : "text-amber-400";
   return (
     <div className="flex items-center gap-2 text-xs text-slate-500">
       <span className={sourceColor}>●</span>
@@ -359,6 +360,7 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
 export default function DashboardPage() {
   const { symbol: activeSymbol, setSymbol: setActiveSymbol } = useSymbol();
   const { user } = useAuth();
+  const { toast } = useToast();
   const isAdmin = user?.is_admin === true;
 
   const [techExplainOpen, setTechExplainOpen] = useState<boolean>(() => {
@@ -419,14 +421,14 @@ export default function DashboardPage() {
     })();
 
   const regimeFromSnapshot = gasSnapshot?.regime;
-  const techScore   = gasSnapshot?.component_scores?.technical ?? techData?.technical_confidence_score ?? 50;
-  const sent30d     = sentData?.sentiment_30d ?? null;
-  const macroScore  = gasSnapshot?.component_scores?.macro ?? macroData?.macro_score?.score ?? 50;
-  const macroLabel  = macroData?.macro_score?.label ?? "Neutral";
-  const vixLevel    = macroData?.data?.vix?.value ?? null;
+  const techScore = gasSnapshot?.component_scores?.technical ?? techData?.technical_confidence_score ?? 50;
+  const sent30d = sentData?.sentiment_30d ?? null;
+  const macroScore = gasSnapshot?.component_scores?.macro ?? macroData?.macro_score?.score ?? 50;
+  const macroLabel = macroData?.macro_score?.label ?? "Neutral";
+  const vixLevel = macroData?.data?.vix?.value ?? null;
   const yieldSpread = macroData?.data?.yield_spread_10y_2y?.value ?? null;
-  const signals     = techData?.signals ?? [];
-  const isLoading   = gasLoading && !gasSnapshot && !gasError;
+  const signals = techData?.signals ?? [];
+  const isLoading = gasLoading && !gasSnapshot && !gasError;
   const currentPrice = priceData?.price ?? 0;
 
   const mlOutput = useMemo(() => buildMlOutput(signals, techScore), [signals, techScore]);
@@ -454,19 +456,23 @@ export default function DashboardPage() {
     () => detectConflicts(techScore, sentScore0100, macroScore, signals),
     [techScore, sentScore0100, macroScore, signals],
   );
-  const whyBullets   = explanationData?.why_moving ?? fallbackWhyBullets;
+  const whyBullets = explanationData?.why_moving ?? fallbackWhyBullets;
   const conflictData = explanationData
     ? { hasConflict: explanationData.has_conflict, conflicts: explanationData.conflicts, summary: explanationData.conflict_summary }
     : fallbackConflictData;
   const initialAiSummary = explanationData?.ai_summary ?? null;
 
   const handleTrainStarted = useCallback(() => {
+    toast({ title: "Training started", description: "ML models training in background — signals will appear in ~90 seconds.", type: "info", duration: 6000 });
     const intervalId = setInterval(async () => {
       const fresh = await mutateTech();
-      if (fresh?.signals && fresh.signals.length > 0) clearInterval(intervalId);
+      if (fresh?.signals && fresh.signals.length > 0) {
+        clearInterval(intervalId);
+        toast({ title: "Training complete", description: `Signals for ${activeSymbol} are ready.`, type: "success" });
+      }
     }, 5000);
     setTimeout(() => clearInterval(intervalId), 180_000);
-  }, [mutateTech]);
+  }, [mutateTech, toast, activeSymbol]);
 
   const openGasExplain = useCallback(
     () => setExplainPayload(buildGasPayload(gasScore, techScore, sent30d, macroScore, macroLabel)),
@@ -517,7 +523,7 @@ export default function DashboardPage() {
               {/* Row 1 – GAS + Regime */}
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="tour-gas-score">
-                  <MarketWeatherWidget gasScore={gasScore} onExplain={openGasExplain} />
+                  <MarketWeatherWidget gasScore={gasScore} symbol={activeSymbol} onExplain={openGasExplain} />
                 </div>
                 <div className="tour-regime">
                   <RegimeWidget
@@ -538,22 +544,20 @@ export default function DashboardPage() {
                     <p className="text-xs text-slate-500 mt-0.5">Sharpe-weighted ML signal across all trained timeframes</p>
                   </div>
                   <div className="flex items-baseline gap-2 flex-shrink-0">
-                    <span className={`text-4xl font-black tabular-nums ${
-                      techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"
-                    }`}>{techScore.toFixed(1)}</span>
+                    <span className={`text-4xl font-black tabular-nums ${techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"
+                      }`}>{techScore.toFixed(1)}</span>
                     <span className="text-slate-500 text-base">/ 100</span>
                     {currentPrice > 0 && (
                       <span className="ml-2 text-xs text-slate-500 font-mono tabular-nums">
                         ${currentPrice.toFixed(2)}
                       </span>
                     )}
-                    <span className={`ml-1 text-xs font-bold px-2 py-0.5 rounded-full border ${
-                      techScore >= 60 ? "text-emerald-400 bg-emerald-950/40 border-emerald-800/50" :
-                      techScore >= 40 ? "text-amber-400 bg-amber-950/40 border-amber-800/50"       :
-                                        "text-rose-400 bg-rose-950/40 border-rose-800/50"
-                    }`}>
+                    <span className={`ml-1 text-xs font-bold px-2 py-0.5 rounded-full border ${techScore >= 60 ? "text-emerald-400 bg-emerald-950/40 border-emerald-800/50" :
+                        techScore >= 40 ? "text-amber-400 bg-amber-950/40 border-amber-800/50" :
+                          "text-rose-400 bg-rose-950/40 border-rose-800/50"
+                      }`}>
                       {techScore >= 80 ? "Strong Bullish" : techScore >= 60 ? "Bullish Lean" :
-                       techScore >= 40 ? "Mixed / Neutral" : techScore >= 20 ? "Bearish Lean" : "Strong Bearish"}
+                        techScore >= 40 ? "Mixed / Neutral" : techScore >= 20 ? "Bearish Lean" : "Strong Bearish"}
                     </span>
                   </div>
                 </div>
@@ -578,9 +582,8 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-3">
                           <span className="text-[10px] text-slate-600 w-12 flex-shrink-0">0 Bear</span>
                           <div className="relative flex-1 h-2.5 rounded-full bg-slate-700 overflow-hidden">
-                            <div className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${
-                              techScore >= 60 ? "bg-emerald-500" : techScore >= 40 ? "bg-amber-500" : "bg-rose-500"
-                            }`} style={{ width: `${techScore}%` }} />
+                            <div className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${techScore >= 60 ? "bg-emerald-500" : techScore >= 40 ? "bg-amber-500" : "bg-rose-500"
+                              }`} style={{ width: `${techScore}%` }} />
                             <div className="absolute inset-y-0 left-1/2 w-px bg-slate-400/50" />
                           </div>
                           <span className="text-[10px] text-slate-600 w-14 flex-shrink-0 text-right">100 Bull</span>
@@ -595,7 +598,7 @@ export default function DashboardPage() {
                             <p className="text-slate-500 mb-0.5">Score {techScore.toFixed(1)}</p>
                             <p className={`font-semibold ${techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"}`}>
                               {techScore < 40 ? `${(50 - techScore).toFixed(0)} pts below neutral` :
-                               techScore > 60 ? `${(techScore - 50).toFixed(0)} pts above neutral` : "Near neutral (50)"}
+                                techScore > 60 ? `${(techScore - 50).toFixed(0)} pts above neutral` : "Near neutral (50)"}
                             </p>
                             <p className="text-slate-500 text-[10px] mt-0.5">vs midpoint of 50</p>
                           </div>
@@ -613,11 +616,10 @@ export default function DashboardPage() {
                           <p className="text-[10px] text-slate-500 mb-1.5 font-medium uppercase tracking-wider">Inputs</p>
                           <div className="flex flex-wrap gap-2">
                             {signals.map((s) => (
-                              <div key={s.timeframe} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${
-                                s.direction === "Bullish" ? "bg-emerald-950/40 border-emerald-800/50 text-emerald-400" :
-                                s.direction === "Bearish" ? "bg-rose-950/40 border-rose-800/50 text-rose-400"         :
-                                                            "bg-amber-950/30 border-amber-800/40 text-amber-400"
-                              }`}>
+                              <div key={s.timeframe} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${s.direction === "Bullish" ? "bg-emerald-950/40 border-emerald-800/50 text-emerald-400" :
+                                  s.direction === "Bearish" ? "bg-rose-950/40 border-rose-800/50 text-rose-400" :
+                                    "bg-amber-950/30 border-amber-800/40 text-amber-400"
+                                }`}>
                                 <span className="text-slate-300 font-mono font-bold">{s.timeframe}</span>
                                 <span>{s.direction === "Bullish" ? "▲" : s.direction === "Bearish" ? "▼" : "—"}</span>
                                 <span className="text-slate-400">{s.confidence.toFixed(0)}%</span>
@@ -651,8 +653,8 @@ export default function DashboardPage() {
                 yieldSpread={yieldSpread}
                 macroRegime={regimeFromSnapshot ?? null}
                 newsSentiment={{
-                  d1:  sentData?.sentiment_1d  ?? null,
-                  d7:  sentData?.sentiment_7d  ?? null,
+                  d1: sentData?.sentiment_1d ?? null,
+                  d7: sentData?.sentiment_7d ?? null,
                   d30: sentData?.sentiment_30d ?? null,
                 }}
                 gasScore={gasScore}

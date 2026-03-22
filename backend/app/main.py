@@ -26,7 +26,7 @@ from app.api.v1.endpoints import (
     portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts, strategies,
     showcase, ops, analytics, experiments, email, api_keys, risk, admin_gas, options, sectors,
     insiders, earnings, shorts, adv_sentiment, fed_policy, indicators,
-    admin_bulk,
+    admin_bulk, symbols,
 )
 from app.api.v1.endpoints.admin_ml import router as admin_ml_router  # Sprint 6
 from app.api.public.v1 import router as public_v1_router
@@ -93,8 +93,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ── Middleware stack (outermost first) ────────────────────────────────────────
-# Starlette applies middleware in reverse registration order.
-# SecurityHeaders is registered last so it wraps every response outbound.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -103,7 +101,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(MetricsMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)  # SEC-06: add security headers to every response
+app.add_middleware(SecurityHeadersMiddleware)  # SEC-06
 
 
 @app.get("/")
@@ -117,9 +115,10 @@ async def root() -> dict:
 
 
 # ── Core routers ──────────────────────────────────────────────────────────────
-app.include_router(health_router, prefix="/api/v1/health", tags=["Health"])
-app.include_router(auth_router,   prefix="/api/v1/auth",   tags=["Auth"])
-app.include_router(data_router,   prefix="/api/v1/data",   tags=["Data Pipelines"])
+app.include_router(health_router,     prefix="/api/v1/health",   tags=["Health"])
+app.include_router(auth_router,       prefix="/api/v1/auth",     tags=["Auth"])
+app.include_router(data_router,       prefix="/api/v1/data",     tags=["Data Pipelines"])
+app.include_router(symbols.router,    prefix="/api/v1/symbols",  tags=["Symbol Search"])
 
 # ── Domain routers ────────────────────────────────────────────────────────────
 app.include_router(macro.router,          prefix="/api/v1/macro",          tags=["Macro Analysis"])
@@ -153,12 +152,10 @@ app.include_router(adv_sentiment.router,  prefix="/api/v1/adv-sentiment",  tags=
 app.include_router(fed_policy.router,     prefix="/api/v1/fed-policy",     tags=["Fed Policy"])
 app.include_router(indicators.router,     prefix="/api/v1/indicators",     tags=["Custom Indicators"])
 
-# ── todos-v4.md — bulk pipeline admin ────────────────────────────────────────
+# ── Admin ─────────────────────────────────────────────────────────────────────
 app.include_router(admin_bulk.router_admin, prefix="/api/v1/admin",       tags=["Admin — Pipeline"])
 app.include_router(admin_bulk.router,       prefix="/api/v1/admin/bulk",  tags=["Admin — Bulk Pipeline"])
-
-# ── todos-v5 Sprint 6 — ML admin (drift alerts, Optuna params) ───────────────
-app.include_router(admin_ml_router, prefix="/api/v1/admin/ml", tags=["Admin — ML Pipeline"])
+app.include_router(admin_ml_router,         prefix="/api/v1/admin/ml",    tags=["Admin — ML Pipeline"])
 
 # ── Public external API ───────────────────────────────────────────────────────
 app.include_router(public_v1_router.router, prefix="/public/v1", tags=["Public API"])

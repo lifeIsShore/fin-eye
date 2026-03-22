@@ -38,6 +38,9 @@ class MacroLatestResponse(BaseModel):
     """Response for GET /macro/latest — backward-compatible with existing frontend."""
     data: dict[str, IndicatorLatest]
     macro_score: Optional[MacroScoreDto] = None
+    # Sprint 10 (UX-TRUST-01): ISO UTC timestamp injected by the endpoint so the
+    # frontend FreshnessIndicator can show how stale macro data is.
+    fetched_at: Optional[str] = None
 
 
 # ─── Yield curve ─────────────────────────────────────────────────────────────

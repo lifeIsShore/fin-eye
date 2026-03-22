@@ -11,6 +11,7 @@ Routes:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -94,29 +95,49 @@ def _interpret(name: str, value: Optional[float]) -> str:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def _build_core_response(db: AsyncSession) -> tuple[MacroLatestResponse, dict[str, Optional[float]]]:
+async def _build_core_response(
+    db: AsyncSession,
+) -> tuple[MacroLatestResponse, dict[str, Optional[float]]]:
     """
     Fetch all core indicators and return (response_dto, indicator_value_dict).
     The value dict is passed to scoring functions to avoid re-querying.
+
+    Sprint 10 (UX-TRUST-01): injects `fetched_at` as the most recent
+    `date` field across all indicators, falling back to current UTC time.
+    This lets the frontend FreshnessIndicator show how stale macro data is.
     """
     rows = await get_latest_batch_async(db, _CORE_INDICATORS)
     data: dict[str, IndicatorLatest] = {}
     values: dict[str, Optional[float]] = {}
+    latest_date: Optional[str] = None
 
     for name in _CORE_INDICATORS:
         row = rows.get(name)
         val = row.value if row else None
         values[name] = val
+        row_date = row.date.isoformat() if row and row.date else None
         data[name] = IndicatorLatest(
             value=val,
-            date=row.date.isoformat() if row and row.date else None,
+            date=row_date,
             interpretation=_interpret(name, val),
         )
+        # Track the most recently updated indicator date for freshness
+        if row_date and (latest_date is None or row_date > latest_date):
+            latest_date = row_date
 
     macro_score: Optional[MacroScoreDto] = (
         compute_macro_score(values) if any(v is not None for v in values.values()) else None
     )
-    return MacroLatestResponse(data=data, macro_score=macro_score), values
+
+    # fetched_at: use the most recent indicator date, or current time as fallback
+    # VIX updates daily so this is a good proxy for "when was macro last refreshed"
+    fetched_at = latest_date or datetime.now(timezone.utc).isoformat()
+
+    return MacroLatestResponse(
+        data=data,
+        macro_score=macro_score,
+        fetched_at=fetched_at,
+    ), values
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -157,7 +178,6 @@ async def get_advanced(db: AsyncSession = Depends(get_db)) -> MacroAdvancedRespo
         for name, row in adv_rows.items()
     }
 
-    # Merge all values for scoring (scoring functions accept a flat dict)
     all_values = {**core_values, **adv_values}
 
     # ── Compute NFP MoM if we have history ────────────────────────────────
@@ -177,11 +197,10 @@ async def get_advanced(db: AsyncSession = Depends(get_db)) -> MacroAdvancedRespo
             all_values["industrial_production_yoy"] = ip_yoy
 
     # ── Derived components ─────────────────────────────────────────────────
-    yield_curve = compute_yield_curve(adv_values, adv_dates)
-    recession = compute_recession_risk(all_values)
+    yield_curve  = compute_yield_curve(adv_values, adv_dates)
+    recession    = compute_recession_risk(all_values)
     stress_index = compute_macro_stress_index(all_values)
 
-    # ── Leading indicators DTO ─────────────────────────────────────────────
     leading = LeadingIndicatorsDto(
         nonfarm_payrolls_latest=adv_values.get("nonfarm_payrolls"),
         nonfarm_payrolls_mom=nfp_mom,
@@ -218,7 +237,10 @@ async def get_indicator_history(
     if indicator_name not in _ALL_VALID_INDICATORS:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unknown indicator '{indicator_name}'. Valid options: {sorted(_ALL_VALID_INDICATORS)}",
+            detail=(
+                f"Unknown indicator '{indicator_name}'. "
+                f"Valid options: {sorted(_ALL_VALID_INDICATORS)}"
+            ),
         )
     rows = await get_history_async(db, indicator_name, limit=limit)
     return IndicatorHistoryResponse(
@@ -242,5 +264,8 @@ async def refresh_macro_data(db: AsyncSession = Depends(get_db)) -> dict:
         await refresh_all_macro_indicators(db)
     except Exception as exc:
         logger.error("Macro refresh failed: %s", exc)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
     return {"status": "accepted", "message": "Macro data refreshed successfully."}

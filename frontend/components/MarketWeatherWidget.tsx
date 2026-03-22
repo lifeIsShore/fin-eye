@@ -3,16 +3,17 @@
 /**
  * MarketWeatherWidget.tsx
  *
- * Sprint 7 (UX-GROWTH-01): Added `symbol` prop + GasSparkline below the score
- * so users see the 7-day GAS trend at a glance without leaving the dashboard.
+ * Sprint 7 (UX-GROWTH-01): Added symbol prop + GasSparkline below score.
+ * Sprint 9 (UX-EDU-01): Added ScoreTooltip on the GAS score number.
  */
 
 import { InfoButton } from "./ScoreExplainPanel";
+import { ScoreTooltip } from "./Tooltip";
 import GasSparkline from "./GasSparkline";
 
 interface MarketWeatherWidgetProps {
-    gasScore:  number;
-    symbol?:   string;    // needed for sparkline — pass activeSymbol from dashboard
+    gasScore:   number;
+    symbol?:    string;
     onExplain?: () => void;
 }
 
@@ -55,15 +56,28 @@ export default function MarketWeatherWidget({
 
     return (
         <div className={`p-6 rounded-2xl border ${weatherBg} flex flex-col items-center justify-center text-center space-y-4`}>
-            {/* ── Score + label ── */}
-            <div className="flex items-baseline space-x-3">
+            {/* ── Score row ── */}
+            <div className="flex items-center justify-center gap-2">
                 <span className={`text-6xl font-black tracking-tighter ${weatherColor}`}>
                     {gasScore.toFixed(0)}
                 </span>
-                <span className="text-xl font-bold text-slate-500">GAS</span>
-                {onExplain && (
-                    <InfoButton onClick={onExplain} label="GAS Score" />
-                )}
+                {/* "GAS" label + tooltip */}
+                <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-1">
+                        <span className="text-xl font-bold text-slate-500">GAS</span>
+                        <ScoreTooltip
+                            label="Global Alignment Score (GAS)"
+                            description="A 0–100 composite of three independent signal layers: Technical ML models, News Sentiment, and Macro conditions. Higher = more bullish alignment across all three."
+                            range="0–100 · ≥65 Bullish · 40–65 Neutral · ≤35 Bearish"
+                            source="Fin-Eye proprietary model"
+                            side="bottom"
+                            size="xs"
+                        />
+                    </div>
+                    {onExplain && (
+                        <InfoButton onClick={onExplain} label="GAS Score" />
+                    )}
+                </div>
             </div>
 
             <div className="space-y-1">

@@ -352,7 +352,6 @@ async def get_prediction_stats(
 
 
 # ── /{symbol}/price-targets ───────────────────────────────────────────────────
-# Sprint 5 — todos-v5 Phase 6.2: model-driven ATR + expected return
 
 @router.get("/{symbol}/price-targets")
 async def get_price_targets(
@@ -361,14 +360,7 @@ async def get_price_targets(
 ) -> Dict[str, Any]:
     """
     Sprint 5 — todos-v5 Phase 6.2 + 7.1.
-
-    Model-driven probabilistic price targets:
-      - Real ATR from the last 252 daily bars (not a hardcoded 2% estimate)
-      - Expected return derived from Sharpe-weighted ML signals
-      - Kelly Criterion position sizing from live prediction accuracy
-      - Falls back gracefully at each step if data is unavailable
-
-    Also includes Kelly Criterion sizing so the frontend doesn't need a second endpoint.
+    Model-driven probabilistic price targets with Kelly Criterion sizing.
     """
     from app.services.price_target_service import (  # noqa: PLC0415
         fetch_live_indicators_sync,
@@ -384,7 +376,6 @@ async def get_price_targets(
     sym  = symbol.upper()
     loop = asyncio.get_running_loop()
 
-    # ── 1. Live market indicators (ATR, price, 52-week range) ─────────────────
     indicators = await loop.run_in_executor(None, fetch_live_indicators_sync, sym)
     if not indicators or indicators.get("current_price", 0) <= 0:
         return {
@@ -395,7 +386,6 @@ async def get_price_targets(
     current_price = indicators["current_price"]
     atr_14        = indicators["atr_14"]
 
-    # ── 2. ML signal context — expected return from trained models ────────────
     raw_signals:    list[dict] = []
     expected_return = 0.0
     confidence_frac = 0.5
@@ -410,7 +400,6 @@ async def get_price_targets(
         except Exception as exc:
             logger.debug("Could not compute consensus for price targets (%s): %s", sym, exc)
 
-    # ── 3. Probabilistic price targets ───────────────────────────────────────
     targets = compute_price_targets(
         current_price=current_price,
         atr_14=atr_14,
@@ -419,46 +408,38 @@ async def get_price_targets(
         horizon_label=horizon_label,
     )
 
-    # ── 4. Kelly Criterion from prediction DB ─────────────────────────────────
     kelly: dict = {}
     try:
         stats = await get_prediction_stats(db, sym)
-        # Use the best performing timeframe stats, or fallback to 1d
-        tf_stats = stats.get("timeframes", {})
-        best_tf  = stats.get("best_performing_timeframe") or "1d"
+        tf_stats  = stats.get("timeframes", {})
+        best_tf   = stats.get("best_performing_timeframe") or "1d"
         best_stat = tf_stats.get(best_tf, {})
 
-        win_rate    = best_stat.get("live_accuracy")
-        n_resolved  = best_stat.get("total_resolved", 0)
-        avg_win     = best_stat.get("avg_return_correct")
-        avg_loss    = best_stat.get("avg_return_wrong")
+        win_rate   = best_stat.get("live_accuracy")
+        n_resolved = best_stat.get("total_resolved", 0)
+        avg_win    = best_stat.get("avg_return_correct")
+        avg_loss   = best_stat.get("avg_return_wrong")
 
         if win_rate is not None and avg_win is not None and avg_loss is not None and n_resolved >= 10:
             kelly = compute_kelly(
-                win_rate=win_rate,
-                avg_win_pct=avg_win,
-                avg_loss_pct=avg_loss,
-                n_resolved=n_resolved,
-                source="live",
+                win_rate=win_rate, avg_win_pct=avg_win, avg_loss_pct=avg_loss,
+                n_resolved=n_resolved, source="live",
             )
         else:
-            # Fall back to validation accuracy from registry
             records = _read_registry()
-            rec_1d = next(
+            rec_1d  = next(
                 (r for r in reversed(records)
                  if r.get("symbol", "").upper() == sym and r.get("timeframe") == "1d"),
                 None,
             )
             if rec_1d:
-                val_acc = rec_1d.get("metrics", {}).get(
-                    rec_1d.get("model_name", ""), {}\
-                ).get("accuracy", 0.0) or 0.52
-                val_ret = rec_1d.get("metrics", {}).get(
-                    rec_1d.get("model_name", ""), {}\
-                ).get("total_return", 0.0)
-                # Rough avg win/loss from validation return and win rate
-                avg_win_est  = val_ret / max(val_acc * 100, 1) if val_acc > 0 else 0.02
-                avg_loss_est = -val_ret / max((1 - val_acc) * 100, 1) if val_acc < 1 else -0.02
+                # Extract metrics safely — avoid chained subscript on potential None
+                _model_key     = rec_1d.get("model_name", "")
+                _model_metrics = rec_1d.get("metrics", {}).get(_model_key, {})
+                val_acc        = _model_metrics.get("accuracy", 0.0) or 0.52
+                val_ret        = _model_metrics.get("total_return", 0.0)
+                avg_win_est    = val_ret / max(val_acc * 100, 1) if val_acc > 0 else 0.02
+                avg_loss_est   = -val_ret / max((1 - val_acc) * 100, 1) if val_acc < 1 else -0.02
                 kelly = compute_kelly(
                     win_rate=max(val_acc, 0.5),
                     avg_win_pct=max(avg_win_est, 0.005),
@@ -469,28 +450,28 @@ async def get_price_targets(
     except Exception as exc:
         logger.debug("Kelly computation failed for %s (non-fatal): %s", sym, exc)
 
-    # ── 5. Signal summary for context ────────────────────────────────────────
-    signal_summary = []
-    for s in raw_signals:
-        signal_summary.append({
+    signal_summary = [
+        {
             "timeframe":  s.get("timeframe"),
             "direction":  s.get("direction"),
             "confidence": s.get("confidence"),
             "sharpe":     s.get("validation_sharpe"),
-        })
+        }
+        for s in raw_signals
+    ]
 
     return {
-        "symbol":        sym,
-        "available":     True,
-        "current_price": current_price,
-        "atr_14":        atr_14,
-        "atr_pct":       indicators.get("atr_pct"),
-        "high_52w":      indicators.get("high_52w"),
-        "low_52w":       indicators.get("low_52w"),
-        "pct_from_52w_high": indicators.get("pct_from_52w_high"),
-        "pct_from_52w_low":  indicators.get("pct_from_52w_low"),
-        "targets":       targets,
-        "kelly":         kelly if kelly else None,
+        "symbol":             sym,
+        "available":          True,
+        "current_price":      current_price,
+        "atr_14":             atr_14,
+        "atr_pct":            indicators.get("atr_pct"),
+        "high_52w":           indicators.get("high_52w"),
+        "low_52w":            indicators.get("low_52w"),
+        "pct_from_52w_high":  indicators.get("pct_from_52w_high"),
+        "pct_from_52w_low":   indicators.get("pct_from_52w_low"),
+        "targets":            targets,
+        "kelly":              kelly if kelly else None,
         "expected_return":    round(expected_return * 100, 2),
         "model_confidence":   round(confidence_frac * 100, 1),
         "horizon_label":      horizon_label,
@@ -510,12 +491,7 @@ async def get_kelly_sizing(
     symbol: str,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Sprint 5 — todos-v5 Phase 7.1.
-
-    Standalone Kelly Criterion endpoint for when price targets aren't needed.
-    Returns position sizing suggestion based on live prediction accuracy.
-    """
+    """Sprint 5 — standalone Kelly Criterion endpoint."""
     from app.services.price_target_service import compute_kelly  # noqa: PLC0415
     from app.services.prediction_service import get_prediction_stats  # noqa: PLC0415
 
@@ -562,33 +538,30 @@ async def get_prediction_history(
     db: AsyncSession = Depends(get_db),
 ) -> List[Dict[str, Any]]:
     """
-    Sprint 6 — todos-v6 B7 (deep-dive page).
-
-    Returns the last N resolved predictions for a symbol/timeframe,
-    newest first. Used by the /model-info/[symbol] prediction history table.
+    Sprint 6 — returns last N resolved predictions for the deep-dive page.
     """
-    from sqlalchemy import select  # noqa: PLC0415
-    from app.models.ml_prediction import MLPrediction  # noqa: PLC0415
+    from sqlalchemy import select as sa_select  # noqa: PLC0415
+    from app.models.ml_prediction import MLPrediction as _MP  # noqa: PLC0415
 
     sym = symbol.upper()
     tf  = timeframe.lower()
 
     result = await db.execute(
-        select(
-            MLPrediction.predicted_at,
-            MLPrediction.predicted_direction,
-            MLPrediction.confidence,
-            MLPrediction.price_at_prediction,
-            MLPrediction.price_at_outcome,
-            MLPrediction.actual_return,
-            MLPrediction.was_correct,
+        sa_select(
+            _MP.predicted_at,
+            _MP.predicted_direction,
+            _MP.confidence,
+            _MP.price_at_prediction,
+            _MP.price_at_outcome,
+            _MP.actual_return,
+            _MP.was_correct,
         )
         .where(
-            MLPrediction.symbol    == sym,
-            MLPrediction.timeframe == tf,
-            MLPrediction.outcome_resolved_at.isnot(None),
+            _MP.symbol    == sym,
+            _MP.timeframe == tf,
+            _MP.outcome_resolved_at.isnot(None),
         )
-        .order_by(MLPrediction.predicted_at.desc())
+        .order_by(_MP.predicted_at.desc())
         .limit(max(1, min(limit, 200)))
     )
     rows = result.fetchall()
