@@ -15,6 +15,7 @@ import {
   type InsightSections,
   type LLMInsightRequest,
 } from "../lib/api_llm_types";
+import { interpretConfidence } from "../lib/signalUtils";
 
 // ── SSE streaming hook ────────────────────────────────────────────────────────
 

@@ -1,12 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { TechnicalSignalDto } from "../lib/api";
 import ModelDetailsPanel from "./ModelDetailsPanel";
 import {
     X, TrendingUp, TrendingDown, Minus,
-    Info, ChevronRight,
+    Info, ChevronRight, ExternalLink,
 } from "lucide-react";
+import {
+    interpretConfidence as interpretConfidenceUtil,
+    directionConfig as directionConfigUtil,
+    buildAgreementSummary,
+    type ConfidenceInfo,
+    type DirectionConfig,
+} from "../lib/signalUtils";
 
 interface TimeframeGridProps {
     signals:    TechnicalSignalDto[];
@@ -66,68 +74,19 @@ const TIMEFRAME_META: Record<string, {
 
 const TILE_ORDER = ["1h", "4h", "1d", "1wk", "1mo"];
 
-// ── Confidence interpretation ─────────────────────────────────────────────────
+// ── Local wrappers — add JSX icon onto the shared util config ────────────────
 
-function interpretConfidence(conf: number): {
-    label: string;
-    description: string;
-    color: string;
-} {
-    if (conf >= 80) return {
-        label: "Very High",
-        description: "The model is strongly leaning in this direction. All key features are aligned.",
-        color: "text-emerald-400",
-    };
-    if (conf >= 65) return {
-        label: "High",
-        description: "Most features agree on this direction. A reliable signal but not exceptional.",
-        color: "text-sky-400",
-    };
-    if (conf >= 55) return {
-        label: "Moderate",
-        description: "Slight majority of features point this way. Treat with caution — confirm with other layers.",
-        color: "text-amber-400",
-    };
-    return {
-        label: "Low",
-        description: "Features are mixed. The model has a slight lean but this is near-random. Wait for a clearer signal.",
-        color: "text-slate-400",
-    };
+function interpretConfidence(conf: number): ConfidenceInfo {
+    return interpretConfidenceUtil(conf);
 }
 
-// ── Direction UI helpers ──────────────────────────────────────────────────────
-
-function directionConfig(direction: string) {
-    if (direction === "Bullish") return {
-        icon: <TrendingUp className="h-4 w-4" />,
-        tile: "bg-emerald-950/40 border-emerald-800/50 hover:border-emerald-600/60",
-        text: "text-emerald-400",
-        badge: "bg-emerald-900/50 text-emerald-300 border-emerald-700/40",
-        bar: "bg-emerald-500",
-        panelBg: "bg-emerald-950/20 border-emerald-800/40",
-        label: "Bullish",
-        plain: "The model predicts this asset will move UP over the forecast horizon.",
-    };
-    if (direction === "Bearish") return {
-        icon: <TrendingDown className="h-4 w-4" />,
-        tile: "bg-rose-950/40 border-rose-800/50 hover:border-rose-600/60",
-        text: "text-rose-400",
-        badge: "bg-rose-900/50 text-rose-300 border-rose-700/40",
-        bar: "bg-rose-500",
-        panelBg: "bg-rose-950/20 border-rose-800/40",
-        label: "Bearish",
-        plain: "The model predicts this asset will move DOWN over the forecast horizon.",
-    };
-    return {
-        icon: <Minus className="h-4 w-4" />,
-        tile: "bg-amber-950/30 border-amber-800/40 hover:border-amber-600/50",
-        text: "text-amber-400",
-        badge: "bg-amber-900/50 text-amber-300 border-amber-700/40",
-        bar: "bg-amber-500",
-        panelBg: "bg-amber-950/20 border-amber-800/40",
-        label: "Neutral",
-        plain: "The model sees roughly equal probability of up and down movement.",
-    };
+function directionConfig(direction: string): DirectionConfig & { icon: React.ReactNode } {
+    const base = directionConfigUtil(direction);
+    const icon =
+        base.iconName === "TrendingUp"   ? <TrendingUp   className="h-4 w-4" /> :
+        base.iconName === "TrendingDown" ? <TrendingDown className="h-4 w-4" /> :
+                                           <Minus        className="h-4 w-4" />;
+    return { ...base, icon };
 }
 
 // ── Consensus summary ─────────────────────────────────────────────────────────
@@ -347,22 +306,82 @@ function TimeframeDetailPanel({
                                 </ul>
                             </div>
 
-                            {/* ⚙ Model Details link — Sprint 4 addition */}
-                            <button
-                                onClick={() => { onClose(); onOpenModelDetails(); }}
-                                className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/60 px-4 py-3 transition-colors group"
-                            >
-                                <span className="text-sm">⚙</span>
-                                <span className="text-xs font-semibold text-slate-400 group-hover:text-slate-200 transition-colors">
-                                    View full model details — features, training info &amp; model competition
-                                </span>
-                                <ChevronRight className="h-3.5 w-3.5 text-slate-600 group-hover:text-slate-300 ml-auto transition-colors" />
-                            </button>
+                            {/* ⚙ Model Details — Sprint 4 + Sprint 33 (link to deep-dive page) */}
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={() => { onClose(); onOpenModelDetails(); }}
+                                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/60 px-4 py-3 transition-colors group"
+                                >
+                                    <span className="text-sm">⚙</span>
+                                    <span className="text-xs font-semibold text-slate-400 group-hover:text-slate-200 transition-colors">
+                                        View full model details — features, training info &amp; model competition
+                                    </span>
+                                    <ChevronRight className="h-3.5 w-3.5 text-slate-600 group-hover:text-slate-300 ml-auto transition-colors" />
+                                </button>
+                                {symbol && (
+                                    <Link
+                                        href={`/model-info/${encodeURIComponent(symbol)}`}
+                                        onClick={onClose}
+                                        className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-700/40 bg-slate-900/40 hover:bg-slate-800/40 px-4 py-2.5 transition-colors group"
+                                    >
+                                        <ExternalLink className="h-3.5 w-3.5 text-slate-600 group-hover:text-slate-300 transition-colors" />
+                                        <span className="text-xs text-slate-500 group-hover:text-slate-300 transition-colors">
+                                            Open full model report for {symbol} →
+                                        </span>
+                                    </Link>
+                                )}
+                            </div>
                         </div>
                     </>
                 )}
             </div>
         </>
+    );
+}
+
+// ── Agreement banner (inside the grid component) — Sprint 33 ────────────────
+
+function AgreementBanner({ signals }: { signals: TechnicalSignalDto[] }) {
+    if (signals.length < 2) return null;
+
+    const summary = buildAgreementSummary(signals);
+
+    const schemeClasses: Record<typeof summary.scheme, { wrapper: string; text: string; icon: string }> = {
+        "emerald-strong": { wrapper: "border-emerald-800/40 bg-emerald-950/15", text: "text-emerald-300",  icon: "🟢" },
+        "emerald-mild":   { wrapper: "border-emerald-900/30 bg-emerald-950/10", text: "text-emerald-400",  icon: "🟢" },
+        "rose-strong":    { wrapper: "border-rose-800/40 bg-rose-950/15",       text: "text-rose-300",    icon: "🔴" },
+        "rose-mild":      { wrapper: "border-rose-900/30 bg-rose-950/10",       text: "text-rose-400",    icon: "🔴" },
+        "amber":          { wrapper: "border-amber-800/40 bg-amber-950/15",     text: "text-amber-300",   icon: "🟡" },
+    };
+
+    const cls = schemeClasses[summary.scheme];
+
+    return (
+        <div className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 ${cls.wrapper}`}>
+            <span className="text-base flex-shrink-0">{cls.icon}</span>
+            <div className="min-w-0 flex-1">
+                <p className={`text-sm font-semibold ${cls.text}`}>{summary.message}</p>
+                <p className={`text-xs opacity-70 mt-0.5 ${cls.text}`}>{summary.subText}</p>
+            </div>
+            {/* Mini per-timeframe bar strip */}
+            <div className="flex-shrink-0 hidden sm:flex flex-col items-end gap-0.5">
+                <div className="flex gap-0.5 h-2">
+                    {signals.map((s, i) => (
+                        <div
+                            key={i}
+                            title={`${s.timeframe}: ${s.direction}`}
+                            className={`w-4 rounded-sm ${
+                                s.direction === "Bullish" ? "bg-emerald-500" :
+                                s.direction === "Bearish" ? "bg-rose-500"    : "bg-amber-400/40"
+                            }`}
+                        />
+                    ))}
+                </div>
+                <p className="text-[9px] text-slate-600">
+                    {summary.bullish}B · {summary.bearish}Be · {summary.neutral}N
+                </p>
+            </div>
+        </div>
     );
 }
 
@@ -378,8 +397,11 @@ export default function TimeframeGrid({ signals, symbol }: TimeframeGridProps) {
 
     return (
         <>
+            {/* Agreement banner — Sprint 33 (inside TimeframeGrid, above tiles) */}
+            <AgreementBanner signals={sortedSignals} />
+
             {/* Signal tiles */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full mt-2">
                 {sortedSignals.map((signal) => {
                     const cfg      = directionConfig(signal.direction);
                     const confInfo = interpretConfidence(signal.confidence);

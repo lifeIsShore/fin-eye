@@ -1,5 +1,5 @@
 # Fin-Eye — Sprint Progress Tracker
-> Last updated: Sprint 32 complete
+> Last updated: Sprint 33 complete
 
 ## Completed Sprints
 
@@ -273,6 +273,229 @@ alembic upgrade head   # applies s27_001_signal_grade_history if not already run
 - [x] **AI allocation explainer** -- `backend/app/api/v1/endpoints/allocation.py`: `POST /api/v1/allocation/explain` SSE endpoint — receives the allocation result, builds a structured LLM prompt with all position grades/GAS scores/weights/exclusions, streams via Ollama with deterministic static fallback when Ollama is offline. `frontend/app/portfolio/build/page.tsx`: `streamAllocationExplain()` async generator, `useEffect` auto-triggers on every new `result`, streams tokens into a violet `🧠 AI Portfolio Explanation` panel with typing cursor and "Generating…" indicator.
 - [x] **Graceful degradation messages** -- `frontend/components/DataSourceStatus.tsx` (NEW): reusable dismissable banner component with `error` / `stale` / `warning` variants; colour-coded icons (WifiOff/Clock/AlertTriangle); shows source name, description, optional raw error message. Wired into `app/page.tsx` (GAS Engine, Sentiment, Macro errors), `app/macro/page.tsx` (replaces old custom error div). Used everywhere a data fetch can silently fail.
 - [x] **Data source attribution** -- `frontend/app/macro/page.tsx`: `FRED_SOURCES` map (12 series IDs), `FredAttribution` component renders a clickable `FRED · {SERIES_ID} ↗` link on each `IndicatorCard`. `indicatorKey` prop added to `IndicatorCard`. Both Overview and Advanced tabs pass `indicatorKey={key}` to all `IndicatorCard` instances. Footer disclaimer updated with clickable FRED link and note about hovering for series IDs.
+
+## ✅ Sprint 33 — Complete
+
+**Sources:** `todos-v6.md` B5/B6 (signal utils + agreement banner) · `todos-v4.md` Phase 1 (Train Now button) · `todos-v3.md` §15 (price chart + weekly digest)
+
+### Deliverables
+- [x] **`signalUtils.ts` shared utility** — `frontend/lib/signalUtils.ts` (NEW): `interpretConfidence(conf)` returning `{ label, colour, description }` for the five tiers (Strong/Moderate/Weak/Uncertain/No signal); `directionConfig(direction)` returning icon, colour, plain-text label. Import in `TimeframeGrid.tsx` and `LLMInsightCard.tsx` to replace duplicated inline logic and align both components on the same palette.
+- [x] **Multi-timeframe agreement banner in TimeframeGrid** — `frontend/components/TimeframeGrid.tsx`: text banner above the grid tiles using `signalUtils.ts`; "N of M timeframes agree: UP → stronger signal" / "Timeframes conflict → wait for confirmation"; colour-coded (emerald ≥3 agree, amber split, rose ≥3 disagree). Closes `todos-v6 B5`.
+- [x] **Train Now button + designed empty state** — `frontend/components/TimeframeGrid.tsx` (or parent): when `GET /api/v1/technical/train-status/{symbol}` returns `not_started`, render icon + message + `[▶ Train Now]` button → `POST /api/v1/technical/train/{symbol}`; poll status every 5s while `training`; show animated timeframe checklist during training; toast on completion. Closes `todos-v4 Phase 1.3`.
+- [x] **Price chart (TradingView widget) on dashboard** — `frontend/components/PriceChart.tsx` (NEW): lightweight TradingView advanced chart widget embedded via script tag; symbol-aware (updates when `activeSymbol` changes); dark-mode themed to match `bg-slate-900`; placed in the dashboard between the GAS widget and the TimeframeGrid. Eliminates the biggest session-exit point.
+- [x] **Weekly digest email opt-in** — Backend: `User.weekly_digest` boolean column + migration; `PATCH /auth/me` accepts `weekly_digest`; `job_weekly_digest()` scheduler job (Mondays 07:00 UTC) — for each opted-in user, assembles top-5 GAS movers from their watchlist + macro summary and sends via Resend. Frontend: toggle in `/settings` Preferences section with success feedbac
+---
+
+## Sprint 34 — Planned
+
+**Sources:** `todos-v4.md` Phase 2 (ticker universe) · Phase 3 (bulk seed infrastructure)
+
+### Deliverables
+- [ ] **`tickers_universe` DB table** — Alembic migration: `symbol`, `name`, `asset_class`, `exchange`, `tr_rank`, `is_active`, `yf_valid`, `added_at` columns; unique on `symbol`. Closes `todos-v4 Phase 2.1`.
+- [ ] **`tickers_predefined.json`** — `backend/data/tickers_predefined.json` (NEW): top 1000 symbols by trading volume on Trade Republic DE; flat list of stocks + ETFs + crypto with `symbol`, `name`, `class`, `tr_rank` fields; single source of truth for all bulk jobs. Closes `todos-v4 Phase 2.2`.
+- [ ] **`seed_ticker_universe.py` script** — `backend/scripts/seed_ticker_universe.py` (NEW): reads `tickers_predefined.json`, upserts into `tickers_universe`, validates each via `yf.Ticker().fast_info`, sets `yf_valid`, prints summary. Closes `todos-v4 Phase 2.3`.
+- [ ] **`bulk_job_runs` tracking table** — Alembic migration: `job_type`, `scope`, `symbol`, `status`, `reason`, `rows_added`, `started_at`, `completed_at`; indexes on `symbol`, `status`, `(job_type, created_at DESC)`. Closes `todos-v4 Phase 3.1`.
+- [ ] **`bulk_seed_service.py`** — `backend/app/services/bulk_seed_service.py` (NEW): append-only idempotent seeder; checks `MAX(trade_date)` before fetching; skips symbols with < 200 rows (`insufficient_data`); logs every result to `bulk_job_runs`. Closes `todos-v4 Phase 3.2`.
+- [ ] **Bulk seed endpoints** — `backend/app/api/v1/endpoints/admin_bulk.py`: `POST /admin/bulk/run-seed` (batches of 10 concurrent, 1s sleep, returns immediately with job_id); `GET /admin/bulk/seed-status` (total/done/failed/skipped/pct_complete/eta/recent). `GET /admin/tickers-universe` paginated list. Closes `todos-v4 Phase 3.3–3.5`.
+
+### Migration note
+```bash
+alembic revision --autogenerate -m "add_tickers_universe_bulk_job_runs"
+alembic upgrade head
+python scripts/seed_ticker_universe.py
+```
+
+---
+
+## Sprint 35 — Planned
+
+**Sources:** `todos-v4.md` Phase 4 (bulk train) · Phase 7 (pipeline overview) · Phase 8 (per-ticker panel)
+
+### Deliverables
+- [ ] **Bulk train endpoints** — `backend/app/api/v1/endpoints/admin_bulk.py`: `POST /admin/bulk/run-train` (scope: `untrained_only` | `retrain_all`, sequential CPU-bound, logs to `bulk_job_runs`); `GET /admin/bulk/train-status` (total/done/failed/current_symbol/current_timeframe/pct_complete/recent with Sharpe). Closes `todos-v4 Phase 4.1–4.2`.
+- [ ] **`pipeline-overview` endpoint** — `GET /api/v1/admin/bulk/pipeline-overview`: single endpoint returning ticker_universe stats, seeding stats (seeded/failed/skipped/missing/failed_tickers list), training stats (trained/avg_sharpe/quality_gate_pct), news stats, and `active_jobs` flags. Powers the Settings UI. Closes `todos-v4 Phase 7.1`.
+- [ ] **`DataPipelineSection` in Settings** — `frontend/app/settings/page.tsx`: new `SectionCard` (admin-only); OHLCV seeding progress bar + `[▶ Seed Missing]` / `[▶ Seed All]` buttons; ML training progress bar + `[▶ Train Untrained]` / `[▶ Retrain All]` buttons; news section with `[▶ Refresh News]`; expandable failed/skipped lists; polls `pipeline-overview` every 3s while a job is active. Closes `todos-v4 Phase 4.4`.
+- [ ] **Ticker page Run/Train control row** — `frontend/components/TickerDataPanel.tsx`: three-state status row (No data → `[↓ Fetch Data]`; Data seeded, no model → `[▶ Train Models]`; Trained → Sharpe + date + `[↻ Retrain]`); polls `train-status/{symbol}` every 5s while training. Closes `todos-v4 Phase 4.5`.
+- [ ] **Improve single-ticker train endpoint** — `backend/app/api/v1/endpoints/technical.py`: `POST /technical/train/{symbol}` logs per-timeframe progress to `bulk_job_runs`; richer response `{ symbol, timeframes_queued, estimated_seconds }`; `?force=true` support. Closes `todos-v4 Phase 4.3`.
+
+---
+
+## Sprint 36 — Planned
+
+**Sources:** `todos-v4.md` Phase 5 (news storage · FinBERT pipeline · cron jobs)
+
+### Deliverables
+- [ ] **Extend `news_articles` table** — Alembic migration: add `url TEXT`, `sentiment_label VARCHAR(10)`, `finbert_score FLOAT`, `last_fetched_at TIMESTAMP`, `fetch_source VARCHAR(20)`; unique constraint on `(symbol, title, published_at)`; index on `(symbol, published_at DESC)`. Closes `todos-v4 Phase 5.1`.
+- [ ] **Cache-first news fetcher** — `backend/app/services/news_data.py`: rewrite `fetch_recent_news()` to check DB first (≥5 rows + `last_fetched_at` within 24h = return from DB, zero Finnhub calls); on cache miss: call Finnhub, run FinBERT, store with `url` + `last_fetched_at`. Closes `todos-v4 Phase 5.2`.
+- [ ] **`sentiment_scorer.py` FinBERT singleton** — `backend/app/services/sentiment_scorer.py` (NEW): `ProsusAI/finbert` via `transformers`; batch up to 64 headlines; singleton loaded once; keyword fallback when model unavailable; maps positive→bullish / negative→bearish / neutral→neutral. Closes `todos-v4 Phase 5.3`.
+- [ ] **Bulk news seed endpoint** — `POST /api/v1/admin/bulk/run-news-seed`: fetches + scores news for all active tickers; default lookback 7 days, max 365; respects Finnhub free tier (≤60 calls/min); `GET /admin/bulk/news-status` progress endpoint. Closes `todos-v4 Phase 5.4`.
+- [ ] **Scheduler jobs** — `backend/app/services/scheduler.py`: weekly TTL cleanup cron (Sunday 02:00 UTC — deletes `published_at < NOW() - 365 days`); daily news refresh cron (06:00 UTC weekdays — fetches last 2 days for all active tickers, skips recently-fetched). Closes `todos-v4 Phase 5.5–5.6`.
+
+### Migration note
+```bash
+alembic revision --autogenerate -m "extend_news_articles_url_finbert"
+alembic upgrade head
+pip install transformers torch  # or transformers[torch]
+```
+
+---
+
+## Sprint 37 — Planned
+
+**Sources:** `todos-v3.md` §2 (grouped nav) · §9 (onboarding) · `todos.md` §10–11
+
+### Deliverables
+- [ ] **Grouped dropdown nav** — `frontend/components/Nav.tsx`: replace the flat 19-item list with categorised groups — Intelligence (Dashboard, Macro, Sentiment, Retail, Fed Policy), Markets (Options, Sectors, Earnings, Insiders, Shorts, Adv. Sentiment), Tools (Backtest, Portfolio, Hedge, Indicators, Alerts), Learn (Learn, Community), Pro Tools (Showcase); collapsible groups on desktop; full-height drawer on mobile. Closes `todos-v3 §2 UX-NAV-01`.
+- [ ] **CMD+K command palette** — `frontend/components/CommandPalette.tsx` (NEW): `⌘K` / `Ctrl+K` global shortcut; fuzzy search over all nav pages + watchlist symbols; keyboard-navigable results; jumps to page or sets `activeSymbol`. Closes `todos-v3 §2 UX-NAV-02`.
+- [ ] **`/welcome` onboarding page** — `frontend/app/welcome/page.tsx` (NEW): shown after email confirmation for new users; 3-option goal selector (Learn basics / Improve trade timing / Research stocks); routes to most relevant feature; sets `has_completed_onboarding` flag. Closes `todos-v3 §9 UX-ONBOARD-01`.
+- [ ] **Empty watchlist CTA** — `frontend/components/WatchlistWidget.tsx`: when watchlist is empty, show dashed-border prompt "Add your first stock to track its GAS score" with pre-filled symbol search input. Closes `todos-v3 §9` + `todos.md §11`.
+- [ ] **Progressive disclosure for new users** — `frontend/components/Nav.tsx`: hide advanced nav items (Options, Shorts, Insiders, Adv. Sentiment, Fed Policy, Indicators) for users in first 3 sessions (`session_count < 3` from localStorage); reveal after tour completion or 3-page visit threshold. Closes `todos-v3 §9`.
+
+---
+
+## Sprint 38 — Planned
+
+**Sources:** `todos-v3.md` §10 (monetisation) · `todos.md` §6
+
+### Deliverables
+- [ ] **Pro gate with lock icon** — `frontend/components/ProGate.tsx` (NEW): reusable wrapper component; renders a 🔒 overlay + tooltip "Available on Pro — Upgrade for €14.99/mo" on any Pro-only feature; clicking opens billing modal directly. Apply to: Walk-Forward panel, AI Allocator, Fed Policy page, Advanced Sentiment, Indicators. Closes `todos-v3 §10 UX-MONETISE-01`.
+- [ ] **Free 7-day trial flow** — Backend: `User.trial_ends_at` column + migration; `POST /billing/start-trial` sets `trial_ends_at = now + 7 days`, no card required; middleware grants Pro access while trial is active. Frontend: "Start free trial" CTA on billing page and Pro gate tooltip; trial expiry banner on dashboard. Closes `todos-v3 §10` + `todos.md §6`.
+- [ ] **Cancellation flow with pause offer** — `frontend/app/billing/cancel/page.tsx` (NEW): single-question "Why are you leaving?" survey (5 options); offers 1-month free pause as alternative to full cancellation; backend `POST /billing/pause` sets `paused_until = now + 30 days`. Closes `todos-v3 §10`.
+- [ ] **Invoice/receipt download** — Backend: `GET /billing/invoices` lists Stripe invoices for the authenticated user; `GET /billing/invoices/{id}/pdf` proxies Stripe-generated PDF. Frontend: Invoices section in `/billing` page with download buttons. Closes `todos.md §6`.
+
+### Migration note
+```bash
+alembic revision --autogenerate -m "add_trial_ends_at_to_users"
+alembic upgrade head
+```
+
+---
+
+## Sprint 39 — Planned
+
+**Sources:** `todos-v3.md` §19 (Showcase) · §20 (Investment Strategy Planner) · `todos.md` §16
+
+### Deliverables
+- [ ] **Showcase product preview modal** — `frontend/app/showcase/page.tsx`: each product card gets a "Preview" button opening an embedded Google Sheets / PDF in a modal; clearly watermarked "Sample Only"; `PreviewModal` component with iframe + watermark overlay. Closes `todos-v3 §19 SHOP-V2-01`.
+- [ ] **Bundle configuration** — Backend: `bundle` flag + `bundle_items[]` on product model; seed at least one bundle ("Investor Bundle" — Portfolio Tracker + Retirement Calculator) with "Save X%" badge. Frontend: bundle cards in Showcase with "What's included" expandable section. Closes `todos-v3 §19 SHOP-V2-03`.
+- [ ] **"Coming Soon" + Notify me section** — `frontend/app/showcase/page.tsx`: dedicated Coming Soon row for roadmap products (FIRE Calculator, Tax-Loss Harvesting Tracker, Crypto Tax Report, Real Estate Analyzer); `POST /showcase/notify` stores user preference; per-product "Notify me" toggle. Closes `todos-v3 §19 SHOP-ROADMAP-01`.
+- [ ] **Asset allocation suggester** — `frontend/app/portfolio/allocate/page.tsx` (NEW): inputs: risk profile (from `User.risk_profile`), age, time horizon, currency; output: pie chart + table of suggested asset class weights (equities/bonds/cash/alternatives); always shows educational disclaimer. Closes `todos-v3 §20 PLAN-02`.
+- [ ] **Sequence of Returns Risk Visualiser** — `frontend/app/portfolio/retirement/page.tsx` (NEW): retirement planning tool; inputs: portfolio size, annual withdrawal, start year; renders three scenario lines (retiring before 2000/2008/2020 crash); shows portfolio survival rate and depletion year per scenario; Recharts `LineChart`; educational disclaimer. Closes `todos-v3 §20 PLAN-05`.
+
+---
+
+## Sprint 40 — Planned
+
+**Sources:** `todos-v4.md` Phase 6 Tier 1 (external data sources — first wave)
+
+### Deliverables
+- [ ] **CNN Fear & Greed Index scraper** — `backend/app/services/external/cnn_fear_greed.py` (NEW): polls `https://production.dataviz.cnn.io/index/fearandgreed/graphdata` hourly; stores 0-100 score in a new `external_signals` table (`source`, `signal_name`, `value`, `fetched_at`); exposes `GET /api/v1/macro/fear-greed/cnn`; `fear_greed_norm` feature added to all tickers in `engineer_features()`. Closes `todos-v4 Phase 6 #1`.
+- [ ] **Crypto Fear & Greed Index** — `backend/app/services/external/crypto_fear_greed.py` (NEW): polls `https://api.alternative.me/fng/` hourly; stores in `external_signals`; exposes `GET /api/v1/macro/fear-greed/crypto`; `crypto_fear_greed_norm` feature added to crypto tickers only (BTC-USD, ETH-USD). Closes `todos-v4 Phase 6 #2`.
+- [ ] **Google Trends via pytrends** — `backend/app/services/external/google_trends.py` (NEW): fetches weekly relative search interest (0-100) per ticker via `pytrends`; `geo='DE'` for TR DE stocks; stores in `external_signals`; `google_trends_norm` feature in `engineer_features()`; cron: daily at 08:00 UTC. Closes `todos-v4 Phase 6 #3`.
+- [ ] **Reddit sentiment extension** — `backend/app/services/reddit_service.py` (extend existing): add r/de and r/aktien to existing subreddit list; compute `reddit_mentions_norm` and `reddit_sentiment_norm` per ticker per 24h; store in `external_signals`; cron every 6h. Closes `todos-v4 Phase 6 #4`.
+- [ ] **Wikipedia pageviews feature** — `backend/app/services/external/wikipedia_pageviews.py` (NEW): daily article view count per company Wikipedia page; z-score vs 252-day mean → `wikipedia_attention_zscore`; unusual attention (z > 2) flagged; added to `engineer_features()`; cron: daily. Closes `todos-v4 Phase 6 #5`.
+- [ ] **`external_signals` DB table** — Alembic migration: `source VARCHAR(30)`, `symbol VARCHAR(20)`, `signal_name VARCHAR(50)`, `value FLOAT`, `raw_json JSONB`, `fetched_at TIMESTAMP`; index on `(symbol, signal_name, fetched_at DESC)`.
+
+### Dependencies
+```bash
+pip install pytrends praw beautifulsoup4
+alembic revision --autogenerate -m "add_external_signals"
+alembic upgrade head
+```
+
+---
+
+## Sprint 41 — Planned
+
+**Sources:** `todos-v3.md` §17–18 (multi-asset expansion · ML improvements) · `todos-v5.md` Phase 4.4 + 7.1
+
+### Deliverables
+- [ ] **Crypto symbol expansion** — Add BTC-USD and ETH-USD to the default symbol list (`DEFAULT_SYMBOLS` config); backend: `crypto` asset class handling in `technical_service.py` (no earnings calendar, no sector data — graceful fallback); frontend: asset class badge on ticker header ("Crypto" pill); Crypto Fear & Greed score surfaced on the dashboard for crypto tickers (feeds from Sprint 40 scraper). Closes `todos-v3 §17 ASSET-CRYPTO-01`.
+- [ ] **Commodity + FX + ETF symbol expansion** — Add GC=F (Gold), CL=F (Oil), EURUSD=X, GBPUSD=X, USDJPY=X to default list; seasonal sin/cos features in `engineer_features()` for commodities; interest rate differential feature for FX pairs; expand symbol autocomplete dropdown to visually group results by asset class (Equities / ETFs / Crypto / Commodities / Forex). Closes `todos-v3 §17 ASSET-COMMODITY-01`, `ASSET-FOREX-01`.
+- [ ] **Optuna hyperparameter tuning** — `backend/app/services/ml_pipeline.py`: `tune_xgboost()` + `tune_lightgbm()` functions using Optuna (30 trials each); gated by `ENABLE_HYPERTUNING=True` in `.env`; runs as a separate overnight scheduler job (`job_overnight_tuning()` at 02:00 UTC); best params stored in model registry JSON for transparency; not run during real-time incremental updates. Closes `todos-v5 Phase 4.4`.
+- [ ] **LSTM model as 4th competitor** — `backend/app/services/ml_pipeline.py`: `LSTMWrapper` using PyTorch (already in requirements); sequence length 20 bars; attention mechanism; added to the model competition alongside XGBoost, LightGBM, Logistic; disqualified if accuracy < 0.52 same as others; adds `lstm` to `requirements.txt`. Closes `todos-v3 §18`.
+- [ ] **Kelly Criterion position sizing** — Backend: `kelly_fraction()` function in `prediction_service.py` (full Kelly halved, capped at 25%); inputs from prediction DB `live_accuracy`, `avg_return_when_correct`, `avg_return_when_wrong`; exposed via `GET /api/v1/technical/{symbol}/position-sizing`. Frontend: position size suggestion row in `LLMInsightCard.tsx` `[RISK MANAGEMENT]` section — "Suggested position size: ~8% of portfolio (Half-Kelly, based on 59% live win rate)"; Kelly formula shown in tooltip; marked as mathematical suggestion, not advice. Closes `todos-v5 Phase 7.1–7.2`.
+
+### Dependencies
+```bash
+pip install torch  # LSTM
+alembic upgrade head  # no new migrations — uses existing model registry
+```
+
+---
+
+## Sprint 42 — Planned
+
+**Sources:** `todos-v4.md` Phase 6 Tier 2 (external scrapers — second wave) · `todos-v3.md` §17
+
+### Deliverables
+- [ ] **finanzen.net German news scraper** — `backend/app/services/external/finanzen_net.py` (NEW): scrapes German-language headlines from `https://www.finanzen.net/nachrichten/aktien/{symbol}` every 4h using `BeautifulSoup4`; respects `robots.txt`; feeds scraped headlines into `sentiment_scorer.py` (FinBERT); stores in `news_articles` with `fetch_source='finanzen_net'`; German-language headlines especially valuable for TR DE stocks. Closes `todos-v4 Phase 6 #6`.
+- [ ] **StockTwits extension** — `backend/app/services/stocktwits_service.py` (extend existing): full `reddit_mentions_norm` + `stocktwits_sentiment_norm` per ticker per 24h stored in `external_signals`; cron every 2h; expose `GET /api/v1/sentiment/{symbol}/social` combining Reddit + StockTwits signals into one response. Closes `todos-v4 Phase 6 #10`.
+- [ ] **SEC EDGAR insider transactions** — `backend/app/services/external/sec_edgar.py` (NEW): polls SEC EDGAR Form 4 filings daily; computes `insider_net_sentiment` per symbol (cluster buying = bullish, large selling = bearish); stores in `external_signals`; `insider_net_sentiment` added as ML feature in `engineer_features()`; exposes `GET /api/v1/signals/{symbol}/insider`. Closes `todos-v4 Phase 6 #11`.
+- [ ] **OpenInsider aggregated view** — `backend/app/services/external/open_insider.py` (NEW): scrapes `https://openinsider.com/screener?s={symbol}` daily; computes `insider_cluster_buy_score`; stored in `external_signals`; wired into insider endpoint above as a complementary source. Closes `todos-v4 Phase 6 #12`.
+- [ ] **Social signals frontend panel** — `frontend/components/SocialSignalsPanel.tsx` (NEW): collapsible panel on the dashboard showing Reddit mentions + sentiment trend, StockTwits bull/bear ratio, insider net sentiment score; coloured bars + delta vs prior week; placed below `WhatChangedToday`. Wires to the new `/sentiment/{symbol}/social` endpoint.
+
+### Dependencies
+```bash
+pip install beautifulsoup4 requests edgar  # if not already installed
+```
+
+---
+
+## Sprint 43 — Planned
+
+**Sources:** `todos.md` §2 · §3 · §14 (education UX · UI polish · settings personalisation) · `todos-v3.md` §8 · §13
+
+### Deliverables
+- [ ] **Glossary page** — `frontend/app/learn/glossary/page.tsx` (NEW): searchable A–Z glossary of all fin-eye terms (GAS, FinBERT, ATR, Kelly, Sharpe, Regime, SHAP, Walk-Forward, etc.); each entry has term, plain-English definition, and a "See it on dashboard →" deep-link; search filters list live as user types; every technical term across the app links here via `[?]` tooltip anchor. Closes `todos.md §2` + `todos-v3.md §8`.
+- [ ] **Interactive onboarding tour update** — `frontend/components/onboarding/GuidedTour.tsx` (extend): add new tour stops for pages added since original tour — Watchlist Overview, Macro (FOMC countdown), Backtesting, Learn Hub, AI Allocator, Explore; fires automatically for `has_completed_tour === false`; "What does this mean?" CTA on GAS widget for cold users. Closes `todos-v3.md §9`.
+- [ ] **Dark mode contrast audit** — Run WCAG AA contrast check across all components; fix failing elements (text-slate-500 on bg-slate-900, small labels in TimeframeGrid, badge text); document which tokens were changed; target ≥ 4.5:1 for body text, ≥ 3:1 for large text. Closes `todos.md §3`.
+- [ ] **Page transition animations** — `frontend/app/layout.tsx`: add Framer Motion `AnimatePresence` + `motion.div` wrapper with subtle fade+slide (200ms) between route changes; respects `prefers-reduced-motion`. Closes `todos.md §3`.
+- [ ] **Currency preference (USD/EUR)** — Backend: `User.currency` column (`'USD'` default) + migration + `PATCH /auth/me`; frontend: currency toggle in Settings Preferences section; `useCurrency()` hook formats all monetary values app-wide (backtesting initial capital, price targets, allocation amounts); EU users no longer see $10,000 friction point. Closes `todos.md §14` + `todos-v3.md §13`.
+- [ ] **Compact / expanded view toggle** — Settings: data density toggle stored in `localStorage`; compact mode reduces padding, hides secondary labels, shrinks sparklines; expanded is the default; applies globally via a CSS class on `<body>`. Closes `todos.md §14`.
+
+### Migration note
+```bash
+alembic revision --autogenerate -m "add_currency_to_users"
+alembic upgrade head
+```
+
+---
+
+## Sprint 44 — Planned
+
+**Sources:** `todos.md` §4 · §12 · §17 (performance · community · admin ops) · `todos-v3.md` §23–24
+
+### Deliverables
+- [ ] **Bundle size audit + code splitting** — Run `next build --profile`; identify top contributors (Recharts, Lucide, large page components); apply `next/dynamic` lazy imports to all route pages and heavy components (backtesting, model-info, portfolio); target < 200kB initial JS. Closes `todos.md §4`.
+- [ ] **Redis cache warming on startup** — `backend/app/main.py`: `startup_event` pre-warms Redis cache for top 20 most-watched symbols (GAS snapshots + macro latest + sentiment timeseries); ensures first user request after deploy hits cache, not cold DB. Closes `todos.md §4`.
+- [ ] **Service Worker / PWA** — `frontend/public/sw.js` (NEW): basic Service Worker caching last-seen dashboard state (GAS snapshot, macro data, watchlist) for offline read; `next-pwa` or manual registration in `_document.tsx`; `manifest.json` with app icons. Closes `todos.md §4`.
+- [ ] **Sentry error monitoring** — Fill `SENTRY_DSN` in `.env`; configure Sentry in `frontend/sentry.client.config.ts` + `sentry.server.config.ts`; backend: Sentry SDK in `main.py`; alert on error rate > 1%; breadcrumbs for API calls. Closes `todos.md §17` + `todos-v3.md §24`.
+- [ ] **Churn early warning** — `backend/app/services/scheduler.py`: daily job (`job_churn_check()` at 09:00 UTC) — queries users with `last_login < now - 7 days` and `is_pro = True`; creates a `ChurnRisk` flag in admin DB; triggers re-engagement email via Resend ("We miss you — your watchlist has moved"). Closes `todos.md §17`.
+- [ ] **Public strategy leaderboard** — `frontend/app/community/leaderboard/page.tsx` (NEW): sorted leaderboard of public backtesting strategies by Sharpe ratio; weekly reset; submit strategy button (marks a backtest run as public); top 10 shown with anonymised username, strategy name, Sharpe, total return, max drawdown. Backend: `is_public` flag on `BacktestRun` model + `GET /backtesting/leaderboard`. Closes `todos.md §12` + `todos-v3.md §23`.
+- [ ] **A/B experiment framework** — `frontend/lib/experiments.ts` (NEW): `useExperiment(name)` hook reading feature flags from `GET /api/v1/experiments/assignments`; backend: `experiments` table with name, variant, user_pct rollout; admin UI at `/admin/experiments`; first experiment: onboarding flow variant (goal-selector vs direct dashboard). Closes `todos.md §17` + `todos-v3.md §24`.
+
+---
+
+## Sprint 45 — Planned
+
+**Sources:** `todos.md` §18 · §21 (lifestyle finance content · B2B2C landlord architecture — Phase 3)
+
+### Deliverables
+- [ ] **`/lifestyle` hub page** — `frontend/app/lifestyle/page.tsx` (NEW): four content pillars — Tax Residency, Legal Structures, International Banking, Estate & Pension; "Lifestyle" added to nav under Learn; intro cards per pillar with icon + description + CTA. Closes `todos-v3.md §21 NOMAD-01`.
+- [ ] **Interactive tax residency comparison table** — `frontend/app/lifestyle/tax-residency/page.tsx` (NEW): 10 countries with columns (income tax rate, capital gains, wealth tax, crypto treatment, days required, FATCA exposure); filter by "no wealth tax" / "territorial" / "crypto-friendly"; sort by any column; FATCA callout banner for US citizens. Closes `todos-v3.md §21 NOMAD-02`.
+- [ ] **Legal entity type comparison** — `frontend/app/lifestyle/legal-structures/page.tsx` (NEW): 9 entity structures (sole trader, LTD, GmbH, LLC, holding, trust, foundation, BV, S.A.); interactive "Which fits me?" filter (questions: residency, asset type, privacy need, tax goal); results ranked by fit score. Closes `todos-v3.md §21 NOMAD-03`.
+- [ ] **Tenant registration + B2B white-label foundation** — Backend: `tenants` table (`id`, `slug`, `name`, `logo_url`, `accent_colour`, `owner_user_id`); `/advisors/register` flow with invitation tokens; `TenantContext` FastAPI dependency injected into all relevant endpoints; cross-tenant access denied integration test. Frontend: subdomain-based logo + accent colour theming via CSS variable injection. Closes `todos-v3.md §22 B2B-TENANT-01/02` + `B2B-ISOLATION-01`.
+- [ ] **Custom GAS weights per advisor** — `frontend/app/admin/gas-weights/page.tsx` (NEW): three sliders (Technical / Macro / Sentiment weight); preset profiles (Macro-Heavy, Technical-Focus, Balanced); weights must sum to 1.0 (enforced client + server); stored on `Tenant` model; `compute_signal_grade()` reads tenant weights when `tenant_id` is present. Closes `todos-v3.md §22 B2B-GAS-WEIGHTS-01`.
+- [ ] **Compliance audit log** — Backend: append-only `compliance_audit_logs` table (`tenant_id`, `user_id`, `action`, `resource`, `ip_address`, `timestamp`); middleware writes a row for every authenticated API call in B2B context; `GET /admin/compliance/export` returns paginated CSV. Closes `todos-v3.md §22 B2B-COMPLIANCE-01`.
+
+### Migration note
+```bash
+alembic revision --autogenerate -m "add_tenants_compliance_audit_logs"
+alembic upgrade head
+```
+
+---
 
 ## Files to copy from outputs after this session
 
