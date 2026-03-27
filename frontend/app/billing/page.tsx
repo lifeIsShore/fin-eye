@@ -10,12 +10,13 @@
  * - Payments not yet live — Coming Soon badge preserved
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import Link from "next/link";
 import {
   Check, X, Zap, Building2, CreditCard, Shield,
   TrendingUp, BarChart2, Bell, Users, Globe,
-  Lock, Star,
+  Lock, Star, Receipt, PauseCircle,
 } from "lucide-react";
 
 // ── Plan data ─────────────────────────────────────────────────────────────────
@@ -179,10 +180,56 @@ function PriceDisplay({
 export default function BillingPage() {
   const { user } = useAuth();
   const [annual, setAnnual] = useState(false);
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trialMessage, setTrialMessage] = useState<string | null>(null);
+
   const currentPlanId: "free" | "pro" | "institutional" = user?.is_pro ? "pro" : "free";
+
+  // Compute trial state
+  const trialEnd = user?.trial_ends_at ? new Date(user.trial_ends_at) : null;
+  const trialActive = trialEnd && trialEnd > new Date();
+  const trialDaysLeft = trialActive
+    ? Math.ceil((trialEnd!.getTime() - Date.now()) / 86_400_000)
+    : 0;
+  const neverTrialed = !user?.trial_ends_at;
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+  const startTrial = async () => {
+    setTrialLoading(true);
+    setTrialMessage(null);
+    try {
+      const token = localStorage.getItem("access_token");
+      const res = await fetch(`${API_BASE}/api/v1/billing/start-trial`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await res.json();
+      setTrialMessage(data.message ?? "Trial started!");
+    } catch {
+      setTrialMessage("Something went wrong. Please try again.");
+    } finally {
+      setTrialLoading(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-10">
+
+      {/* Trial banner */}
+      {trialActive && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-700/40 bg-amber-950/20 px-5 py-4">
+          <Zap className="h-4 w-4 text-amber-400 flex-shrink-0" />
+          <p className="text-sm text-amber-300">
+            <strong>Free trial active</strong> — {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining.
+            {" "}
+            <Link href="#plans" className="underline hover:text-amber-200">Upgrade to keep Pro access.</Link>
+          </p>
+        </div>
+      )}
 
       {/* Header */}
       <div className="text-center space-y-2">
@@ -271,21 +318,47 @@ export default function BillingPage() {
 
               {/* CTA */}
               <div className="space-y-2">
-                <button
-                  disabled
-                  className={`w-full rounded-xl py-2.5 text-sm font-semibold transition-colors cursor-not-allowed ${
-                    isCurrent
-                      ? "border border-slate-700 bg-slate-800 text-slate-400 opacity-70"
-                      : plan.ctaStyle === "primary"
-                      ? "bg-blue-600 text-white opacity-60"
-                      : "border border-slate-700 bg-slate-800 text-slate-300 opacity-60"
-                  }`}
-                >
-                  {isCurrent ? "✓ Current Plan" : plan.cta}
-                </button>
-                <p className="text-center text-[10px] text-slate-600">
-                  {isCurrent ? "You are on this plan" : "Payments coming soon"}
-                </p>
+                {isCurrent ? (
+                  <>
+                    <button
+                      disabled
+                      className="w-full rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-sm font-semibold text-slate-400 opacity-70 cursor-not-allowed"
+                    >
+                      ✓ Current Plan
+                    </button>
+                    <p className="text-center text-[10px] text-slate-600">You are on this plan</p>
+                  </>
+                ) : plan.id === "pro" && !user?.is_pro && neverTrialed ? (
+                  <>
+                    <button
+                      onClick={startTrial}
+                      disabled={trialLoading}
+                      className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50 transition-colors"
+                    >
+                      {trialLoading ? "Starting trial…" : "Start free 7-day trial"}
+                    </button>
+                    {trialMessage && (
+                      <p className="text-center text-[11px] text-emerald-400">{trialMessage}</p>
+                    )}
+                    {!trialMessage && (
+                      <p className="text-center text-[10px] text-slate-600">No credit card required</p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      disabled
+                      className={`w-full rounded-xl py-2.5 text-sm font-semibold cursor-not-allowed ${
+                        plan.ctaStyle === "primary"
+                          ? "bg-blue-600 text-white opacity-60"
+                          : "border border-slate-700 bg-slate-800 text-slate-300 opacity-60"
+                      }`}
+                    >
+                      {plan.cta}
+                    </button>
+                    <p className="text-center text-[10px] text-slate-600">Payments coming soon</p>
+                  </>
+                )}
               </div>
             </div>
           );
@@ -408,6 +481,28 @@ export default function BillingPage() {
           ))}
         </div>
       </div>
+      {/* Invoices */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Receipt className="h-4 w-4 text-slate-500" />
+          <h3 className="text-sm font-semibold text-slate-200">Invoices</h3>
+        </div>
+        <p className="text-xs text-slate-500">
+          No invoices yet — invoices will appear here after your first payment.
+        </p>
+      </div>
+
+      {/* Cancel subscription */}
+      {(user?.is_pro || trialActive) && (
+        <div className="text-center">
+          <Link
+            href="/billing/cancel"
+            className="text-xs text-slate-600 hover:text-rose-400 transition-colors underline"
+          >
+            Cancel or pause subscription
+          </Link>
+        </div>
+      )}
 
     </div>
   );

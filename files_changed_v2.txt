@@ -1,0 +1,5 @@
+SPRINT_PROGRESS.md
+files_changed.txt
+frontend/components/LLMInsightCard.tsx
+frontend/components/TimeframeGrid.tsx
+frontend/lib/signalUtils.ts

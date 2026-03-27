@@ -361,12 +361,19 @@ export function WatchlistWidget({ onSelectSymbol, activeSymbol }: WatchlistWidge
                     <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
                 </div>
             ) : !items || items.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-5 text-center">
-                    <BookmarkCheck className="h-6 w-6 text-slate-600" />
-                    <p className="text-xs text-slate-500">
-                        No tickers yet. Add one above to quick-switch between symbols.
+                <button
+                    type="button"
+                    onClick={() => inputRef.current?.focus()}
+                    className="mt-1 w-full rounded-xl border border-dashed border-slate-700 bg-slate-900/40 px-4 py-5 text-center transition-colors hover:border-sky-700/60 hover:bg-slate-900/70 group"
+                >
+                    <BookmarkCheck className="mx-auto mb-2 h-5 w-5 text-slate-600 group-hover:text-sky-500 transition-colors" />
+                    <p className="text-xs font-medium text-slate-400 group-hover:text-slate-300 transition-colors">
+                        Add your first stock
                     </p>
-                </div>
+                    <p className="mt-0.5 text-[11px] text-slate-600 group-hover:text-slate-500 transition-colors">
+                        Track its GAS score, grade & signal here
+                    </p>
+                </button>
             ) : (() => {
                 const filtered = items.filter((item) => {
                     if (gradeFilter === "all") return true;

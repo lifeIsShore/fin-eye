@@ -42,6 +42,10 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
+    # Monetisation (Sprint 38)
+    trial_ends_at = Column(DateTime(timezone=True), nullable=True)   # null = never trialed
+    paused_until  = Column(DateTime(timezone=True), nullable=True)   # null = not paused
+
     # Relationships
     portfolios = relationship("Portfolio", back_populates="owner", cascade="all, delete-orphan")
     watchlist_items = relationship("WatchlistItem", back_populates="owner", cascade="all, delete-orphan")

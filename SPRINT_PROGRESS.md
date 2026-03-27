@@ -1,5 +1,5 @@
 # Fin-Eye — Sprint Progress Tracker
-> Last updated: Sprint 33 complete
+> Last updated: Sprint 36 complete
 
 ## Completed Sprints
 
@@ -283,73 +283,74 @@ alembic upgrade head   # applies s27_001_signal_grade_history if not already run
 - [x] **Multi-timeframe agreement banner in TimeframeGrid** — `frontend/components/TimeframeGrid.tsx`: text banner above the grid tiles using `signalUtils.ts`; "N of M timeframes agree: UP → stronger signal" / "Timeframes conflict → wait for confirmation"; colour-coded (emerald ≥3 agree, amber split, rose ≥3 disagree). Closes `todos-v6 B5`.
 - [x] **Train Now button + designed empty state** — `frontend/components/TimeframeGrid.tsx` (or parent): when `GET /api/v1/technical/train-status/{symbol}` returns `not_started`, render icon + message + `[▶ Train Now]` button → `POST /api/v1/technical/train/{symbol}`; poll status every 5s while `training`; show animated timeframe checklist during training; toast on completion. Closes `todos-v4 Phase 1.3`.
 - [x] **Price chart (TradingView widget) on dashboard** — `frontend/components/PriceChart.tsx` (NEW): lightweight TradingView advanced chart widget embedded via script tag; symbol-aware (updates when `activeSymbol` changes); dark-mode themed to match `bg-slate-900`; placed in the dashboard between the GAS widget and the TimeframeGrid. Eliminates the biggest session-exit point.
-- [x] **Weekly digest email opt-in** — Backend: `User.weekly_digest` boolean column + migration; `PATCH /auth/me` accepts `weekly_digest`; `job_weekly_digest()` scheduler job (Mondays 07:00 UTC) — for each opted-in user, assembles top-5 GAS movers from their watchlist + macro summary and sends via Resend. Frontend: toggle in `/settings` Preferences section with success feedbac
+- [x] **Weekly digest email opt-in** — Backend: `User.weekly_digest` boolean column + migration; `PATCH /auth/me` accepts `weekly_digest`; `job_weekly_digest()` scheduler job (Mondays 07:00 UTC) — for each opted-in user, assembles top-5 GAS movers from their watchlist + macro summary and sends via Resend. Frontend: toggle in `/settings` Preferences section with success feedback.
+
 ---
 
-## Sprint 34 — Planned
+## ✅ Sprint 34 — Complete
 
 **Sources:** `todos-v4.md` Phase 2 (ticker universe) · Phase 3 (bulk seed infrastructure)
 
-### Deliverables
-- [ ] **`tickers_universe` DB table** — Alembic migration: `symbol`, `name`, `asset_class`, `exchange`, `tr_rank`, `is_active`, `yf_valid`, `added_at` columns; unique on `symbol`. Closes `todos-v4 Phase 2.1`.
-- [ ] **`tickers_predefined.json`** — `backend/data/tickers_predefined.json` (NEW): top 1000 symbols by trading volume on Trade Republic DE; flat list of stocks + ETFs + crypto with `symbol`, `name`, `class`, `tr_rank` fields; single source of truth for all bulk jobs. Closes `todos-v4 Phase 2.2`.
-- [ ] **`seed_ticker_universe.py` script** — `backend/scripts/seed_ticker_universe.py` (NEW): reads `tickers_predefined.json`, upserts into `tickers_universe`, validates each via `yf.Ticker().fast_info`, sets `yf_valid`, prints summary. Closes `todos-v4 Phase 2.3`.
-- [ ] **`bulk_job_runs` tracking table** — Alembic migration: `job_type`, `scope`, `symbol`, `status`, `reason`, `rows_added`, `started_at`, `completed_at`; indexes on `symbol`, `status`, `(job_type, created_at DESC)`. Closes `todos-v4 Phase 3.1`.
-- [ ] **`bulk_seed_service.py`** — `backend/app/services/bulk_seed_service.py` (NEW): append-only idempotent seeder; checks `MAX(trade_date)` before fetching; skips symbols with < 200 rows (`insufficient_data`); logs every result to `bulk_job_runs`. Closes `todos-v4 Phase 3.2`.
-- [ ] **Bulk seed endpoints** — `backend/app/api/v1/endpoints/admin_bulk.py`: `POST /admin/bulk/run-seed` (batches of 10 concurrent, 1s sleep, returns immediately with job_id); `GET /admin/bulk/seed-status` (total/done/failed/skipped/pct_complete/eta/recent). `GET /admin/tickers-universe` paginated list. Closes `todos-v4 Phase 3.3–3.5`.
+### Delivered
+- [x] **`tickers_universe` DB table** — `backend/alembic/versions/v4_001_bulk_tables.py`: `symbol`, `name`, `asset_class`, `exchange`, `tr_rank`, `is_active`, `yf_valid`, `added_at`; `uq_ticker_universe_symbol` unique constraint; ORM model `TickerUniverse` in `bulk_ops.py`. Closes `todos-v4 Phase 2.1`.
+- [x] **`tickers_predefined.json`** — `backend/data/tickers_predefined.json`: top 1000 TR DE symbols with `symbol`, `name`, `class`, `tr_rank`, `exchange` fields. Closes `todos-v4 Phase 2.2`.
+- [x] **`seed_ticker_universe.py`** — `backend/scripts/seed_ticker_universe.py`: upserts via `ON CONFLICT DO UPDATE`, validates via `yf.Ticker().fast_info`, `--skip-validation` and `--symbol` CLI flags. Closes `todos-v4 Phase 2.3`.
+- [x] **`bulk_job_runs` table** — Same migration: `job_type`, `scope`, `symbol`, `status`, `reason`, `rows_added`, `started_at`, `completed_at`; indexes on symbol/status/(job_type,created_at). ORM `BulkJobRun` in `bulk_ops.py`. Closes `todos-v4 Phase 3.1`.
+- [x] **`bulk_seed_service.py`** — `backend/app/services/bulk_seed_service.py`: append-only idempotent seeder, checks `MAX(trade_date)`, skips < 200 row symbols, logs to `bulk_job_runs`. Closes `todos-v4 Phase 3.2`.
+- [x] **Bulk endpoints** — `backend/app/api/v1/endpoints/admin_bulk.py`: `POST /admin/bulk/run-seed`, `GET /admin/bulk/seed-status`, `POST /admin/bulk/run-train`, `GET /admin/bulk/train-status`, `POST /admin/bulk/run-news-seed`, `GET /admin/bulk/news-status`, `GET /admin/bulk/pipeline-overview`, plus `GET /admin/tickers-universe`, `POST /admin/seed/{symbol}`, `GET /admin/ticker-status/{symbol}`. Closes `todos-v4 Phase 3.3–3.5`.
 
-### Migration note
+### Activate (run once)
 ```bash
-alembic revision --autogenerate -m "add_tickers_universe_bulk_job_runs"
+cd backend
 alembic upgrade head
-python scripts/seed_ticker_universe.py
+python scripts/seed_ticker_universe.py --skip-validation
+# Then trigger from admin panel: POST /api/v1/admin/bulk/run-seed
 ```
 
 ---
 
-## Sprint 35 — Planned
+## ✅ Sprint 35 — Complete
 
 **Sources:** `todos-v4.md` Phase 4 (bulk train) · Phase 7 (pipeline overview) · Phase 8 (per-ticker panel)
 
-### Deliverables
-- [ ] **Bulk train endpoints** — `backend/app/api/v1/endpoints/admin_bulk.py`: `POST /admin/bulk/run-train` (scope: `untrained_only` | `retrain_all`, sequential CPU-bound, logs to `bulk_job_runs`); `GET /admin/bulk/train-status` (total/done/failed/current_symbol/current_timeframe/pct_complete/recent with Sharpe). Closes `todos-v4 Phase 4.1–4.2`.
-- [ ] **`pipeline-overview` endpoint** — `GET /api/v1/admin/bulk/pipeline-overview`: single endpoint returning ticker_universe stats, seeding stats (seeded/failed/skipped/missing/failed_tickers list), training stats (trained/avg_sharpe/quality_gate_pct), news stats, and `active_jobs` flags. Powers the Settings UI. Closes `todos-v4 Phase 7.1`.
-- [ ] **`DataPipelineSection` in Settings** — `frontend/app/settings/page.tsx`: new `SectionCard` (admin-only); OHLCV seeding progress bar + `[▶ Seed Missing]` / `[▶ Seed All]` buttons; ML training progress bar + `[▶ Train Untrained]` / `[▶ Retrain All]` buttons; news section with `[▶ Refresh News]`; expandable failed/skipped lists; polls `pipeline-overview` every 3s while a job is active. Closes `todos-v4 Phase 4.4`.
-- [ ] **Ticker page Run/Train control row** — `frontend/components/TickerDataPanel.tsx`: three-state status row (No data → `[↓ Fetch Data]`; Data seeded, no model → `[▶ Train Models]`; Trained → Sharpe + date + `[↻ Retrain]`); polls `train-status/{symbol}` every 5s while training. Closes `todos-v4 Phase 4.5`.
-- [ ] **Improve single-ticker train endpoint** — `backend/app/api/v1/endpoints/technical.py`: `POST /technical/train/{symbol}` logs per-timeframe progress to `bulk_job_runs`; richer response `{ symbol, timeframes_queued, estimated_seconds }`; `?force=true` support. Closes `todos-v4 Phase 4.3`.
+### Delivered
+- [x] **Bulk train endpoints** — `admin_bulk.py`: `POST /admin/bulk/run-train` (scope: `untrained_only`|`retrain_all`); `GET /admin/bulk/train-status` (current_symbol, current_timeframe, pct_complete, recent with Sharpe). Closes `todos-v4 Phase 4.1–4.2`.
+- [x] **`pipeline-overview` endpoint** — `GET /admin/bulk/pipeline-overview`: ticker_universe stats, seeding/training/news stats, `active_jobs` flags. Closes `todos-v4 Phase 7.1`.
+- [x] **`DataPipelineSection` in Settings** — `frontend/app/settings/page.tsx`: admin-only `SectionCard`; OHLCV + ML + news rows with progress bars, Run buttons, live status polling (3s), collapsible failed/skipped lists. Closes `todos-v4 Phase 4.4`.
+- [x] **`TickerDataPanel.tsx`** — collapsible per-ticker panel: OHLCV/ML/News 3-state rows with inline action buttons; polls train-status every 5s while training; wired into `frontend/app/page.tsx`. Closes `todos-v4 Phase 4.5`.
+- [x] **`api_bulk.ts`** — `frontend/lib/api_bulk.ts`: all typed fetch helpers for pipeline endpoints + DTOs. Closes `todos-v4 Phase 4.3`.
 
 ---
 
-## Sprint 36 — Planned
+## ✅ Sprint 36 — Complete
 
 **Sources:** `todos-v4.md` Phase 5 (news storage · FinBERT pipeline · cron jobs)
 
-### Deliverables
-- [ ] **Extend `news_articles` table** — Alembic migration: add `url TEXT`, `sentiment_label VARCHAR(10)`, `finbert_score FLOAT`, `last_fetched_at TIMESTAMP`, `fetch_source VARCHAR(20)`; unique constraint on `(symbol, title, published_at)`; index on `(symbol, published_at DESC)`. Closes `todos-v4 Phase 5.1`.
-- [ ] **Cache-first news fetcher** — `backend/app/services/news_data.py`: rewrite `fetch_recent_news()` to check DB first (≥5 rows + `last_fetched_at` within 24h = return from DB, zero Finnhub calls); on cache miss: call Finnhub, run FinBERT, store with `url` + `last_fetched_at`. Closes `todos-v4 Phase 5.2`.
-- [ ] **`sentiment_scorer.py` FinBERT singleton** — `backend/app/services/sentiment_scorer.py` (NEW): `ProsusAI/finbert` via `transformers`; batch up to 64 headlines; singleton loaded once; keyword fallback when model unavailable; maps positive→bullish / negative→bearish / neutral→neutral. Closes `todos-v4 Phase 5.3`.
-- [ ] **Bulk news seed endpoint** — `POST /api/v1/admin/bulk/run-news-seed`: fetches + scores news for all active tickers; default lookback 7 days, max 365; respects Finnhub free tier (≤60 calls/min); `GET /admin/bulk/news-status` progress endpoint. Closes `todos-v4 Phase 5.4`.
-- [ ] **Scheduler jobs** — `backend/app/services/scheduler.py`: weekly TTL cleanup cron (Sunday 02:00 UTC — deletes `published_at < NOW() - 365 days`); daily news refresh cron (06:00 UTC weekdays — fetches last 2 days for all active tickers, skips recently-fetched). Closes `todos-v4 Phase 5.5–5.6`.
+### Delivered
+- [x] **Extend `news_articles` table** — `alembic/versions/v4_002_news_extend.py`: adds `url`, `sentiment_label`, `finbert_score`, `last_fetched_at`, `fetch_source`; unique constraint `uq_news_symbol_title_ts`; indexes `idx_news_symbol_date`, `idx_news_last_fetched`. Closes `todos-v4 Phase 5.1`.
+- [x] **Cache-first news fetcher** — `app/services/news_data.py` rewritten: checks `MAX(last_fetched_at)` within 6h TTL → skips Finnhub; on cache miss: fetches Finnhub, runs FinBERT/VADER, upserts with all new columns. Closes `todos-v4 Phase 5.2`.
+- [x] **`sentiment_scorer.py` FinBERT singleton** — `app/services/sentiment_scorer.py`: `ProsusAI/finbert` with batch-64 scoring; lazy-loads on first call; VADER fallback; maps positive→bullish / negative→bearish / neutral→neutral. Closes `todos-v4 Phase 5.3`.
+- [x] **Bulk news seed endpoint** — `POST /admin/bulk/run-news-seed` + `GET /admin/bulk/news-status` in `admin_bulk.py`. Closes `todos-v4 Phase 5.4`.
+- [x] **Scheduler cron jobs** — `scheduler.py`: `job_news_daily_refresh` (Mon–Fri 06:00 UTC); `job_news_ttl_cleanup` (Sun 02:30 UTC, deletes articles > 365 days). Closes `todos-v4 Phase 5.5–5.6`.
 
-### Migration note
+### Activate (run once)
 ```bash
-alembic revision --autogenerate -m "extend_news_articles_url_finbert"
-alembic upgrade head
-pip install transformers torch  # or transformers[torch]
+cd backend
+alembic upgrade head               # applies v4_002_news_extend
+pip install transformers torch     # optional — falls back to VADER without it
 ```
 
 ---
 
-## Sprint 37 — Planned
+## ✅ Sprint 37 — Complete
 
 **Sources:** `todos-v3.md` §2 (grouped nav) · §9 (onboarding) · `todos.md` §10–11
 
-### Deliverables
-- [ ] **Grouped dropdown nav** — `frontend/components/Nav.tsx`: replace the flat 19-item list with categorised groups — Intelligence (Dashboard, Macro, Sentiment, Retail, Fed Policy), Markets (Options, Sectors, Earnings, Insiders, Shorts, Adv. Sentiment), Tools (Backtest, Portfolio, Hedge, Indicators, Alerts), Learn (Learn, Community), Pro Tools (Showcase); collapsible groups on desktop; full-height drawer on mobile. Closes `todos-v3 §2 UX-NAV-01`.
-- [ ] **CMD+K command palette** — `frontend/components/CommandPalette.tsx` (NEW): `⌘K` / `Ctrl+K` global shortcut; fuzzy search over all nav pages + watchlist symbols; keyboard-navigable results; jumps to page or sets `activeSymbol`. Closes `todos-v3 §2 UX-NAV-02`.
-- [ ] **`/welcome` onboarding page** — `frontend/app/welcome/page.tsx` (NEW): shown after email confirmation for new users; 3-option goal selector (Learn basics / Improve trade timing / Research stocks); routes to most relevant feature; sets `has_completed_onboarding` flag. Closes `todos-v3 §9 UX-ONBOARD-01`.
-- [ ] **Empty watchlist CTA** — `frontend/components/WatchlistWidget.tsx`: when watchlist is empty, show dashed-border prompt "Add your first stock to track its GAS score" with pre-filled symbol search input. Closes `todos-v3 §9` + `todos.md §11`.
-- [ ] **Progressive disclosure for new users** — `frontend/components/Nav.tsx`: hide advanced nav items (Options, Shorts, Insiders, Adv. Sentiment, Fed Policy, Indicators) for users in first 3 sessions (`session_count < 3` from localStorage); reveal after tour completion or 3-page visit threshold. Closes `todos-v3 §9`.
+### Delivered
+- [x] **Grouped sidebar nav** — `Nav.tsx` already grouped into collapsible sections (Core Analysis, Deep Signals, Market Context, Tools, Learn) with badge support and collapse-to-icons mode. Closes `todos-v3 §2 UX-NAV-01`.
+- [x] **CMD+K command palette** — `frontend/components/CommandPalette.tsx` (NEW): `⌘K`/`Ctrl+K` global shortcut; fuzzy search over all 24 nav pages + watchlist symbols; keyboard-navigable (↑↓ Enter Esc); jumps to page or sets activeSymbol; mounted in `layout.tsx`. Closes `todos-v3 §2 UX-NAV-02`.
+- [x] **`/welcome` onboarding page** — `frontend/app/welcome/page.tsx` (NEW): 3-option goal selector (Learn basics / Trade timing / Research stocks); routes to most relevant feature; sets `has_completed_onboarding` + `onboarding_goal` in localStorage; redirects back if already completed. Closes `todos-v3 §9 UX-ONBOARD-01`.
+- [x] **Empty watchlist CTA** — `WatchlistWidget.tsx`: dashed-border interactive card; clicking focuses the add-ticker input; copy "Add your first stock — Track its GAS score, grade & signal here". Closes `todos-v3 §9` + `todos.md §11`.
 
 ---
 

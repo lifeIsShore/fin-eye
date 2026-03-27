@@ -11,6 +11,8 @@ export interface User {
     name?: string | null;
     default_symbol?: string | null;  // Sprint 23
     risk_profile?: string | null;     // Sprint 24
+    trial_ends_at?: string | null;   // Sprint 38
+    paused_until?: string | null;    // Sprint 38
 }
 
 interface AuthContextType {

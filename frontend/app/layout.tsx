@@ -7,6 +7,7 @@ import { AuthProvider } from "../components/AuthProvider";
 import { ConsentGate } from "../components/ConsentGate";
 import { SymbolProvider } from "../lib/symbolContext";
 import { ToastProvider } from "../components/ToastProvider";
+import CommandPalette from "../components/CommandPalette";
 
 export const metadata = {
     title: "Fin-Eye",
@@ -22,6 +23,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                         <SymbolProvider>
                             {/* ToastProvider wraps everything so any component can call useToast() */}
                             <ToastProvider>
+                                {/* Global ⌘K / Ctrl+K command palette */}
+                                <CommandPalette />
                                 {/*
                                  * Layout:
                                  * ┌──────────┬───────────────────────────────────────────────┐
