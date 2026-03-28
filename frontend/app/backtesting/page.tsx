@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { PageBanner } from "@/components/ui/PageBanner";
 import { useSymbol } from "@/lib/symbolContext";
+import ProGate from "@/components/ProGate";
 
 // ─── Inline risk disclaimer bar (todos-v3.md UX-LEGAL-01) ────────────────────
 
@@ -990,12 +991,13 @@ function WalkForwardPanel({
       </button>
 
       {open && (
-        <div className="border-t border-slate-800 px-5 pb-5 pt-4 space-y-4">
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Anchored walk-forward splits the full price history into <strong className="text-slate-400">N folds</strong>.
-            Each fold trains on all prior data (in-sample) and tests on the next period (out-of-sample).
-            A large gap between IS and OOS Sharpe signals curve-fitting.
-          </p>
+        <ProGate feature="Walk-Forward Analysis">
+          <div className="border-t border-slate-800 px-5 pb-5 pt-4 space-y-4">
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Anchored walk-forward splits the full price history into <strong className="text-slate-400">N folds</strong>.
+              Each fold trains on all prior data (in-sample) and tests on the next period (out-of-sample).
+              A large gap between IS and OOS Sharpe signals curve-fitting.
+            </p>
 
           {/* Controls */}
           <div className="flex flex-wrap items-end gap-4">
@@ -1179,7 +1181,8 @@ function WalkForwardPanel({
               </div>
             </div>
           )}
-        </div>
+          </div>
+        </ProGate>
       )}
     </div>
   );

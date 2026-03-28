@@ -345,6 +345,7 @@ pip install transformers torch     # optional — falls back to VADER without it
 ## ✅ Sprint 37 — Complete
 
 **Sources:** `todos-v3.md` §2 (grouped nav) · §9 (onboarding) · `todos.md` §10–11
+```
 
 ### Delivered
 - [x] **Grouped sidebar nav** — `Nav.tsx` already grouped into collapsible sections (Core Analysis, Deep Signals, Market Context, Tools, Learn) with badge support and collapse-to-icons mode. Closes `todos-v3 §2 UX-NAV-01`.
@@ -354,15 +355,23 @@ pip install transformers torch     # optional — falls back to VADER without it
 
 ---
 
-## Sprint 38 — Planned
+## Sprint 38: Monetisation & Pro Features (v4.3) [In Progress]
+Goal: UX transitions from "free everything" to a tiered model with a 7-day trial.
 
-**Sources:** `todos-v3.md` §10 (monetisation) · `todos.md` §6
-
-### Deliverables
-- [ ] **Pro gate with lock icon** — `frontend/components/ProGate.tsx` (NEW): reusable wrapper component; renders a 🔒 overlay + tooltip "Available on Pro — Upgrade for €14.99/mo" on any Pro-only feature; clicking opens billing modal directly. Apply to: Walk-Forward panel, AI Allocator, Fed Policy page, Advanced Sentiment, Indicators. Closes `todos-v3 §10 UX-MONETISE-01`.
-- [ ] **Free 7-day trial flow** — Backend: `User.trial_ends_at` column + migration; `POST /billing/start-trial` sets `trial_ends_at = now + 7 days`, no card required; middleware grants Pro access while trial is active. Frontend: "Start free trial" CTA on billing page and Pro gate tooltip; trial expiry banner on dashboard. Closes `todos-v3 §10` + `todos.md §6`.
-- [ ] **Cancellation flow with pause offer** — `frontend/app/billing/cancel/page.tsx` (NEW): single-question "Why are you leaving?" survey (5 options); offers 1-month free pause as alternative to full cancellation; backend `POST /billing/pause` sets `paused_until = now + 30 days`. Closes `todos-v3 §10`.
-- [ ] **Invoice/receipt download** — Backend: `GET /billing/invoices` lists Stripe invoices for the authenticated user; `GET /billing/invoices/{id}/pdf` proxies Stripe-generated PDF. Frontend: Invoices section in `/billing` page with download buttons. Closes `todos.md §6`.
+### Delivered
+- [x] **Pro gate with lock icon** (🔒 overlay).
+    - [ ] Apply to: Walk-Forward panel (backtesting)
+    - [ ] Apply to: AI Allocator (portfolios)
+    - [/ ] Apply to: Fed Policy page (Imported but not wrapping content)
+    - [/ ] Apply to: Advanced Sentiment (Imported but not wrapping content)
+    - [ ] Apply to: Indicators page
+- [x] **Free 7-day trial flow** (no card required).
+    - [x] Backend `User.trial_ends_at` column + migration.
+    - [x] `POST /billing/start-trial`.
+    - [x] Frontend start-trial button & status banner.
+- [x] **Cancellation flow with pause offer**.
+    - [x] `/billing/cancel` page with 30-day pause offer.
+- [/] **Invoice/receipt download** (Stripe proxy stub).
 
 ### Migration note
 ```bash

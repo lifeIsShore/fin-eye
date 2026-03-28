@@ -19,6 +19,7 @@ import {
   type CustomIndicatorDto,
   type FormulaNode,
 } from "../../lib/api";
+import ProGate from "@/components/ProGate";
 
 // ─── Starter presets ──────────────────────────────────────────────────────────
 
@@ -428,7 +429,8 @@ export default function IndicatorsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
+      <ProGate feature="Indicator Builder">
+        <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
@@ -729,7 +731,8 @@ export default function IndicatorsPage() {
             </div>
           </div>
         </div>
-      )}
+      </div>
+      </ProGate>
     </div>
   );
 }

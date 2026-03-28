@@ -13,7 +13,9 @@ import {
   type GoogleTrendsDto,
   type StockTwitsSnapshotDto,
   type StockTwitsMessageDto,
-} from "../../lib/api";
+} from "@/lib/api";
+import ProGate from "@/components/ProGate";
+import { BrainCircuit, Info } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -350,8 +352,9 @@ export default function AdvancedSentimentPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+    <ProGate feature="Advanced Sentiment Analysis">
+      <div className="min-h-screen bg-slate-950 text-slate-200">
+        <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
@@ -519,6 +522,7 @@ export default function AdvancedSentimentPage() {
           </>
         )}
       </div>
-    </div>
+      </div>
+    </ProGate>
   );
 }

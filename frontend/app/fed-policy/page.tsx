@@ -1,5 +1,6 @@
 "use client";
 
+import ProGate from "@/components/ProGate";
 import useSWR from "swr";
 import {
   AreaChart, Area, LineChart, Line,
@@ -396,66 +397,68 @@ export default function FedPolicyPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
-
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Fed Policy</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Target rate · balance sheet · SOFR · dot plot · market expectations · FRED data
-          </p>
-        </div>
-
-        {/* Loading */}
-        {isLoading && !data && (
-          <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 p-6">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
-            <p className="text-sm text-slate-400">Fetching Fed data from FRED…</p>
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="rounded-xl border border-rose-800/50 bg-rose-950/30 p-4 space-y-1">
-            <p className="text-sm font-semibold text-rose-400">Unable to load Fed policy data</p>
-            <p className="text-xs text-rose-400/80">{error.message}</p>
-            <p className="text-xs text-slate-500 pt-1">
-              FRED requires a valid API key in backend settings (<code className="text-slate-400">FRED_API_KEY</code>).
+    <ProGate feature="Fed Policy Analysis">
+      <div className="min-h-screen bg-slate-950 text-slate-200">
+        <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+          {/* ... existing content ... */}
+          {/* Header */}
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100">Fed Policy</h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Target rate · balance sheet · SOFR · dot plot · market expectations · FRED data
             </p>
           </div>
-        )}
 
-        {data && (
-          <>
-            {/* Current rate hero */}
-            <RateHero data={data} />
-
-            {/* Rate history */}
-            <RateHistoryChart data={data} />
-
-            {/* Dot plot + forward expectations side by side on wide screens */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <DotPlotPanel dots={data.dot_plot} current={data.current_midpoint} />
-              <ForwardTable expectations={data.forward_expectations} current={data.current_midpoint} />
+          {/* Loading */}
+          {isLoading && !data && (
+            <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 p-6">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+              <p className="text-sm text-slate-400">Fetching Fed data from FRED…</p>
             </div>
+          )}
 
-            {/* Balance sheet */}
-            <BalanceSheetChart history={data.balance_sheet_history} />
-
-            {/* SOFR */}
-            <SofrChart sofr={data.sofr_history} dff={data.effective_rate_history} />
-
-            {/* Reverse repo */}
-            <ReverseRepoChart history={data.reverse_repo_history} current={data.current_reverse_repo_b} />
-
-            {/* Disclaimer */}
-            <div className="rounded-xl border border-slate-800/40 bg-slate-900/20 px-4 py-3">
-              <p className="text-[10px] leading-relaxed text-slate-600">{data.disclaimer}</p>
+          {/* Error */}
+          {error && (
+            <div className="rounded-xl border border-rose-800/50 bg-rose-950/30 p-4 space-y-1">
+              <p className="text-sm font-semibold text-rose-400">Unable to load Fed policy data</p>
+              <p className="text-xs text-rose-400/80">{error.message}</p>
+              <p className="text-xs text-slate-500 pt-1">
+                FRED requires a valid API key in backend settings (<code className="text-slate-400">FRED_API_KEY</code>).
+              </p>
             </div>
-          </>
-        )}
+          )}
+
+          {data && (
+            <>
+              {/* Current rate hero */}
+              <RateHero data={data} />
+
+              {/* Rate history */}
+              <RateHistoryChart data={data} />
+
+              {/* Dot plot + forward expectations side by side on wide screens */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <DotPlotPanel dots={data.dot_plot} current={data.current_midpoint} />
+                <ForwardTable expectations={data.forward_expectations} current={data.current_midpoint} />
+              </div>
+
+              {/* Balance sheet */}
+              <BalanceSheetChart history={data.balance_sheet_history} />
+
+              {/* SOFR */}
+              <SofrChart sofr={data.sofr_history} dff={data.effective_rate_history} />
+
+              {/* Reverse repo */}
+              <ReverseRepoChart history={data.reverse_repo_history} current={data.current_reverse_repo_b} />
+
+              {/* Disclaimer */}
+              <div className="rounded-xl border border-slate-800/40 bg-slate-900/20 px-4 py-3">
+                <p className="text-[10px] leading-relaxed text-slate-600">{data.disclaimer}</p>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </ProGate>
   );
 }
