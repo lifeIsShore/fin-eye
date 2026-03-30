@@ -43,6 +43,68 @@ import { useRecentSymbols } from "../hooks/useRecentSymbols";
 import { fetchWatchlist } from "../lib/api";
 import { fetchModelDetails, type ModelDetailsResponse } from "../lib/api_model_details";
 
+// ─── Sprint 41: Crypto Fear & Greed Panel ────────────────────────────────
+// Inline component: fetches GET /api/v1/macro/fear-greed/crypto and renders
+// a compact scored gauge. Only rendered when activeSymbol is a crypto ticker.
+const CRYPTO_FG_API = `${(process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000")}/api/v1/macro/fear-greed/crypto`;
+
+function useCryptoFearGreed() {
+  return useSWR(
+    "crypto-fear-greed",
+    async () => {
+      const r = await fetch(CRYPTO_FG_API, { cache: "no-store" });
+      if (!r.ok) throw new Error("crypto fg unavailable");
+      return r.json() as Promise<{ score: number; label: string; norm: number; source: string; fetched_at: string }>;
+    },
+    { refreshInterval: 5 * 60_000, shouldRetryOnError: false },
+  );
+}
+
+function CryptoFearGreedPanel({ symbol }: { symbol: string }) {
+  const { data, error } = useCryptoFearGreed();
+  if (error || !data) return null;
+
+  const score = data.score;
+  const label = data.label;
+  const norm  = data.norm ?? score / 100;
+
+  const color =
+    score <= 25 ? "text-rose-400" :
+    score <= 45 ? "text-orange-400" :
+    score <= 55 ? "text-amber-400" :
+    score <= 75 ? "text-emerald-400" : "text-green-400";
+  const bg =
+    score <= 25 ? "bg-rose-950/25 border-rose-800/40" :
+    score <= 45 ? "bg-orange-950/25 border-orange-800/40" :
+    score <= 55 ? "bg-amber-950/25 border-amber-800/40" :
+    score <= 75 ? "bg-emerald-950/25 border-emerald-800/40" : "bg-green-950/25 border-green-800/40";
+  const barColor =
+    score <= 25 ? "bg-rose-500" :
+    score <= 45 ? "bg-orange-500" :
+    score <= 55 ? "bg-amber-500" :
+    score <= 75 ? "bg-emerald-500" : "bg-green-500";
+
+  return (
+    <div className={`flex items-center gap-4 rounded-xl border px-4 py-3 ${bg}`}>
+      <span className="text-xl flex-shrink-0">😰</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 mb-1.5">
+          <span className="text-xs font-semibold text-slate-400">Crypto Fear & Greed</span>
+          <span className={`text-xs font-mono font-bold tabular-nums ${color}`}>{score}</span>
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${color}`}>{label}</span>
+        </div>
+        <div className="h-1.5 w-full rounded-full bg-slate-700/60 overflow-hidden">
+          <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${Math.round(norm * 100)}%` }} />
+        </div>
+      </div>
+      <div className="flex-shrink-0 text-right">
+        <p className="text-[10px] text-slate-600">Source: Alternative.me</p>
+        <p className="text-[10px] text-slate-600 font-mono">{symbol.toUpperCase()}</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const DISCLAIMER =
@@ -829,6 +891,19 @@ export default function DashboardPage() {
                 clickable
                 symbol={activeSymbol}
               />
+              {/* Sprint 41 — Asset class badge */}
+              {(() => {
+                const sym = activeSymbol.toUpperCase();
+                const isCrypto    = sym.endsWith("-USD") || sym.endsWith("-USDT");
+                const isCommodity = sym.endsWith("=F");
+                const isFX        = sym.endsWith("=X");
+                const isETF       = ["SPY","QQQ","IWM","GLD","TLT","EEM","VTI","IAU"].includes(sym);
+                if (isCrypto)    return <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-amber-950/40 border-amber-800/50 text-amber-400">₿ Crypto</span>;
+                if (isCommodity) return <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-yellow-950/40 border-yellow-800/50 text-yellow-400">🪨 Commodity</span>;
+                if (isFX)        return <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-sky-950/40 border-sky-800/50 text-sky-400">💱 FX</span>;
+                if (isETF)       return <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-violet-950/40 border-violet-800/50 text-violet-400">📈 ETF</span>;
+                return null;
+              })()}
             </div>
             <p className="text-sm text-slate-400">Real-time GAS, Regime, and Multi-Timeframe layers.</p>
             <div className="mt-0.5 flex flex-wrap items-center gap-4">
@@ -1030,6 +1105,16 @@ export default function DashboardPage() {
                   />
                 </div>
               </section>
+
+              {/* Sprint 41 — Crypto Fear & Greed (shown only for crypto tickers) */}
+              {(() => {
+                const sym = activeSymbol.toUpperCase();
+                const isCrypto = sym.endsWith("-USD") || sym.endsWith("-USDT");
+                if (!isCrypto) return null;
+                return (
+                  <CryptoFearGreedPanel symbol={activeSymbol} />
+                );
+              })()}
 
               {/* Row 2 – Technical Consensus */}
               <section className="tour-timeframes p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">

@@ -146,8 +146,35 @@ class Settings(BaseSettings):
     backup_dir: str = Field(default="backups", alias="BACKUP_DIR")
     ohlcv_lookback_years: int = Field(default=5, alias="OHLCV_LOOKBACK_YEARS")
     ohlcv_symbols_default: list[str] = Field(
-        default=["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "SPY", "QQQ", "NVDA"],
+        default=[
+            # Core US equities
+            "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "SPY", "QQQ", "NVDA",
+            # Sprint 41: Crypto
+            "BTC-USD", "ETH-USD",
+            # Sprint 41: Commodities
+            "GC=F",    # Gold futures
+            "CL=F",    # Crude Oil WTI futures
+            # Sprint 41: FX pairs
+            "EURUSD=X",
+            "GBPUSD=X",
+            "USDJPY=X",
+        ],
         alias="OHLCV_SYMBOLS_DEFAULT",
+    )
+
+    # Sprint 41: Asset-class classification helpers (read-only, derived constants)
+    # Used by technical_service, gas_precompute, and frontend badge logic.
+    crypto_symbols: list[str] = Field(
+        default=["BTC-USD", "ETH-USD"],
+        alias="CRYPTO_SYMBOLS",
+    )
+    commodity_symbols: list[str] = Field(
+        default=["GC=F", "CL=F", "NG=F", "ZC=F", "ZS=F"],
+        alias="COMMODITY_SYMBOLS",
+    )
+    fx_symbols: list[str] = Field(
+        default=["EURUSD=X", "GBPUSD=X", "USDJPY=X", "AUDUSD=X", "USDCHF=X"],
+        alias="FX_SYMBOLS",
     )
     rate_limit_anon: int = Field(default=30, alias="RATE_LIMIT_ANON")
     rate_limit_auth: int = Field(default=120, alias="RATE_LIMIT_AUTH")
@@ -155,6 +182,28 @@ class Settings(BaseSettings):
     feature_flags: str = Field(default="", alias="FEATURE_FLAGS")
 
     # ── Helper properties ─────────────────────────────────────────────────────
+
+    # ── Sprint 41: Asset-class helpers ──────────────────────────────────────
+
+    def asset_class(self, symbol: str) -> str:
+        """Return 'crypto', 'commodity', 'fx', or 'equity' for a given symbol."""
+        sym = symbol.upper()
+        if sym in {s.upper() for s in self.crypto_symbols}:
+            return "crypto"
+        if sym in {s.upper() for s in self.commodity_symbols}:
+            return "commodity"
+        if sym in {s.upper() for s in self.fx_symbols}:
+            return "fx"
+        return "equity"
+
+    def is_crypto(self, symbol: str) -> bool:
+        return self.asset_class(symbol) == "crypto"
+
+    def is_commodity(self, symbol: str) -> bool:
+        return self.asset_class(symbol) == "commodity"
+
+    def is_fx(self, symbol: str) -> bool:
+        return self.asset_class(symbol) == "fx"
 
     @property
     def has_finnhub(self) -> bool:

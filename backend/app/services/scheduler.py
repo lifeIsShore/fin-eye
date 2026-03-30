@@ -12,6 +12,12 @@ Jobs:
   - resolve_prediction_outcomes    – every hour at :45 (todos-v5 Phase 5.3)
   - detect_model_drift             – every hour at :50 (todos-v5 Phase 5.5)
   - run_optuna_tuning              – nightly at 01:00 UTC when ENABLE_HYPERTUNING=True (Sprint 6)
+
+Sprint 40 additions:
+  - fear_greed_fetch               – hourly at :05 (CNN + Crypto Fear & Greed)
+  - google_trends_fetch            – daily at 08:15 UTC (pytrends, geo=DE)
+  - wikipedia_pageviews_fetch      – daily at 08:30 UTC (252-day z-score)
+  - reddit_external_signals        – every 6h at 00:45/06:45/12:45/18:45
 """
 import logging
 import time
@@ -223,6 +229,162 @@ async def job_news_ttl_cleanup() -> None:
         get_metrics().record_pipeline_run("news_ttl_cleanup", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, False, str(exc))
 
 
+# ── Sprint 40: External signal jobs ─────────────────────────────────────────
+
+async def job_fear_greed_fetch() -> None:
+    """
+    Fetch CNN + Crypto Fear & Greed indexes every hour.
+    Both use free public APIs — no credentials needed.
+    """
+    from app.services.scrapers.cnn_fear_greed import CnnFearGreedFetcher        # noqa: PLC0415
+    from app.services.scrapers.crypto_fear_greed import CryptoFearGreedFetcher  # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            cnn_r    = await CnnFearGreedFetcher().fetch_and_store(session)
+            crypto_r = await CryptoFearGreedFetcher().fetch_and_store(session)
+        detail = (
+            f"cnn={cnn_r.get('score')}({cnn_r.get('label')}) "
+            f"crypto={crypto_r.get('score')}({crypto_r.get('label')})"
+        )
+        get_metrics().record_pipeline_run(
+            "fear_greed_fetch", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+        logger.info("Fear & Greed fetched: %s", detail)
+    except Exception as exc:
+        get_metrics().record_pipeline_run(
+            "fear_greed_fetch", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        logger.error("job_fear_greed_fetch failed: %s", exc)
+
+
+async def job_google_trends_fetch() -> None:
+    """
+    Fetch Google Trends weekly interest for all active ticker universe symbols.
+    Runs once daily at 08:00 UTC (after macro refresh).
+    Uses a 2s inter-request delay to respect pytrends rate limits.
+    """
+    from app.services.scrapers.google_trends import GoogleTrendsFetcher  # noqa: PLC0415
+    from app.models.bulk_ops import TickerUniverse                        # noqa: PLC0415
+    from sqlalchemy import select as sql_select                           # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        fetcher = GoogleTrendsFetcher()
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                sql_select(TickerUniverse.symbol)
+                .where(
+                    TickerUniverse.is_active == True,   # noqa: E712
+                    TickerUniverse.yf_valid.isnot(False),
+                )
+                .order_by(TickerUniverse.tr_rank.nullslast())
+                .limit(100)  # cap at 100 to stay within rate limits
+            )
+            symbols = [r[0] for r in result.fetchall()]
+            summary = await fetcher.fetch_and_store(session, symbols=symbols, geo="DE")
+        detail = f"ok={len(summary['ok'])} failed={len(summary['failed'])} skipped={len(summary['skipped'])}"
+        get_metrics().record_pipeline_run(
+            "google_trends_fetch", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+        logger.info("Google Trends batch: %s", detail)
+    except Exception as exc:
+        get_metrics().record_pipeline_run(
+            "google_trends_fetch", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        logger.error("job_google_trends_fetch failed: %s", exc)
+
+
+async def job_wikipedia_pageviews_fetch() -> None:
+    """
+    Fetch Wikipedia daily pageviews + compute 252-day z-score for all active symbols.
+    Runs once daily at 08:30 UTC (30 min after Google Trends to avoid concurrent HTTP load).
+    """
+    from app.services.scrapers.wikipedia_pageviews import WikipediaPageviewsFetcher  # noqa: PLC0415
+    from app.models.bulk_ops import TickerUniverse                                    # noqa: PLC0415
+    from sqlalchemy import select as sql_select                                       # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        fetcher = WikipediaPageviewsFetcher()
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                sql_select(TickerUniverse.symbol)
+                .where(
+                    TickerUniverse.is_active == True,   # noqa: E712
+                    TickerUniverse.yf_valid.isnot(False),
+                )
+                .order_by(TickerUniverse.tr_rank.nullslast())
+                .limit(200)
+            )
+            symbols = [r[0] for r in result.fetchall()]
+            summary = await fetcher.fetch_and_store(session, symbols=symbols)
+        detail = f"ok={len(summary['ok'])} failed={len(summary['failed'])} skipped={len(summary['skipped'])}"
+        get_metrics().record_pipeline_run(
+            "wikipedia_pageviews_fetch", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+        logger.info("Wikipedia pageviews batch: %s", detail)
+    except Exception as exc:
+        get_metrics().record_pipeline_run(
+            "wikipedia_pageviews_fetch", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        logger.error("job_wikipedia_pageviews_fetch failed: %s", exc)
+
+
+async def job_reddit_external_signals() -> None:
+    """
+    Compute Reddit mention volume + sentiment for all active symbols and
+    persist in external_signals. Runs every 6 hours.
+    Gracefully falls back to zero-signal rows when Reddit credentials are absent.
+    """
+    from app.services.reddit_service import RedditService   # noqa: PLC0415
+    from app.models.bulk_ops import TickerUniverse          # noqa: PLC0415
+    from sqlalchemy import select as sql_select             # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        svc = RedditService()
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                sql_select(TickerUniverse.symbol)
+                .where(
+                    TickerUniverse.is_active == True,   # noqa: E712
+                    TickerUniverse.yf_valid.isnot(False),
+                )
+                .order_by(TickerUniverse.tr_rank.nullslast())
+                .limit(50)  # Reddit search is slow — cap per run
+            )
+            symbols = [r[0] for r in result.fetchall()]
+            summary = await svc.fetch_and_store_external_signals(session, symbols=symbols)
+        detail = f"ok={len(summary['ok'])} failed={len(summary['failed'])}"
+        get_metrics().record_pipeline_run(
+            "reddit_external_signals", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+        logger.info("Reddit external signals: %s", detail)
+    except Exception as exc:
+        get_metrics().record_pipeline_run(
+            "reddit_external_signals", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+        logger.error("job_reddit_external_signals failed: %s", exc)
+
+
 # ── todos-v5 Phase 5.3 — Prediction outcome resolver ─────────────────────────
 
 async def job_resolve_prediction_outcomes() -> None:
@@ -409,6 +571,30 @@ def setup_scheduler() -> AsyncIOScheduler:
         trigger=CronTrigger(hour=2, minute=0),
         id="backup_db", name="PostgreSQL DB Backup",
         replace_existing=True, misfire_grace_time=3600)
+
+    # Sprint 40 — Fear & Greed: hourly (both CNN and Crypto, same job, free APIs)
+    scheduler.add_job(job_fear_greed_fetch,
+        trigger=CronTrigger(minute=5),  # at :05 every hour
+        id="fear_greed_fetch", name="CNN + Crypto Fear & Greed Fetch",
+        replace_existing=True, misfire_grace_time=300)
+
+    # Sprint 40 — Google Trends: daily at 08:00 UTC (right after macro refresh)
+    scheduler.add_job(job_google_trends_fetch,
+        trigger=CronTrigger(hour=8, minute=15),
+        id="google_trends_fetch", name="Google Trends Daily Fetch",
+        replace_existing=True, misfire_grace_time=3600)
+
+    # Sprint 40 — Wikipedia pageviews: daily at 08:30 UTC
+    scheduler.add_job(job_wikipedia_pageviews_fetch,
+        trigger=CronTrigger(hour=8, minute=30),
+        id="wikipedia_pageviews_fetch", name="Wikipedia Pageviews Daily Fetch",
+        replace_existing=True, misfire_grace_time=3600)
+
+    # Sprint 40 — Reddit external signals: every 6 hours
+    scheduler.add_job(job_reddit_external_signals,
+        trigger=CronTrigger(hour="0,6,12,18", minute=45),
+        id="reddit_external_signals", name="Reddit External Signals (6h)",
+        replace_existing=True, misfire_grace_time=1800)
 
     # todos-v5 Phase 5.3 — Prediction outcome resolver, every hour at :45
     scheduler.add_job(job_resolve_prediction_outcomes,

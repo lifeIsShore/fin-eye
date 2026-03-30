@@ -218,21 +218,135 @@ def engineer_features(df: pd.DataFrame, horizon: int = DEFAULT_HORIZON) -> pd.Da
     vol_ma20          = volume.rolling(20).mean().replace(0, 1e-9)
     d["volume_ratio"] = volume / vol_ma20
 
+    # Sprint 41: Seasonal features (sin/cos encoding of day-of-week + month)
+    # Especially useful for commodity futures (seasonal price patterns).
+    day_of_week = pd.Series(d.index.dayofweek if hasattr(d.index, 'dayofweek') else 0, index=d.index, dtype=float)
+    month_of_year = pd.Series(d.index.month if hasattr(d.index, 'month') else 1, index=d.index, dtype=float)
+    import math  # noqa: PLC0415
+    d["sin_dow"]   = (day_of_week   * (2 * math.pi / 5)).apply(math.sin)
+    d["cos_dow"]   = (day_of_week   * (2 * math.pi / 5)).apply(math.cos)
+    d["sin_month"] = (month_of_year * (2 * math.pi / 12)).apply(math.sin)
+    d["cos_month"] = (month_of_year * (2 * math.pi / 12)).apply(math.cos)
+
+    # Sprint 41: FX interest rate differential feature
+    # Injected as `fx_rate_diff` by inject_external_features() for FX pairs;
+    # zero-filled here for non-FX symbols so FEATURES list is always satisfiable.
+    if "fx_rate_diff" not in d.columns:
+        d["fx_rate_diff"] = 0.0
+    else:
+        d["fx_rate_diff"] = d["fx_rate_diff"].ffill().fillna(0.0)
+
+    # Sprint 40: External signal features (forward-filled; zero when absent)
+    # These columns are joined in by inject_external_features() before training.
+    # Filling here ensures the FEATURES list is always satisfiable.
+    for _ext_col in [
+        "fear_greed_norm", "crypto_fear_greed_norm", "google_trends_norm",
+        "reddit_mentions_norm", "reddit_sentiment_norm", "wikipedia_attention_zscore",
+    ]:
+        if _ext_col not in d.columns:
+            d[_ext_col] = 0.0
+        else:
+            d[_ext_col] = d[_ext_col].ffill().fillna(0.0)
+
     # Target
     d["target_ret_fwd"] = close.shift(-horizon) / close - 1
     d["target"]         = (d["target_ret_fwd"] > 0).astype(int)
 
-    d.dropna(inplace=True)
+    d.dropna(subset=["ret_1", "rsi_14", "target"], inplace=True)
     return d
 
 
+def inject_external_features(
+    df: pd.DataFrame,
+    symbol: str,
+    ext_rows: list[dict],
+) -> pd.DataFrame:
+    """
+    Sprint 40 — Join external signal readings onto a price DataFrame.
+
+    `ext_rows` is a list of dicts with keys:
+        {signal_name, value, fetched_at}  (from ExternalSignal table)
+
+    The function builds a time-indexed Series for each signal name, then
+    reindexes to the price DataFrame's DatetimeIndex, forward-fills, and
+    zero-fills any remaining NaN.  Crypto-specific signals are injected
+    only for crypto tickers.
+
+    Usage in technical_service.py / bulk_seed_service.py:
+        from app.services.ml_pipeline import inject_external_features, _EXTERNAL_FEATURE_COLS
+        # ... query external_signals rows for this symbol ...
+        df = inject_external_features(df, symbol, ext_rows)
+        df = engineer_features(df, horizon=horizon)
+    """
+    from app.services.scrapers.crypto_fear_greed import is_crypto  # noqa: PLC0415
+
+    if df.empty or not ext_rows:
+        # Nothing to inject — engineer_features will zero-fill
+        return df
+
+    d = df.copy()
+
+    # Group rows by signal_name
+    by_name: dict[str, list[tuple]] = {}
+    for row in ext_rows:
+        name = row.get("signal_name", "")
+        ts   = row.get("fetched_at")
+        val  = row.get("value")
+        if name and ts is not None and val is not None:
+            by_name.setdefault(name, []).append((ts, float(val)))
+
+    # Build per-signal Series and reindex to price index
+    idx = d.index  # DatetimeIndex
+    for signal_name, readings in by_name.items():
+        # Skip crypto-only signals for non-crypto tickers
+        if signal_name == "crypto_fear_greed_norm" and not is_crypto(symbol):
+            continue
+        try:
+            ts_vals = sorted(readings, key=lambda x: x[0])
+            s = pd.Series(
+                {ts: v for ts, v in ts_vals},
+                name=signal_name,
+            )
+            s.index = pd.to_datetime(s.index, utc=True)
+            # Reindex to price bars, forward-fill, zero-fill any leading NaN
+            aligned = s.reindex(idx.tz_convert("UTC") if idx.tz else idx, method="ffill")
+            aligned = aligned.ffill().fillna(0.0)
+            d[signal_name] = aligned.values
+        except Exception:
+            # If injection fails for any signal, just leave column absent (zero-filled later)
+            pass
+
+    return d
+
+
+# External signal column names (Sprint 40) - separate constant so callers can reference them
+_EXTERNAL_FEATURE_COLS = [
+    "fear_greed_norm",
+    "crypto_fear_greed_norm",
+    "google_trends_norm",
+    "reddit_mentions_norm",
+    "reddit_sentiment_norm",
+    "wikipedia_attention_zscore",
+]
+
 FEATURES = [
+    # Core price/momentum/technicals
     "ret_1", "ret_3", "ret_5",
     "sma_cross_10_20", "sma_cross_20_50", "price_vs_sma50",
     "rsi_14", "macd", "macd_hist",
     "bb_width", "bb_pb", "atr_pct",
     "mom_10", "mom_20",
     "volume_ratio",
+    # External signals (Sprint 40) - zero-filled when external_signals table is empty
+    "fear_greed_norm",
+    "google_trends_norm",
+    "reddit_mentions_norm",
+    "reddit_sentiment_norm",
+    "wikipedia_attention_zscore",
+    # Seasonal encoding (Sprint 41) - always computed from the DatetimeIndex
+    "sin_dow", "cos_dow", "sin_month", "cos_month",
+    # FX interest rate differential (Sprint 41) - zero for non-FX symbols
+    "fx_rate_diff",
 ]
 
 
@@ -400,6 +514,191 @@ class LightGBMWrapper:
         return self.model.predict_proba(X[FEATURES])
 
 
+class LSTMWrapper:
+    """
+    Sprint 41 — LSTM with attention as 4th competing model (todos-v3 §18).
+
+    Architecture:
+      - Input: sequence of 20 consecutive feature vectors (seq_len=20)
+      - Bidirectional LSTM (hidden=64, 2 layers)
+      - Additive (Bahdanau) attention over time steps
+      - Linear classifier head → sigmoid probability
+
+    Training:
+      - Binary cross-entropy with class-weight balancing
+      - Adam, lr=1e-3, up to 30 epochs with early stopping (patience=5)
+      - Runs in CPU mode (no GPU required); ~10–30s per symbol/timeframe
+
+    Disqualified by the same accuracy/Sharpe gates as all other models.
+    Falls back gracefully if PyTorch is not installed.
+    """
+    name = "lstm_attention"
+    SEQ_LEN = 20
+    HIDDEN  = 64
+    LAYERS  = 2
+    EPOCHS  = 30
+    PATIENCE = 5
+
+    def __init__(self, n_positive: int = 1, n_negative: int = 1):
+        self._pos_weight = float(max(1.0, n_negative / max(n_positive, 1)))
+        self._model      = None
+        self._scaler     = StandardScaler()
+        self._available  = self._check_torch()
+
+    @staticmethod
+    def _check_torch() -> bool:
+        try:
+            import torch  # noqa: PLC0415
+            return True
+        except ImportError:
+            logger.warning("PyTorch not installed — LSTMWrapper will be skipped")
+            return False
+
+    # ── Build model ───────────────────────────────────────────────────────────
+
+    def _build_model(self, n_features: int):
+        try:
+            import torch  # noqa: PLC0415
+            import torch.nn as nn  # noqa: PLC0415
+
+            class _AttentionLSTM(nn.Module):
+                def __init__(self, n_feat: int, hidden: int, layers: int):
+                    super().__init__()
+                    self.lstm = nn.LSTM(
+                        input_size=n_feat, hidden_size=hidden,
+                        num_layers=layers, batch_first=True,
+                        dropout=0.2, bidirectional=True,
+                    )
+                    self.attn  = nn.Linear(hidden * 2, 1)
+                    self.head  = nn.Sequential(
+                        nn.Linear(hidden * 2, 32),
+                        nn.ReLU(),
+                        nn.Dropout(0.3),
+                        nn.Linear(32, 1),
+                    )
+
+                def forward(self, x):                   # x: (B, T, F)
+                    out, _ = self.lstm(x)               # (B, T, H*2)
+                    score  = self.attn(out).squeeze(-1) # (B, T)
+                    weight = torch.softmax(score, dim=1).unsqueeze(-1)  # (B, T, 1)
+                    ctx    = (out * weight).sum(dim=1)  # (B, H*2)
+                    return self.head(ctx).squeeze(-1)   # (B,)
+
+            return _AttentionLSTM(n_features, self.HIDDEN, self.LAYERS)
+        except Exception as e:
+            logger.warning("Could not build LSTM model: %s", e)
+            return None
+
+    # ── Sequence builder ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def _make_sequences(X: np.ndarray, y: np.ndarray, seq_len: int):
+        """Slide a window of seq_len over rows; each sample predicts y[t+seq_len-1]."""
+        xs, ys = [], []
+        for i in range(len(X) - seq_len):
+            xs.append(X[i: i + seq_len])
+            ys.append(y[i + seq_len - 1])
+        return np.array(xs, dtype=np.float32), np.array(ys, dtype=np.float32)
+
+    # ── fit ───────────────────────────────────────────────────────────────────
+
+    def fit(self, X_df, y):
+        if not self._available:
+            raise RuntimeError("PyTorch not installed")
+
+        import torch  # noqa: PLC0415
+        import torch.nn as nn  # noqa: PLC0415
+
+        X_raw = X_df[FEATURES].values
+        y_arr = y.values if hasattr(y, "values") else np.array(y)
+
+        # Scale features
+        X_scaled = self._scaler.fit_transform(X_raw)
+
+        # Build sequences
+        X_seq, y_seq = self._make_sequences(X_scaled, y_arr, self.SEQ_LEN)
+        if len(X_seq) < 50:
+            raise ValueError(f"Not enough rows for LSTM sequences (got {len(X_seq)}, need ≥50)")
+
+        n_feat = X_seq.shape[2]
+        model  = self._build_model(n_feat)
+        if model is None:
+            raise RuntimeError("LSTM model construction failed")
+
+        # Class-weighted BCE
+        pos_w    = torch.tensor([self._pos_weight])
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_w)
+        optim    = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+        X_t = torch.from_numpy(X_seq)
+        y_t = torch.from_numpy(y_seq)
+
+        best_loss = float("inf")
+        patience  = 0
+        best_state: Optional[dict] = None
+
+        model.train()
+        for epoch in range(self.EPOCHS):
+            optim.zero_grad()
+            logits = model(X_t)
+            loss   = criterion(logits, y_t)
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optim.step()
+
+            val_loss = loss.item()
+            if val_loss < best_loss - 1e-4:
+                best_loss  = val_loss
+                patience   = 0
+                best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            else:
+                patience += 1
+                if patience >= self.PATIENCE:
+                    logger.debug("LSTM early stop at epoch %d", epoch)
+                    break
+
+        if best_state:
+            model.load_state_dict(best_state)
+        model.eval()
+        self._model = model
+
+    # ── predict_proba ─────────────────────────────────────────────────────────
+
+    def predict_proba(self, X_df) -> np.ndarray:
+        if not self._available or self._model is None:
+            raise RuntimeError("LSTM model not fitted")
+
+        import torch  # noqa: PLC0415
+
+        X_raw    = X_df[FEATURES].values
+        X_scaled = self._scaler.transform(X_raw)
+        n        = len(X_scaled)
+
+        # Build sequences; pad the first (SEQ_LEN-1) rows by repeating the first seq
+        probs_out = np.full(n, 0.5, dtype=np.float32)
+
+        if n < self.SEQ_LEN:
+            # Not enough rows — return neutral 0.5 for everything
+            return np.column_stack([1 - probs_out, probs_out])
+
+        # Build sliding-window sequences for the full X
+        seqs = []
+        for i in range(n):
+            start = max(0, i - self.SEQ_LEN + 1)
+            chunk = X_scaled[start: i + 1]
+            if len(chunk) < self.SEQ_LEN:
+                # Pad by repeating first row
+                pad   = np.repeat(chunk[:1], self.SEQ_LEN - len(chunk), axis=0)
+                chunk = np.vstack([pad, chunk])
+            seqs.append(chunk)
+
+        X_t = torch.from_numpy(np.array(seqs, dtype=np.float32))
+        with torch.no_grad():
+            logits = self._model(X_t).numpy()
+        probs_pos = 1.0 / (1.0 + np.exp(-logits))  # sigmoid
+        return np.column_stack([1 - probs_pos, probs_pos])
+
+
 class EnsembleWrapper:
     """
     Sprint 3 — Soft-voting ensemble.
@@ -532,10 +831,12 @@ def run_training_pipeline(
     returns_val = val_df["target_ret_fwd"].values
 
     # ── Base model definitions — Prophet intentionally absent ─────────────────
+    # Sprint 41: LSTMWrapper added as 4th competing model
     base_model_defs: Dict[str, Any] = {
-        "logistic": LogisticWrapper(),
-        "xgboost":  XGBoostWrapper(n_positive=n_pos, n_negative=n_neg),
-        "lightgbm": LightGBMWrapper(n_positive=n_pos, n_negative=n_neg),
+        "logistic":       LogisticWrapper(),
+        "xgboost":        XGBoostWrapper(n_positive=n_pos, n_negative=n_neg),
+        "lightgbm":       LightGBMWrapper(n_positive=n_pos, n_negative=n_neg),
+        "lstm_attention": LSTMWrapper(n_positive=n_pos, n_negative=n_neg),
     }
     results:      Dict[str, Dict] = {}
     fitted_models: Dict[str, Any] = {}
@@ -556,7 +857,7 @@ def run_training_pipeline(
                 "features": ",".join(FEATURES),
                 "min_sharpe_gate": MIN_WINNER_SHARPE,
                 "min_acc_gate":    MIN_WINNER_ACCURACY,
-                "models_competing": "logistic,xgboost,lightgbm,ensemble",
+                "models_competing": "logistic,xgboost,lightgbm,lstm_attention,ensemble",
                 "prophet_removed":  "true",
             })
 

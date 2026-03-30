@@ -280,3 +280,78 @@ async def refresh_macro_data(db: AsyncSession = Depends(get_db)) -> dict:
             detail=str(exc),
         ) from exc
     return {"status": "accepted", "message": "Macro data refreshed successfully."}
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# GET /fear-greed/cnn + /fear-greed/crypto  (Sprint 40)
+# ───────────────────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/fear-greed/cnn",
+    summary="CNN Fear & Greed Index — latest reading (Sprint 40)",
+)
+async def get_cnn_fear_greed(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Returns the most recently stored CNN Fear & Greed score from the
+    `external_signals` table. Falls back to a live fetch on first call
+    (before the hourly cron has populated the table).
+
+    Response schema:
+        score      float  0–100
+        label      str    e.g. "Greed", "Extreme Fear"
+        norm       float  0.0–1.0
+        fetched_at str    ISO-8601 timestamp
+        source     str    "cache" | "live"
+    """
+    from app.services.scrapers.cnn_fear_greed import CnnFearGreedFetcher  # noqa: PLC0415
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    fetcher = CnnFearGreedFetcher()
+    cached  = await fetcher.get_latest(db)
+    if cached:
+        return {**cached, "source": "cache"}
+    # First call before cron has run — fetch live and store
+    result = await fetcher.fetch_and_store(db)
+    if not result.get("stored"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CNN Fear & Greed index is temporarily unavailable.",
+        )
+    return {**result, "source": "live"}
+
+
+@router.get(
+    "/fear-greed/crypto",
+    summary="Crypto Fear & Greed Index — latest reading (Sprint 40)",
+)
+async def get_crypto_fear_greed(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Returns the most recently stored Crypto Fear & Greed score from the
+    `external_signals` table (Alternative.me API). Falls back to live fetch
+    on first call.
+
+    Response schema:
+        score      float  0–100
+        label      str    e.g. "Fear", "Greed"
+        norm       float  0.0–1.0
+        fetched_at str    ISO-8601 timestamp
+        source     str    "cache" | "live"
+    """
+    from app.services.scrapers.crypto_fear_greed import CryptoFearGreedFetcher  # noqa: PLC0415
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    fetcher = CryptoFearGreedFetcher()
+    cached  = await fetcher.get_latest(db)
+    if cached:
+        return {**cached, "source": "cache"}
+    result = await fetcher.fetch_and_store(db)
+    if not result.get("stored"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Crypto Fear & Greed index is temporarily unavailable.",
+        )
+    return {**result, "source": "live"}

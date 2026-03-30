@@ -394,23 +394,30 @@ alembic upgrade head
 
 ---
 
-## Sprint 40 — Planned
+## ✅ Sprint 40 — Complete
 
 **Sources:** `todos-v4.md` Phase 6 Tier 1 (external data sources — first wave)
 
-### Deliverables
-- [ ] **CNN Fear & Greed Index scraper** — `backend/app/services/external/cnn_fear_greed.py` (NEW): polls `https://production.dataviz.cnn.io/index/fearandgreed/graphdata` hourly; stores 0-100 score in a new `external_signals` table (`source`, `signal_name`, `value`, `fetched_at`); exposes `GET /api/v1/macro/fear-greed/cnn`; `fear_greed_norm` feature added to all tickers in `engineer_features()`. Closes `todos-v4 Phase 6 #1`.
-- [ ] **Crypto Fear & Greed Index** — `backend/app/services/external/crypto_fear_greed.py` (NEW): polls `https://api.alternative.me/fng/` hourly; stores in `external_signals`; exposes `GET /api/v1/macro/fear-greed/crypto`; `crypto_fear_greed_norm` feature added to crypto tickers only (BTC-USD, ETH-USD). Closes `todos-v4 Phase 6 #2`.
-- [ ] **Google Trends via pytrends** — `backend/app/services/external/google_trends.py` (NEW): fetches weekly relative search interest (0-100) per ticker via `pytrends`; `geo='DE'` for TR DE stocks; stores in `external_signals`; `google_trends_norm` feature in `engineer_features()`; cron: daily at 08:00 UTC. Closes `todos-v4 Phase 6 #3`.
-- [ ] **Reddit sentiment extension** — `backend/app/services/reddit_service.py` (extend existing): add r/de and r/aktien to existing subreddit list; compute `reddit_mentions_norm` and `reddit_sentiment_norm` per ticker per 24h; store in `external_signals`; cron every 6h. Closes `todos-v4 Phase 6 #4`.
-- [ ] **Wikipedia pageviews feature** — `backend/app/services/external/wikipedia_pageviews.py` (NEW): daily article view count per company Wikipedia page; z-score vs 252-day mean → `wikipedia_attention_zscore`; unusual attention (z > 2) flagged; added to `engineer_features()`; cron: daily. Closes `todos-v4 Phase 6 #5`.
-- [ ] **`external_signals` DB table** — Alembic migration: `source VARCHAR(30)`, `symbol VARCHAR(20)`, `signal_name VARCHAR(50)`, `value FLOAT`, `raw_json JSONB`, `fetched_at TIMESTAMP`; index on `(symbol, signal_name, fetched_at DESC)`.
+### Delivered
+- [x] **`external_signals` DB table** — `app/models/external_signal.py` (NEW): `ExternalSignal` ORM model; `alembic/versions/s40_001_external_signals.py` migration from head `5e66ab23ac8b`; columns: `source`, `symbol`, `signal_name`, `value`, `raw_json` (JSONB), `fetched_at`; indexes on `(symbol, signal_name, fetched_at)` + `(source, fetched_at)`. Registered in `models/__init__.py`. Closes `todos-v4 Phase 6 table`.
+- [x] **CNN Fear & Greed scraper** — `app/services/scrapers/cnn_fear_greed.py` (NEW): `CnnFearGreedFetcher` polls `production.dataviz.cnn.io` hourly; stores `fear_greed_score` (0-100) + `fear_greed_norm` (0-1); `get_latest()` for cache reads. Closes `todos-v4 Phase 6 #1`.
+- [x] **Crypto Fear & Greed scraper** — `app/services/scrapers/crypto_fear_greed.py` (NEW): `CryptoFearGreedFetcher` polls Alternative.me API; stores `crypto_fear_greed_score` + `crypto_fear_greed_norm`; `is_crypto()` helper used by ML pipeline. Closes `todos-v4 Phase 6 #2`.
+- [x] **Google Trends scraper** — `app/services/scrapers/google_trends.py` (NEW): `GoogleTrendsFetcher` via pytrends; 2s inter-request delay; geo=DE default with worldwide fallback; stores `google_trends_interest` + `google_trends_norm`; runs in executor (blocking). Closes `todos-v4 Phase 6 #3`.
+- [x] **Reddit sentiment extension** — `app/services/reddit_service.py` extended: added r/de + r/aktien to subreddit list; new `fetch_and_store_external_signals()` async method stores `reddit_mentions`, `reddit_mentions_norm`, `reddit_sentiment_norm` per ticker. Original API fully backward-compatible. Closes `todos-v4 Phase 6 #4`.
+- [x] **Wikipedia pageviews scraper** — `app/services/scrapers/wikipedia_pageviews.py` (NEW): `WikipediaPageviewsFetcher` uses Wikimedia REST API; fetches 252 days of daily views; computes z-score; stores `wikipedia_views` + `wikipedia_attention_zscore`; 20+ company article mappings. Closes `todos-v4 Phase 6 #5`.
+- [x] **ML pipeline external features** — `ml_pipeline.py`: `engineer_features()` now accepts + zero-fills 6 external columns; `inject_external_features(df, symbol, ext_rows)` helper joins `external_signals` rows onto price DataFrame (forward-fill, crypto-gating); `_EXTERNAL_FEATURE_COLS` constant; `FEATURES` list extended with 5 new columns (`crypto_fear_greed_norm` excluded — injected only via `inject_external_features` to avoid training on all-zero rows for non-crypto tickers). Closes `todos-v4 Phase 6 ML`.
+- [x] **Macro endpoints** — `macro.py`: `GET /api/v1/macro/fear-greed/cnn` and `/macro/fear-greed/crypto` (cache-first, live fallback on first call, `Cache-Control: max-age=300`). Closes `todos-v4 Phase 6 #1-2 endpoints`.
+- [x] **Scheduler cron jobs** — `scheduler.py`: `job_fear_greed_fetch` (hourly :05), `job_google_trends_fetch` (daily 08:15), `job_wikipedia_pageviews_fetch` (daily 08:30), `job_reddit_external_signals` (every 6h at :45). All fully metrics-instrumented.
+- [x] **`beautifulsoup4>=4.12.0`** added to `requirements.txt` (pre-req for Sprint 42).
+- [x] `app/services/scrapers/__init__.py` package init created.
 
-### Dependencies
+### Activate (run once)
 ```bash
-pip install pytrends praw beautifulsoup4
-alembic revision --autogenerate -m "add_external_signals"
-alembic upgrade head
+cd backend
+alembic upgrade head               # applies s40_001_external_signals
+pip install beautifulsoup4         # only new dep not already installed
+# Fear & Greed data starts flowing immediately at next :05 mark
+# Google Trends + Wikipedia + Reddit flow starting next morning at 08:15 UTC
 ```
 
 ---

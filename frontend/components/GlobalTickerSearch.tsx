@@ -30,6 +30,32 @@ interface SymbolResult {
     trained:     boolean;
 }
 
+// Sprint 41 — Classify a symbol into an asset class for grouped display
+function classifySymbol(symbol: string): "crypto" | "commodity" | "fx" | "etf" | "equity" {
+    const s = symbol.toUpperCase();
+    if (s.endsWith("-USD") || s.endsWith("-USDT")) return "crypto";
+    if (s.endsWith("=F"))                           return "commodity";
+    if (s.endsWith("=X"))                           return "fx";
+    if (["SPY","QQQ","IWM","GLD","TLT","EEM","VTI","IAU","VXX","UVXY"].includes(s)) return "etf";
+    return "equity";
+}
+
+const CLASS_LABEL: Record<string, string> = {
+    equity:    "Equities",
+    etf:       "ETFs",
+    crypto:    "Crypto",
+    commodity: "Commodities",
+    fx:        "Forex",
+};
+
+const CLASS_COLOR: Record<string, string> = {
+    equity:    "text-slate-500",
+    etf:       "text-violet-500",
+    crypto:    "text-amber-500",
+    commodity: "text-yellow-500",
+    fx:        "text-sky-500",
+};
+
 async function fetchSymbolSearch(query: string, limit = 8): Promise<SymbolResult[]> {
     if (!query.trim()) return [];
     try {
@@ -177,53 +203,75 @@ export function GlobalTickerSearch() {
                             <Loader2 className="h-3 w-3 animate-spin" />
                             Searching…
                         </div>
-                    ) : (
-                        results.map((item, idx) => (
-                            <button
-                                key={item.symbol}
-                                role="option"
-                                aria-selected={idx === activeIdx}
-                                type="button"
-                                onMouseEnter={() => setActiveIdx(idx)}
-                                onMouseDown={() => commit(item.symbol)}
-                                className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors ${
-                                    idx === activeIdx
-                                        ? "bg-slate-800"
-                                        : "hover:bg-slate-800/60"
-                                }`}
-                            >
-                                {/* Symbol */}
-                                <div className="flex-shrink-0 w-16">
-                                    <span className={`text-sm font-bold ${
-                                        item.symbol === symbol ? "text-sky-400" : "text-slate-100"
-                                    }`}>
-                                        {item.symbol}
-                                    </span>
-                                </div>
+                    ) : (() => {
+                        // Sprint 41 — Group results by asset class
+                        type AssetClass = "crypto" | "commodity" | "fx" | "etf" | "equity";
+                        const CLASS_ORDER: AssetClass[] = ["equity", "etf", "crypto", "commodity", "fx"];
+                        const grouped: Record<AssetClass, (SymbolResult & { _origIdx: number })[]> = {
+                            equity: [], etf: [], crypto: [], commodity: [], fx: [],
+                        };
+                        results.forEach((item, idx) => {
+                            const cls = classifySymbol(item.symbol) as AssetClass;
+                            grouped[cls].push({ ...item, _origIdx: idx });
+                        });
 
-                                {/* Description + meta */}
-                                <div className="flex-1 min-w-0">
-                                    {item.description && (
-                                        <p className="text-xs text-slate-400 truncate leading-tight">
-                                            {item.description}
-                                        </p>
-                                    )}
-                                    {(item.type || item.exchange) && (
-                                        <p className="text-[10px] text-slate-600 leading-tight">
-                                            {[item.type, item.exchange].filter(Boolean).join(" · ")}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* Trained badge */}
-                                {item.trained && (
-                                    <span className="flex-shrink-0 text-[9px] text-emerald-400 bg-emerald-950/50 border border-emerald-800/40 rounded px-1.5 py-0.5 font-medium">
-                                        trained
-                                    </span>
-                                )}
-                            </button>
-                        ))
-                    )}
+                        const rows: React.ReactNode[] = [];
+                        for (const cls of CLASS_ORDER) {
+                            const items = grouped[cls];
+                            if (!items.length) continue;
+                            // Group header — only shown when ≥2 different classes present
+                            const totalClasses = CLASS_ORDER.filter(c => grouped[c].length > 0).length;
+                            if (totalClasses > 1) {
+                                rows.push(
+                                    <div key={`hdr-${cls}`} className={`px-3 pt-2 pb-0.5 text-[9px] font-bold uppercase tracking-widest ${CLASS_COLOR[cls]}`}>
+                                        {CLASS_LABEL[cls]}
+                                    </div>
+                                );
+                            }
+                            for (const item of items) {
+                                const idx = item._origIdx;
+                                rows.push(
+                                    <button
+                                        key={item.symbol}
+                                        role="option"
+                                        aria-selected={idx === activeIdx}
+                                        type="button"
+                                        onMouseEnter={() => setActiveIdx(idx)}
+                                        onMouseDown={() => commit(item.symbol)}
+                                        className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors ${
+                                            idx === activeIdx ? "bg-slate-800" : "hover:bg-slate-800/60"
+                                        }`}
+                                    >
+                                        <div className="flex-shrink-0 w-16">
+                                            <span className={`text-sm font-bold ${
+                                                item.symbol === symbol ? "text-sky-400" : "text-slate-100"
+                                            }`}>
+                                                {item.symbol}
+                                            </span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            {item.description && (
+                                                <p className="text-xs text-slate-400 truncate leading-tight">
+                                                    {item.description}
+                                                </p>
+                                            )}
+                                            {(item.type || item.exchange) && (
+                                                <p className="text-[10px] text-slate-600 leading-tight">
+                                                    {[item.type, item.exchange].filter(Boolean).join(" · ")}
+                                                </p>
+                                            )}
+                                        </div>
+                                        {item.trained && (
+                                            <span className="flex-shrink-0 text-[9px] text-emerald-400 bg-emerald-950/50 border border-emerald-800/40 rounded px-1.5 py-0.5 font-medium">
+                                                trained
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            }
+                        }
+                        return rows;
+                    })()}
                 </div>
             )}
         </div>
