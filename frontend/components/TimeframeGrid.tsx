@@ -145,10 +145,12 @@ function ConsensusSummary({ signals }: { signals: TechnicalSignalDto[] }) {
 
 function TimeframeDetailPanel({
     signal,
+    symbol,
     onClose,
     onOpenModelDetails,
 }: {
     signal:               TechnicalSignalDto | null;
+    symbol?:              string;
     onClose:              () => void;
     onOpenModelDetails:   () => void;
 }) {
@@ -223,9 +225,9 @@ function TimeframeDetailPanel({
                                     </div>
                                 </div>
                                 <div className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
-                                    confInfo.label === "Very High" ? "bg-emerald-950/30 border-emerald-800/40" :
-                                    confInfo.label === "High"      ? "bg-sky-950/30 border-sky-800/40" :
-                                    confInfo.label === "Moderate"  ? "bg-amber-950/30 border-amber-800/40" :
+                                    confInfo.label === "Strong signal" ? "bg-emerald-950/30 border-emerald-800/40" :
+                                    confInfo.label === "Moderate signal" ? "bg-sky-950/30 border-sky-800/40" :
+                                    confInfo.label === "Weak signal" || confInfo.label === "Uncertain" ? "bg-amber-950/30 border-amber-800/40" :
                                     "bg-slate-800/40 border-slate-700/40"
                                 }`}>
                                     <span className={`text-xs font-bold ${confInfo.color}`}>{confInfo.label} Confidence</span>
@@ -457,6 +459,7 @@ export default function TimeframeGrid({ signals, symbol }: TimeframeGridProps) {
             {/* Signal detail slide-over */}
             <TimeframeDetailPanel
                 signal={selectedSignal}
+                symbol={symbol}
                 onClose={() => setSelectedSignal(null)}
                 onOpenModelDetails={() => setModelDetailsPanelOpen(true)}
             />

@@ -430,6 +430,7 @@ export default function IndicatorsPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <ProGate feature="Indicator Builder">
+        <>
         <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
 
         {/* Header */}
@@ -687,7 +688,7 @@ export default function IndicatorsPage() {
         </p>
       </div>
 
-      {/* ── Save modal ──────────────────────────────────────────────────────── */}
+        {/* ── Save modal ──────────────────────────────────────────────────────── */}
       {saveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-6 space-y-4 shadow-2xl mx-4">
@@ -731,7 +732,8 @@ export default function IndicatorsPage() {
             </div>
           </div>
         </div>
-      </div>
+      )}
+        </>
       </ProGate>
     </div>
   );

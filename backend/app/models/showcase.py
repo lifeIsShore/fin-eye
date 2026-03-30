@@ -22,6 +22,9 @@ class ShowcaseProduct(Base):
     price_label = Column(String(80), nullable=False, default="Free")
     # Where the "Buy now" / "View" button sends the user
     external_url = Column(String(500), nullable=False)
+    preview_url = Column(String(500), nullable=True)
+    is_bundle   = Column(Boolean, nullable=False, default=False)
+    bundle_items= Column(JSON, nullable=False, default=list)
     is_active   = Column(Boolean, nullable=False, default=True)
     sort_order  = Column(Integer, nullable=False, default=100)
 
@@ -44,3 +47,15 @@ class ShowcaseClick(Base):
     event_type    = Column(String(20), nullable=False)   # view | detail | outbound
     anon_user_id  = Column(String(64), nullable=True)    # anonymised, optional
     created_at    = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+class FeatureInterest(Base):
+    """
+    Records when a user clicks 'Notify Me' on a coming-soon or pro feature.
+    """
+    __tablename__ = "feature_interests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    email = Column(String(255), nullable=True)
+    feature_name = Column(String(100), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

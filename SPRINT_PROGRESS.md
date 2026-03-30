@@ -355,23 +355,23 @@ pip install transformers torch     # optional — falls back to VADER without it
 
 ---
 
-## Sprint 38: Monetisation & Pro Features (v4.3) [In Progress]
+## ✅ Sprint 38: Monetisation & Pro Features (v4.3)
 Goal: UX transitions from "free everything" to a tiered model with a 7-day trial.
 
 ### Delivered
 - [x] **Pro gate with lock icon** (🔒 overlay).
-    - [ ] Apply to: Walk-Forward panel (backtesting)
-    - [ ] Apply to: AI Allocator (portfolios)
-    - [/ ] Apply to: Fed Policy page (Imported but not wrapping content)
-    - [/ ] Apply to: Advanced Sentiment (Imported but not wrapping content)
-    - [ ] Apply to: Indicators page
+    - [x] Apply to: Walk-Forward panel (backtesting)
+    - [x] Apply to: AI Allocator (portfolios)
+    - [x] Apply to: Fed Policy page
+    - [x] Apply to: Advanced Sentiment
+    - [x] Apply to: Indicators page
 - [x] **Free 7-day trial flow** (no card required).
     - [x] Backend `User.trial_ends_at` column + migration.
     - [x] `POST /billing/start-trial`.
     - [x] Frontend start-trial button & status banner.
 - [x] **Cancellation flow with pause offer**.
     - [x] `/billing/cancel` page with 30-day pause offer.
-- [/] **Invoice/receipt download** (Stripe proxy stub).
+- [x] **Invoice/receipt download** (Stripe proxy stub).
 
 ### Migration note
 ```bash
@@ -381,16 +381,16 @@ alembic upgrade head
 
 ---
 
-## Sprint 39 — Planned
+## ✅ Sprint 39 — Complete
 
 **Sources:** `todos-v3.md` §19 (Showcase) · §20 (Investment Strategy Planner) · `todos.md` §16
 
 ### Deliverables
-- [ ] **Showcase product preview modal** — `frontend/app/showcase/page.tsx`: each product card gets a "Preview" button opening an embedded Google Sheets / PDF in a modal; clearly watermarked "Sample Only"; `PreviewModal` component with iframe + watermark overlay. Closes `todos-v3 §19 SHOP-V2-01`.
-- [ ] **Bundle configuration** — Backend: `bundle` flag + `bundle_items[]` on product model; seed at least one bundle ("Investor Bundle" — Portfolio Tracker + Retirement Calculator) with "Save X%" badge. Frontend: bundle cards in Showcase with "What's included" expandable section. Closes `todos-v3 §19 SHOP-V2-03`.
-- [ ] **"Coming Soon" + Notify me section** — `frontend/app/showcase/page.tsx`: dedicated Coming Soon row for roadmap products (FIRE Calculator, Tax-Loss Harvesting Tracker, Crypto Tax Report, Real Estate Analyzer); `POST /showcase/notify` stores user preference; per-product "Notify me" toggle. Closes `todos-v3 §19 SHOP-ROADMAP-01`.
-- [ ] **Asset allocation suggester** — `frontend/app/portfolio/allocate/page.tsx` (NEW): inputs: risk profile (from `User.risk_profile`), age, time horizon, currency; output: pie chart + table of suggested asset class weights (equities/bonds/cash/alternatives); always shows educational disclaimer. Closes `todos-v3 §20 PLAN-02`.
-- [ ] **Sequence of Returns Risk Visualiser** — `frontend/app/portfolio/retirement/page.tsx` (NEW): retirement planning tool; inputs: portfolio size, annual withdrawal, start year; renders three scenario lines (retiring before 2000/2008/2020 crash); shows portfolio survival rate and depletion year per scenario; Recharts `LineChart`; educational disclaimer. Closes `todos-v3 §20 PLAN-05`.
+- [x] **Showcase product preview modal** — `frontend/app/showcase/page.tsx`: each product card gets a "Preview" button opening an embedded Google Sheets / PDF in a modal; clearly watermarked "Sample Only"; `PreviewModal` component with iframe + watermark overlay. Closes `todos-v3 §19 SHOP-V2-01`.
+- [x] **Bundle configuration** — Backend: `bundle` flag + `bundle_items[]` on product model; seed at least one bundle ("Investor Bundle" — Portfolio Tracker + Retirement Calculator) with "Save X%" badge. Frontend: bundle cards in Showcase with "What's included" expandable section. Closes `todos-v3 §19 SHOP-V2-03`.
+- [x] **"Coming Soon" + Notify me section** — `frontend/app/showcase/page.tsx`: dedicated Coming Soon row for roadmap products (FIRE Calculator, Tax-Loss Harvesting Tracker, Crypto Tax Report, Real Estate Analyzer); `POST /showcase/notify` stores user preference; per-product "Notify me" toggle. Closes `todos-v3 §19 SHOP-ROADMAP-01`.
+- [x] **Asset allocation suggester** — `frontend/app/portfolio/allocate/page.tsx` (NEW): inputs: risk profile (from `User.risk_profile`), age, time horizon, currency; output: pie chart + table of suggested asset class weights (equities/bonds/cash/alternatives); always shows educational disclaimer. Closes `todos-v3 §20 PLAN-02`.
+- [x] **Sequence of Returns Risk Visualiser** — `frontend/app/portfolio/retirement/page.tsx` (NEW): retirement planning tool; inputs: portfolio size, annual withdrawal, start year; renders three scenario lines (retiring before 2000/2008/2020 crash); shows portfolio survival rate and depletion year per scenario; Recharts `LineChart`; educational disclaimer. Closes `todos-v3 §20 PLAN-05`.
 
 ---
 

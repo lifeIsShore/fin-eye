@@ -1206,6 +1206,9 @@ export interface ShowcaseProductDto {
   category: string;
   price_label: string;
   external_url: string;
+  preview_url: string | null;
+  is_bundle: boolean;
+  bundle_items: string[];
   sort_order: number;
 }
 

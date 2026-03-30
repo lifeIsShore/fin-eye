@@ -366,6 +366,32 @@ PRODUCTS = [
         "external_url": "https://example.com/products/watchlist-notion?source=terminal",
         "sort_order": 150,
     },
+    {
+        "title": "The Fin-Eye Investor Bundle",
+        "tagline": "Get our top 3 templates and start reading the market like a pro.",
+        "description": (
+            "A curated collection of our most popular workflow and portfolio templates. "
+            "Includes the Macro Regime Cheat Sheet, the Trade Journal Template, and the "
+            "Sector Rotation Playbook. Save 20% compared to buying individually."
+        ),
+        "features": [
+            "Macro Regime Cheat Sheet (PDF)",
+            "Trade Journal Template (Google Sheets)",
+            "Sector Rotation Playbook (PDF)",
+            "One-time payment, lifetime updates",
+            "Instant digital delivery",
+        ],
+        "category": "Bundles",
+        "price_label": "$40 one-time",
+        "external_url": "https://example.com/products/investor-bundle?source=terminal",
+        "sort_order": 5,
+        "is_bundle": True,
+        "bundle_items": [
+            "Macro Regime Cheat Sheet",
+            "Trade Journal Template",
+            "Sector Rotation Playbook"
+        ]
+    },
 ]
 
 # ─── Seed ─────────────────────────────────────────────────────────────────────

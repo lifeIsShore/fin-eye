@@ -24,7 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.showcase import ShowcaseClick, ShowcaseProduct
+from app.models.showcase import ShowcaseClick, ShowcaseProduct, FeatureInterest
 from app.models.user import User
 from app.api.v1.deps import get_current_user, require_admin
 
@@ -42,6 +42,9 @@ class ProductOut(BaseModel):
     category: str
     price_label: str
     external_url: str
+    preview_url: Optional[str] = None
+    is_bundle: bool
+    bundle_items: List[str]
     sort_order: int
 
     class Config:
@@ -56,6 +59,9 @@ class ProductCreate(BaseModel):
     category: str = "General"
     price_label: str = "Free"
     external_url: str
+    preview_url: Optional[str] = None
+    is_bundle: bool = False
+    bundle_items: List[str] = []
     sort_order: int = 100
 
 
@@ -67,6 +73,9 @@ class ProductUpdate(BaseModel):
     category: Optional[str] = None
     price_label: Optional[str] = None
     external_url: Optional[str] = None
+    preview_url: Optional[str] = None
+    is_bundle: Optional[bool] = None
+    bundle_items: Optional[List[str]] = None
     is_active: Optional[bool] = None
     sort_order: Optional[int] = None
 
@@ -162,6 +171,48 @@ async def track_click(
     except Exception:
         await db.rollback()
         # Never surface analytics errors to the client
+
+
+class NotifyRequest(BaseModel):
+    product_slug: str
+    notify: bool = True
+    email: Optional[str] = None
+
+
+@router.post("/notify", status_code=status.HTTP_200_OK)
+async def request_notification(
+    body: NotifyRequest,
+    user: Optional[User] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Record 'Notify me' interest for coming-soon or pro features.
+    """
+    # Prefer authenticated user's email, fallback to provided email
+    record_email = user.email if user else body.email
+
+    if body.notify:
+        interest = FeatureInterest(
+            user_id=user.id if user else None,
+            email=record_email,
+            feature_name=body.product_slug
+        )
+        db.add(interest)
+    else:
+        # If user untoggles, we can optionally delete the interest. We'll delete it.
+        stmt = select(FeatureInterest).where(FeatureInterest.feature_name == body.product_slug)
+        if user:
+            stmt = stmt.where(FeatureInterest.user_id == user.id)
+        elif record_email:
+            stmt = stmt.where(FeatureInterest.email == record_email)
+        
+        result = await db.execute(stmt)
+        for i in result.scalars().all():
+            await db.delete(i)
+            
+    await db.commit()
+
+    return {"status": "ok", "message": "Interest recorded."}
 
 
 # ─── Admin endpoints ──────────────────────────────────────────────────────────
