@@ -12,9 +12,11 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.models.market import OHLCVDaily, OHLCVIntraday
 from app.services.ohlcv_fetcher import OHLCVFetcher
 from app.services.macro_data import MacroFetcher
 from app.services.news_data import NewsFetcher
@@ -75,6 +77,74 @@ async def trigger_news_fetch(
     except Exception as exc:
         logger.exception("News fetch failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/ohlcv/{symbol}", summary="Read OHLCV price history for a symbol")
+async def get_ohlcv(
+    symbol: str,
+    interval: str = Query(default="1d", description="Bar interval: '1d', '1h', or '4h'"),
+    limit: int = Query(default=365, ge=1, le=3650),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Return OHLCV bars for a symbol, used by the DCA simulator and other frontend pages.
+
+    - interval=1d  → ohlcv_daily  (trade_date)
+    - interval=1h  → ohlcv_intraday filtered by interval
+    - interval=4h  → ohlcv_intraday filtered by interval
+    """
+    sym = symbol.upper()
+
+    if interval == "1d":
+        result = await db.execute(
+            select(OHLCVDaily)
+            .where(OHLCVDaily.symbol == sym)
+            .order_by(desc(OHLCVDaily.trade_date))
+            .limit(limit)
+        )
+        rows = result.scalars().all()
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"No daily OHLCV data found for {sym}")
+        # Return oldest-first so the DCA page gets an ascending time series
+        bars = [
+            {
+                "date": str(r.trade_date),
+                "open": r.open,
+                "high": r.high,
+                "low": r.low,
+                "close": r.adj_close,  # DCA calculations use adj_close
+                "volume": r.volume,
+            }
+            for r in reversed(rows)
+        ]
+    elif interval in ("1h", "4h"):
+        result = await db.execute(
+            select(OHLCVIntraday)
+            .where(OHLCVIntraday.symbol == sym, OHLCVIntraday.interval == interval)
+            .order_by(desc(OHLCVIntraday.bar_time))
+            .limit(limit)
+        )
+        rows = result.scalars().all()
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"No {interval} OHLCV data found for {sym}")
+        bars = [
+            {
+                "date": r.bar_time.isoformat(),
+                "open": r.open,
+                "high": r.high,
+                "low": r.low,
+                "close": r.close,
+                "volume": r.volume,
+            }
+            for r in reversed(rows)
+        ]
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported interval '{interval}'. Use '1d', '1h', or '4h'.",
+        )
+
+    return {"symbol": sym, "interval": interval, "count": len(bars), "bars": bars}
 
 
 @router.get("/cache/status", summary="Cache status")
