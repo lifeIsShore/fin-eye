@@ -330,29 +330,29 @@ Gold futures (`GC=F`) trade on COMEX (part of CME Group), not NYMEX. TradingView
 
 | ID | Severity | File | Description |
 |----|----------|------|-------------|
-| BUG-BE-01 | 🟠 HIGH | ml_pipeline.py | LSTM trains on train loss only — no real early stopping |
-| BUG-BE-02 | 🔴 CRITICAL | ml_pipeline.py | LSTM predict_proba O(N) Python loop — blocks executor thread on 1h series |
-| BUG-BE-03 | 🟡 MEDIUM | ml_pipeline.py | LSTM best_state can be None on degenerate case |
-| BUG-BE-04 | 🟠 HIGH | ml_pipeline.py | sin_dow/cos_dow period=5 wrong for crypto/FX 7-day trading week |
-| BUG-BE-05 | 🟠 HIGH | ohlcv_fetcher.py | Intraday scheduler uses period=60d; inference expects 730d |
-| BUG-BE-06 | 🟠 HIGH | optuna_tuner.py + ml_pipeline.py | Optuna best params saved but never loaded in training pipeline |
-| BUG-BE-07 | 🟠 HIGH | schemas/auth.py | UserResponse missing trial_ends_at and paused_until |
-| FIND-04 | 🔴 CRITICAL | schemas/auth.py + AuthProvider.tsx | UserResponse has no is_pro field — Pro features always denied in production |
-| BUG-BE-09 | 🟡 MEDIUM | gas_precompute.py | Crypto GAS uses neutral sentiment; ignores Crypto Fear & Greed |
-| BUG-BE-12 | 🟡 MEDIUM | prediction_service.py | Outcome resolver serial price fetches — slow with many symbols |
-| BUG-BE-13 | 🟡 MEDIUM | ml_pipeline.py | inject_external_features tz-mismatch — silently zeros all external signals on daily data |
-| BUG-BE-14 | 🟡 MEDIUM | gas_precompute.py | Grade history reads post-upsert grade — never records changes |
-| BUG-BE-15 | 🟡 MEDIUM | technical_service.py | Module-level registry singleton may be stale after new training |
-| BUG-BE-16 | 🔵 LOW | billing.py | Imports get_current_user from auth.py instead of deps.py |
-| BUG-BE-17 | 🔵 LOW | ohlcv_fetcher.py | validate_row() defined but never called |
-| BUG-BE-18 | 🔵 LOW | scheduler.py | weekly_digest cron time (08:00) vs plan doc (07:00) mismatch |
-| BUG-FE-01 | 🟠 HIGH | GlobalTickerSearch.tsx | Keyboard nav broken — mouse hover creates gaps in activeIdx |
-| BUG-FE-02 | 🟡 MEDIUM | page.tsx | CryptoFearGreedPanel norm fallback type assertion fragile |
-| BUG-FE-03 | 🟡 MEDIUM | page.tsx | Header div indentation corruption from Sprint 41 edit |
-| BUG-FE-04 | 🟡 MEDIUM | AuthProvider.tsx | Dev mock user missing optional fields — billing broken in dev |
-| BUG-FE-05 | 🔵 LOW | GlobalTickerSearch.tsx | useDeferredValue + useSWR imported but unused |
-| BUG-FE-06 | 🔵 LOW | page.tsx | CryptoFearGreedPanel SWR cache lost on symbol switch |
-| BUG-FE-07 | 🔵 LOW | page.tsx | Gold futures mapped to NYMEX:GC — should be COMEX:GC1! |
+| ✅ BUG-BE-01 | 🟠 HIGH | ml_pipeline.py | LSTM trains on train loss only — no real early stopping |
+| ✅ BUG-BE-02 | 🔴 CRITICAL | ml_pipeline.py | LSTM predict_proba O(N) Python loop — blocks executor thread on 1h series |
+| ✅ BUG-BE-03 | 🟡 MEDIUM | ml_pipeline.py | LSTM best_state can be None on degenerate case |
+| ✅ BUG-BE-04 | 🟠 HIGH | ml_pipeline.py | sin_dow/cos_dow period=5 wrong for crypto/FX 7-day trading week |
+| ✅ BUG-BE-05 | 🟠 HIGH | ohlcv_fetcher.py | Intraday scheduler uses period=60d; inference expects 730d |
+| ✅ BUG-BE-06 | 🟠 HIGH | optuna_tuner.py + ml_pipeline.py | Optuna best params saved but never loaded in training pipeline |
+| ✅ BUG-BE-07 | 🟠 HIGH | schemas/auth.py | UserResponse missing trial_ends_at and paused_until |
+| ✅ FIND-04 | 🔴 CRITICAL | schemas/auth.py + AuthProvider.tsx | UserResponse has no is_pro field — Pro features always denied in production |
+| ✅ BUG-BE-09 | 🟡 MEDIUM | gas_precompute.py | Crypto GAS uses neutral sentiment; ignores Crypto Fear & Greed |
+| ✅ BUG-BE-12 | 🟡 MEDIUM | prediction_service.py | Outcome resolver serial price fetches — slow with many symbols |
+| ✅ BUG-BE-13 | 🟡 MEDIUM | ml_pipeline.py | inject_external_features tz-mismatch — silently zeros all external signals on daily data |
+| ✅ BUG-BE-14 | 🟡 MEDIUM | gas_precompute.py | Grade history reads post-upsert grade — never records changes |
+| ✅ BUG-BE-15 | 🟡 MEDIUM | technical_service.py | Module-level registry singleton may be stale after new training |
+| ✅ BUG-BE-16 | 🔵 LOW | billing.py | Imports get_current_user from auth.py instead of deps.py |
+| ✅ BUG-BE-17 | 🔵 LOW | ohlcv_fetcher.py | validate_row() defined but never called |
+| ✅ BUG-BE-18 | 🔵 LOW | scheduler.py | weekly_digest cron time (08:00) vs plan doc (07:00) mismatch |
+| ✅ BUG-FE-01 | 🟠 HIGH | GlobalTickerSearch.tsx | Keyboard nav broken — mouse hover creates gaps in activeIdx |
+| ✅ BUG-FE-02 | 🟡 MEDIUM | page.tsx | CryptoFearGreedPanel norm fallback type assertion fragile |
+| ✅ BUG-FE-03 | 🟡 MEDIUM | page.tsx | Header div indentation corruption from Sprint 41 edit |
+| ✅ BUG-FE-04 | 🟡 MEDIUM | AuthProvider.tsx | Dev mock user missing optional fields — billing broken in dev |
+| ✅ BUG-FE-05 | 🔵 LOW | GlobalTickerSearch.tsx | useDeferredValue + useSWR imported but unused |
+| ✅ BUG-FE-06 | 🔵 LOW | page.tsx | CryptoFearGreedPanel SWR cache lost on symbol switch |
+| ✅ BUG-FE-07 | 🔵 LOW | page.tsx | Gold futures mapped to NYMEX:GC — should be COMEX:GC1! |
 
 **Total: 23 bugs, 4 architectural findings, 5 performance improvements**
 **Critical: 2 | High: 7 | Medium: 8 | Low: 6**

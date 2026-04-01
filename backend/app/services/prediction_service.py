@@ -148,13 +148,46 @@ async def resolve_pending_outcomes(
     symbols_needed = list({p.symbol for p in pending})
     prices: dict[str, Optional[float]] = {}
 
-    for sym in symbols_needed:
-        try:
-            price = await _fetch_price_async(sym)
-            prices[sym] = price
-        except Exception as exc:
-            logger.warning("Price fetch failed for %s during outcome resolution: %s", sym, exc)
-            prices[sym] = None
+    # BUG-BE-12: replace serial per-symbol yfinance calls with a single bulk download.
+    # yf.download() fetches all symbols in one HTTP round-trip.
+    try:
+        import asyncio as _asyncio  # noqa: PLC0415
+        loop = _asyncio.get_running_loop()
+
+        def _bulk_fetch() -> dict[str, Optional[float]]:
+            import yfinance as yf  # noqa: PLC0415
+            result: dict[str, Optional[float]] = {s: None for s in symbols_needed}
+            if not symbols_needed:
+                return result
+            try:
+                df = yf.download(
+                    symbols_needed, period="2d", interval="1d",
+                    auto_adjust=True, progress=False, threads=True,
+                )
+                if df.empty:
+                    return result
+                # MultiIndex columns when multiple symbols: (field, symbol)
+                # Single-symbol: flat columns
+                if len(symbols_needed) == 1:
+                    sym = symbols_needed[0]
+                    if "Close" in df.columns:
+                        val = df["Close"].dropna()
+                        result[sym] = float(val.iloc[-1]) if not val.empty else None
+                else:
+                    close = df["Close"] if "Close" in df else df.xs("Close", axis=1, level=0)
+                    for sym in symbols_needed:
+                        if sym in close.columns:
+                            col = close[sym].dropna()
+                            result[sym] = float(col.iloc[-1]) if not col.empty else None
+            except Exception as exc:
+                logger.warning("Bulk price fetch failed: %s — falling back to None for all", exc)
+            return result
+
+        prices = await loop.run_in_executor(None, _bulk_fetch)
+        logger.debug("Bulk price fetch complete for %d symbols", len(symbols_needed))
+    except Exception as exc:
+        logger.warning("Bulk price fetch setup failed: %s — all prices None", exc)
+        prices = {s: None for s in symbols_needed}
 
     resolved = failed = skipped = 0
 

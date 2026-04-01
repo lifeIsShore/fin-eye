@@ -44,7 +44,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         // 1. Dev bypass — instant mock user
         if (!REQUIRE_AUTH) {
-            setUser({ id: "00000000-0000-0000-0000-000000000001", email: "dev@mock.local", is_pro: true, is_admin: true });
+            // BUG-FE-04: dev mock was missing optional fields — billing/settings broken in dev
+            setUser({
+                id: "00000000-0000-0000-0000-000000000001",
+                email: "dev@mock.local",
+                is_pro: true,
+                is_admin: true,
+                name: "Dev User",
+                trial_ends_at: null,
+                paused_until: null,
+                default_symbol: null,
+                risk_profile: "Moderate",
+            });
             setLoading(false);
             return;
         }

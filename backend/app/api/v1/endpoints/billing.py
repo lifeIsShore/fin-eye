@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.user import User
-from app.api.v1.endpoints.auth import get_current_user   # reuse existing dep
+from app.api.v1.deps import get_current_user  # BUG-BE-16: use canonical deps location
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/billing", tags=["billing"])

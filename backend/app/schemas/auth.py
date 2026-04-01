@@ -3,10 +3,10 @@ app/schemas/auth.py
 Pydantic schemas for auth request/response payloads.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 # ── Register ───────────────────────────────────────────────────────────────────
@@ -144,5 +144,18 @@ class UserResponse(BaseModel):
     default_symbol: Optional[str] = None   # Sprint 23
     risk_profile: Optional[str] = None       # Sprint 24
     created_at: datetime
+    trial_ends_at: Optional[datetime] = None  # Sprint 38 — BUG-BE-07
+    paused_until: Optional[datetime] = None   # Sprint 38 — BUG-BE-07
+    is_pro: bool = False                       # FIND-04 — computed from tier/trial
+
+    @model_validator(mode="after")
+    def _compute_is_pro(self) -> "UserResponse":
+        """Derive is_pro from subscription_tier and active trial. FIND-04."""
+        in_trial = (
+            self.trial_ends_at is not None
+            and self.trial_ends_at > datetime.now(timezone.utc)
+        )
+        self.is_pro = self.subscription_tier in ("pro", "institutional") or in_trial
+        return self
 
     model_config = {"from_attributes": True}

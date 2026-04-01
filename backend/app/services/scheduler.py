@@ -545,8 +545,9 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="onboarding_day7", name="Onboarding Email Day 7",
         replace_existing=True, misfire_grace_time=3600)
 
+    # BUG-BE-18: Sprint 33 plan specifies 07:00 UTC; was incorrectly set to 08:00.
     scheduler.add_job(job_weekly_digest,
-        trigger=CronTrigger(day_of_week="mon", hour=8, minute=0),
+        trigger=CronTrigger(day_of_week="mon", hour=7, minute=0),
         id="weekly_digest", name="Weekly Email Digest",
         replace_existing=True, misfire_grace_time=3600)
 

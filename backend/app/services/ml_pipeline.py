@@ -223,8 +223,10 @@ def engineer_features(df: pd.DataFrame, horizon: int = DEFAULT_HORIZON) -> pd.Da
     day_of_week = pd.Series(d.index.dayofweek if hasattr(d.index, 'dayofweek') else 0, index=d.index, dtype=float)
     month_of_year = pd.Series(d.index.month if hasattr(d.index, 'month') else 1, index=d.index, dtype=float)
     import math  # noqa: PLC0415
-    d["sin_dow"]   = (day_of_week   * (2 * math.pi / 5)).apply(math.sin)
-    d["cos_dow"]   = (day_of_week   * (2 * math.pi / 5)).apply(math.cos)
+    # BUG-BE-04: use period=7 for all symbols — correct for both 5-day equity
+    # and 7-day crypto/FX trading weeks (sin(5*2π/7) ≠ sin(0) so equities are fine).
+    d["sin_dow"]   = (day_of_week   * (2 * math.pi / 7)).apply(math.sin)
+    d["cos_dow"]   = (day_of_week   * (2 * math.pi / 7)).apply(math.cos)
     d["sin_month"] = (month_of_year * (2 * math.pi / 12)).apply(math.sin)
     d["cos_month"] = (month_of_year * (2 * math.pi / 12)).apply(math.cos)
 
@@ -308,8 +310,10 @@ def inject_external_features(
                 name=signal_name,
             )
             s.index = pd.to_datetime(s.index, utc=True)
-            # Reindex to price bars, forward-fill, zero-fill any leading NaN
-            aligned = s.reindex(idx.tz_convert("UTC") if idx.tz else idx, method="ffill")
+            # BUG-BE-13: tz-aware Series vs tz-naive idx silently produces all-NaN.
+            # Always align on a UTC-aware index to avoid the mismatch.
+            idx_utc = idx.tz_localize("UTC") if idx.tz is None else idx.tz_convert("UTC")
+            aligned = s.reindex(idx_utc, method="ffill")
             aligned = aligned.ffill().fillna(0.0)
             d[signal_name] = aligned.values
         except Exception:
@@ -461,14 +465,19 @@ class LogisticWrapper:
 class XGBoostWrapper:
     name = "xgboost"
 
-    def __init__(self, n_positive: int = 1, n_negative: int = 1):
+    def __init__(self, n_positive: int = 1, n_negative: int = 1, params: Optional[dict] = None):
         spw = max(1.0, n_negative / max(n_positive, 1))
-        self.model = XGBClassifier(
+        # BUG-BE-06: accept optional Optuna-tuned params, override defaults
+        defaults = dict(
             n_estimators=200, max_depth=4, learning_rate=0.03,
             subsample=0.8, colsample_bytree=0.8, min_child_weight=5,
             gamma=0.1, scale_pos_weight=spw, eval_metric="logloss",
             random_state=42, verbosity=0,
         )
+        if params:
+            defaults.update(params)
+            defaults["scale_pos_weight"] = spw  # always keep class balance
+        self.model = XGBClassifier(**defaults)
 
     def fit(self, X, y):
         self.model.fit(X[FEATURES], y)
@@ -486,17 +495,21 @@ class LightGBMWrapper:
     """
     name = "lightgbm"
 
-    def __init__(self, n_positive: int = 1, n_negative: int = 1):
+    def __init__(self, n_positive: int = 1, n_negative: int = 1, params: Optional[dict] = None):
         try:
             from lightgbm import LGBMClassifier  # noqa: PLC0415
             # Scale positive weight mirrors XGBoost's approach
             spw = max(1.0, n_negative / max(n_positive, 1))
-            self.model = LGBMClassifier(
+            # BUG-BE-06: accept optional Optuna-tuned params, override defaults
+            defaults = dict(
                 n_estimators=300, max_depth=4, learning_rate=0.03,
                 subsample=0.8, colsample_bytree=0.8, min_child_samples=20,
-                scale_pos_weight=spw, random_state=42, verbose=-1,
-                n_jobs=1,
+                scale_pos_weight=spw, random_state=42, verbose=-1, n_jobs=1,
             )
+            if params:
+                defaults.update(params)
+                defaults["scale_pos_weight"] = spw
+            self.model = LGBMClassifier(**defaults)
             self._available = True
         except ImportError:
             logger.warning("lightgbm not installed — LightGBMWrapper will be skipped")
@@ -630,23 +643,38 @@ class LSTMWrapper:
         criterion = nn.BCEWithLogitsLoss(pos_weight=pos_w)
         optim    = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-        X_t = torch.from_numpy(X_seq)
-        y_t = torch.from_numpy(y_seq)
+        # BUG-BE-01: Split off a validation fraction for real early stopping.
+        # BUG-BE-03: Initialise best_state from initial weights so it is never None.
+        val_frac  = 0.2
+        n_seq     = len(X_seq)
+        n_val     = max(1, int(n_seq * val_frac))
+        n_train   = n_seq - n_val
 
-        best_loss = float("inf")
-        patience  = 0
-        best_state: Optional[dict] = None
+        X_train = torch.from_numpy(X_seq[:n_train])
+        y_train = torch.from_numpy(y_seq[:n_train])
+        X_val_t = torch.from_numpy(X_seq[n_train:])
+        y_val_t = torch.from_numpy(y_seq[n_train:])
 
-        model.train()
+        best_loss  = float("inf")
+        patience   = 0
+        # BUG-BE-03 fix: seed best_state from initial weights before any epoch
+        best_state: dict = {k: v.clone() for k, v in model.state_dict().items()}
+
         for epoch in range(self.EPOCHS):
+            model.train()
             optim.zero_grad()
-            logits = model(X_t)
-            loss   = criterion(logits, y_t)
+            logits = model(X_train)
+            loss   = criterion(logits, y_train)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optim.step()
 
-            val_loss = loss.item()
+            # BUG-BE-01 fix: monitor validation loss, not training loss
+            model.eval()
+            with torch.no_grad():
+                val_logits = model(X_val_t)
+                val_loss   = criterion(val_logits, y_val_t).item()
+
             if val_loss < best_loss - 1e-4:
                 best_loss  = val_loss
                 patience   = 0
@@ -654,11 +682,10 @@ class LSTMWrapper:
             else:
                 patience += 1
                 if patience >= self.PATIENCE:
-                    logger.debug("LSTM early stop at epoch %d", epoch)
+                    logger.debug("LSTM early stop at epoch %d (val_loss=%.4f)", epoch, val_loss)
                     break
 
-        if best_state:
-            model.load_state_dict(best_state)
+        model.load_state_dict(best_state)  # always safe — seeded before loop
         model.eval()
         self._model = model
 
@@ -681,18 +708,18 @@ class LSTMWrapper:
             # Not enough rows — return neutral 0.5 for everything
             return np.column_stack([1 - probs_out, probs_out])
 
-        # Build sliding-window sequences for the full X
-        seqs = []
-        for i in range(n):
-            start = max(0, i - self.SEQ_LEN + 1)
-            chunk = X_scaled[start: i + 1]
-            if len(chunk) < self.SEQ_LEN:
-                # Pad by repeating first row
-                pad   = np.repeat(chunk[:1], self.SEQ_LEN - len(chunk), axis=0)
-                chunk = np.vstack([pad, chunk])
-            seqs.append(chunk)
+        # Build sliding-window sequences using vectorised numpy strides (BUG-BE-02).
+        # Pad the first (SEQ_LEN-1) rows by prepending the earliest row, then use
+        # as_strided to produce all windows in one shot — no Python loop over N rows.
+        pad_rows = np.repeat(X_scaled[:1], self.SEQ_LEN - 1, axis=0)
+        padded   = np.vstack([pad_rows, X_scaled])          # (n + SEQ_LEN - 1, F)
+        n_feat   = padded.shape[1]
+        shape    = (n, self.SEQ_LEN, n_feat)
+        strides  = (padded.strides[0], padded.strides[0], padded.strides[1])
+        seqs_arr = np.lib.stride_tricks.as_strided(padded, shape=shape, strides=strides)
+        seqs_arr = np.array(seqs_arr, dtype=np.float32)     # copy to make contiguous
 
-        X_t = torch.from_numpy(np.array(seqs, dtype=np.float32))
+        X_t = torch.from_numpy(seqs_arr)
         with torch.no_grad():
             logits = self._model(X_t).numpy()
         probs_pos = 1.0 / (1.0 + np.exp(-logits))  # sigmoid
@@ -832,10 +859,18 @@ def run_training_pipeline(
 
     # ── Base model definitions — Prophet intentionally absent ─────────────────
     # Sprint 41: LSTMWrapper added as 4th competing model
+    # BUG-BE-06: load Optuna-tuned params (if available) before constructing wrappers
+    from app.services.optuna_tuner import load_best_params  # noqa: PLC0415
+    xgb_params  = load_best_params(symbol, timeframe, "xgboost")
+    lgbm_params = load_best_params(symbol, timeframe, "lightgbm")
+    if xgb_params:
+        logger.info("[%s/%s] Using Optuna-tuned XGBoost params", symbol, timeframe)
+    if lgbm_params:
+        logger.info("[%s/%s] Using Optuna-tuned LightGBM params", symbol, timeframe)
     base_model_defs: Dict[str, Any] = {
         "logistic":       LogisticWrapper(),
-        "xgboost":        XGBoostWrapper(n_positive=n_pos, n_negative=n_neg),
-        "lightgbm":       LightGBMWrapper(n_positive=n_pos, n_negative=n_neg),
+        "xgboost":        XGBoostWrapper(n_positive=n_pos, n_negative=n_neg, params=xgb_params),
+        "lightgbm":       LightGBMWrapper(n_positive=n_pos, n_negative=n_neg, params=lgbm_params),
         "lstm_attention": LSTMWrapper(n_positive=n_pos, n_negative=n_neg),
     }
     results:      Dict[str, Dict] = {}

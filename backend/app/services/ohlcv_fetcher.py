@@ -112,22 +112,24 @@ class OHLCVFetcher:
         rows = []
         for idx, row in df.iterrows():
             trade_date = idx.date() if hasattr(idx, "date") else idx
-            rows.append(
-                {
-                    "symbol": symbol,
-                    "trade_date": trade_date,
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row["Close"]),
-                    # FIX BUG-003: auto_adjust=True means Close IS the adjusted close.
-                    # Original: row.get("Close", row["Close"]) — always returned Close,
-                    # never read "Adj Close". This makes the intent explicit and correct.
-                    "adj_close": float(row["Close"]),
-                    "volume": int(row["Volume"]),
-                    "data_source": "yahoo_finance",
-                }
-            )
+            candidate = {
+                "symbol": symbol,
+                "trade_date": trade_date,
+                "open": float(row["Open"]),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+                "close": float(row["Close"]),
+                # FIX BUG-003: auto_adjust=True means Close IS the adjusted close.
+                "adj_close": float(row["Close"]),
+                "volume": int(row["Volume"]),
+                "data_source": "yahoo_finance",
+            }
+            # BUG-BE-17: validate_row was defined but never called — fix that.
+            errors = self.validate_row(candidate)
+            if errors:
+                logger.warning("Skipping invalid daily row for %s on %s: %s", symbol, trade_date, errors)
+                continue
+            rows.append(candidate)
         return rows
 
     async def _upsert_daily(self, session: AsyncSession, rows: list[dict]) -> int:
@@ -193,7 +195,9 @@ class OHLCVFetcher:
 
     def _download_intraday(self, symbol: str) -> pd.DataFrame:
         ticker = yf.Ticker(symbol)
-        df = ticker.history(period="60d", interval="1h", auto_adjust=True, actions=False)
+        # BUG-BE-05: 60d only stores 2 months; yfinance caps 1h history at 730d.
+        # Use max period so the stored table has the most historical coverage.
+        df = ticker.history(period="730d", interval="1h", auto_adjust=True, actions=False)
         if df.empty:
             return df
         df.index = pd.to_datetime(df.index)
@@ -222,19 +226,23 @@ class OHLCVFetcher:
             bar_time = idx.to_pydatetime() if hasattr(idx, "to_pydatetime") else idx
             if bar_time.tzinfo is None:
                 bar_time = bar_time.replace(tzinfo=timezone.utc)
-            rows.append(
-                {
-                    "symbol": symbol,
-                    "interval": interval,
-                    "bar_time": bar_time,
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row["Close"]),
-                    "volume": int(row["Volume"]),
-                    "data_source": "yahoo_finance",
-                }
-            )
+            candidate = {
+                "symbol": symbol,
+                "interval": interval,
+                "bar_time": bar_time,
+                "open": float(row["Open"]),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+                "close": float(row["Close"]),
+                "volume": int(row["Volume"]),
+                "data_source": "yahoo_finance",
+            }
+            # BUG-BE-17: validate intraday rows too
+            errors = self.validate_row(candidate)
+            if errors:
+                logger.warning("Skipping invalid intraday row for %s at %s: %s", symbol, bar_time, errors)
+                continue
+            rows.append(candidate)
         return rows
 
     async def _upsert_intraday(self, session: AsyncSession, rows: list[dict]) -> int:

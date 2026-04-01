@@ -48,14 +48,18 @@ from app.services.technical_models import Timeframe
 
 logger = logging.getLogger(__name__)
 
-_registry = JsonlFileModelRegistry(REGISTRY_FILE)
+# BUG-BE-15: Do NOT cache registry at module level — newly trained models
+# appended to the JSONL file after startup won't be visible until restart.
+# Always create a fresh instance so reads go back to disk each time.
+def _fresh_registry() -> JsonlFileModelRegistry:
+    return JsonlFileModelRegistry(REGISTRY_FILE)
 
 
 # ── Registry helpers ──────────────────────────────────────────────────────────
 
 def get_latest_model_metadata(symbol: str, timeframe: str) -> dict:
     try:
-        record = _registry.get_latest_for_timeframe(Timeframe(timeframe), symbol=symbol)
+        record = _fresh_registry().get_latest_for_timeframe(Timeframe(timeframe), symbol=symbol)
     except Exception as e:
         logger.error("Error reading model registry for %s/%s: %s", symbol, timeframe, e)
         return {}
@@ -79,7 +83,7 @@ def get_latest_model_metadata(symbol: str, timeframe: str) -> dict:
 def get_trained_timeframes(symbol: str) -> list[str]:
     """BUG-003 FIX: Derive active timeframe list from registry + disk."""
     try:
-        all_champions = _registry.all_champions()
+        all_champions = _fresh_registry().all_champions()
     except Exception as e:
         logger.error("Error reading registry champions for %s: %s", symbol, e)
         return []

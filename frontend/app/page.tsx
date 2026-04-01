@@ -41,12 +41,15 @@ import PriceTape from "../components/PriceTape";
 import GradeBadge from "../components/GradeBadge";
 import { useRecentSymbols } from "../hooks/useRecentSymbols";
 import { fetchWatchlist } from "../lib/api";
-import { fetchModelDetails, type ModelDetailsResponse } from "../lib/api_model_details";
+import {
+  fetchModelDetails,
+  type ModelDetailsResponse,
+} from "../lib/api_model_details";
 
 // ─── Sprint 41: Crypto Fear & Greed Panel ────────────────────────────────
 // Inline component: fetches GET /api/v1/macro/fear-greed/crypto and renders
 // a compact scored gauge. Only rendered when activeSymbol is a crypto ticker.
-const CRYPTO_FG_API = `${(process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000")}/api/v1/macro/fear-greed/crypto`;
+const CRYPTO_FG_API = `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/api/v1/macro/fear-greed/crypto`;
 
 function useCryptoFearGreed() {
   return useSWR(
@@ -54,52 +57,96 @@ function useCryptoFearGreed() {
     async () => {
       const r = await fetch(CRYPTO_FG_API, { cache: "no-store" });
       if (!r.ok) throw new Error("crypto fg unavailable");
-      return r.json() as Promise<{ score: number; label: string; norm: number; source: string; fetched_at: string }>;
+      return r.json() as Promise<{
+        score: number;
+        label: string;
+        norm: number;
+        source: string;
+        fetched_at: string;
+      }>;
     },
     { refreshInterval: 5 * 60_000, shouldRetryOnError: false },
   );
 }
 
-function CryptoFearGreedPanel({ symbol }: { symbol: string }) {
-  const { data, error } = useCryptoFearGreed();
+function CryptoFearGreedPanel({
+  symbol,
+  data: swrData,
+}: {
+  symbol: string;
+  data: ReturnType<typeof useCryptoFearGreed>;
+}) {
+  const { data, error } = swrData;
   if (error || !data) return null;
 
   const score = data.score;
   const label = data.label;
-  const norm  = data.norm ?? score / 100;
+  const norm = data.norm ?? score / 100;
 
   const color =
-    score <= 25 ? "text-rose-400" :
-    score <= 45 ? "text-orange-400" :
-    score <= 55 ? "text-amber-400" :
-    score <= 75 ? "text-emerald-400" : "text-green-400";
+    score <= 25
+      ? "text-rose-400"
+      : score <= 45
+        ? "text-orange-400"
+        : score <= 55
+          ? "text-amber-400"
+          : score <= 75
+            ? "text-emerald-400"
+            : "text-green-400";
   const bg =
-    score <= 25 ? "bg-rose-950/25 border-rose-800/40" :
-    score <= 45 ? "bg-orange-950/25 border-orange-800/40" :
-    score <= 55 ? "bg-amber-950/25 border-amber-800/40" :
-    score <= 75 ? "bg-emerald-950/25 border-emerald-800/40" : "bg-green-950/25 border-green-800/40";
+    score <= 25
+      ? "bg-rose-950/25 border-rose-800/40"
+      : score <= 45
+        ? "bg-orange-950/25 border-orange-800/40"
+        : score <= 55
+          ? "bg-amber-950/25 border-amber-800/40"
+          : score <= 75
+            ? "bg-emerald-950/25 border-emerald-800/40"
+            : "bg-green-950/25 border-green-800/40";
   const barColor =
-    score <= 25 ? "bg-rose-500" :
-    score <= 45 ? "bg-orange-500" :
-    score <= 55 ? "bg-amber-500" :
-    score <= 75 ? "bg-emerald-500" : "bg-green-500";
+    score <= 25
+      ? "bg-rose-500"
+      : score <= 45
+        ? "bg-orange-500"
+        : score <= 55
+          ? "bg-amber-500"
+          : score <= 75
+            ? "bg-emerald-500"
+            : "bg-green-500";
 
   return (
-    <div className={`flex items-center gap-4 rounded-xl border px-4 py-3 ${bg}`}>
+    <div
+      className={`flex items-center gap-4 rounded-xl border px-4 py-3 ${bg}`}
+    >
       <span className="text-xl flex-shrink-0">😰</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1.5">
-          <span className="text-xs font-semibold text-slate-400">Crypto Fear & Greed</span>
-          <span className={`text-xs font-mono font-bold tabular-nums ${color}`}>{score}</span>
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${color}`}>{label}</span>
+          <span className="text-xs font-semibold text-slate-400">
+            Crypto Fear & Greed
+          </span>
+          <span className={`text-xs font-mono font-bold tabular-nums ${color}`}>
+            {score}
+          </span>
+          <span
+            className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${color}`}
+          >
+            {label}
+          </span>
         </div>
         <div className="h-1.5 w-full rounded-full bg-slate-700/60 overflow-hidden">
-          <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${Math.round(norm * 100)}%` }} />
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+            style={{
+              width: `${Math.min(100, Math.max(0, Math.round((data.norm ?? data.score / 100) * 100)))}%`,
+            }}
+          />
         </div>
       </div>
       <div className="flex-shrink-0 text-right">
         <p className="text-[10px] text-slate-600">Source: Alternative.me</p>
-        <p className="text-[10px] text-slate-600 font-mono">{symbol.toUpperCase()}</p>
+        <p className="text-[10px] text-slate-600 font-mono">
+          {symbol.toUpperCase()}
+        </p>
       </div>
     </div>
   );
@@ -144,8 +191,8 @@ function buildWhyBullets(
   if (total > 0) {
     bullets.push(
       `📈 Technical momentum is ${techDir.toLowerCase()} — ` +
-      `${bullishTfs} of ${total} timeframes bullish, ${bearishTfs} bearish ` +
-      `(confidence score: ${techScore.toFixed(0)}/100).`,
+        `${bullishTfs} of ${total} timeframes bullish, ${bearishTfs} bearish ` +
+        `(confidence score: ${techScore.toFixed(0)}/100).`,
     );
   } else {
     bullets.push(
@@ -155,22 +202,31 @@ function buildWhyBullets(
 
   if (sent30d !== null) {
     const sentLabel =
-      sent30d > 0.3 ? "strongly positive" :
-        sent30d > 0.05 ? "mildly positive" :
-          sent30d > -0.05 ? "neutral" :
-            sent30d > -0.3 ? "mildly negative" : "strongly negative";
+      sent30d > 0.3
+        ? "strongly positive"
+        : sent30d > 0.05
+          ? "mildly positive"
+          : sent30d > -0.05
+            ? "neutral"
+            : sent30d > -0.3
+              ? "mildly negative"
+              : "strongly negative";
     bullets.push(
       `📰 News sentiment over the past 30 days is ${sentLabel} ` +
-      `(score: ${sent30d >= 0 ? "+" : ""}${sent30d.toFixed(2)} on a −1 to +1 scale).`,
+        `(score: ${sent30d >= 0 ? "+" : ""}${sent30d.toFixed(2)} on a −1 to +1 scale).`,
     );
   } else {
-    bullets.push("📰 News sentiment data is not yet available for this symbol.");
+    bullets.push(
+      "📰 News sentiment data is not yet available for this symbol.",
+    );
   }
 
   const macroComment =
-    macroScore >= 60 ? "This provides a supportive backdrop for equities." :
-      macroScore < 40 ? "Macro conditions add headwinds to risk assets." :
-        "Macro conditions are broadly neutral.";
+    macroScore >= 60
+      ? "This provides a supportive backdrop for equities."
+      : macroScore < 40
+        ? "Macro conditions add headwinds to risk assets."
+        : "Macro conditions are broadly neutral.";
   bullets.push(
     `🌐 Macro backdrop is '${macroLabel}' (score: ${macroScore.toFixed(0)}/100). ${macroComment}`,
   );
@@ -203,7 +259,8 @@ function detectConflicts(
   ];
 
   for (const [a, b] of pairs) {
-    const sa = scores[a]; const sb = scores[b];
+    const sa = scores[a];
+    const sb = scores[b];
     if ((sa > 65 && sb < 35) || (sb > 65 && sa < 35)) {
       conflicts.push({
         layers: `${a} vs ${b}`,
@@ -238,9 +295,14 @@ function detectConflicts(
 }
 
 // ─── ML output builder ───────────────────────────────────────────────────────
-function buildMlOutput(signals: TechnicalSignalDto[], techScore: number): string | null {
+function buildMlOutput(
+  signals: TechnicalSignalDto[],
+  techScore: number,
+): string | null {
   if (signals.length === 0) return null;
-  const bestSignal = [...signals].sort((a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0))[0];
+  const bestSignal = [...signals].sort(
+    (a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0),
+  )[0];
   const bullish = signals.filter((s) => s.direction === "Bullish").length;
   const bearish = signals.filter((s) => s.direction === "Bearish").length;
   const parts: string[] = [
@@ -250,8 +312,8 @@ function buildMlOutput(signals: TechnicalSignalDto[], techScore: number): string
   if (bestSignal) {
     parts.push(
       `Strongest signal: ${bestSignal.timeframe} ${bestSignal.direction} ` +
-      `(${bestSignal.confidence.toFixed(0)}% conf, Sharpe ${(bestSignal.sharpe_weight ?? 0).toFixed(2)}, ` +
-      `model: ${bestSignal.model_used ?? "unknown"}).`,
+        `(${bestSignal.confidence.toFixed(0)}% conf, Sharpe ${(bestSignal.sharpe_weight ?? 0).toFixed(2)}, ` +
+        `model: ${bestSignal.model_used ?? "unknown"}).`,
     );
   }
   return parts.join(" ");
@@ -261,26 +323,43 @@ function buildMlOutput(signals: TechnicalSignalDto[], techScore: number): string
 
 /** Plain-English descriptions for the most common ML feature names */
 const FEATURE_DESCRIPTIONS: Record<string, string> = {
-  rsi_14:          "RSI — momentum oscillator. Below 30 = oversold (bullish potential), above 70 = overbought.",
-  macd_hist:       "MACD histogram — difference between the signal line. Positive = bullish momentum building.",
-  bb_pb:           "Bollinger Band %B — where price sits in the band. Near 0 = lower band, near 1 = upper band.",
-  sma_cross_10_20: "10-period SMA vs 20-period SMA. Positive = short-term trend above medium-term.",
-  atr_pct:         "ATR as % of price — current volatility level. Higher = larger expected swings.",
-  volume_ratio:    "Volume vs 20-day average. Above 1 = unusual activity, often confirms price moves.",
-  ret_1:           "Yesterday's return — recent price momentum (1 bar).",
-  mom_10:          "10-period momentum — price change % over the last 10 bars.",
-  mom_20:          "20-period momentum — price change % over the last 20 bars.",
-  high_low_pct:    "Intraday range (high-low)/close — measures conviction vs indecision.",
-  close_position:  "Where price closed in the day's range. Near 1 = strong close (bullish sign).",
-  gap_pct:         "Overnight gap — how much the open differed from yesterday's close.",
-  sma_slope_20:    "Slope of the 20-day moving average — rising/flat/falling trend.",
-  ret_10_vs_ret_20:"Whether 10-day and 20-day momentum agree in direction.",
+  rsi_14:
+    "RSI — momentum oscillator. Below 30 = oversold (bullish potential), above 70 = overbought.",
+  macd_hist:
+    "MACD histogram — difference between the signal line. Positive = bullish momentum building.",
+  bb_pb:
+    "Bollinger Band %B — where price sits in the band. Near 0 = lower band, near 1 = upper band.",
+  sma_cross_10_20:
+    "10-period SMA vs 20-period SMA. Positive = short-term trend above medium-term.",
+  atr_pct:
+    "ATR as % of price — current volatility level. Higher = larger expected swings.",
+  volume_ratio:
+    "Volume vs 20-day average. Above 1 = unusual activity, often confirms price moves.",
+  ret_1: "Yesterday's return — recent price momentum (1 bar).",
+  mom_10: "10-period momentum — price change % over the last 10 bars.",
+  mom_20: "20-period momentum — price change % over the last 20 bars.",
+  high_low_pct:
+    "Intraday range (high-low)/close — measures conviction vs indecision.",
+  close_position:
+    "Where price closed in the day's range. Near 1 = strong close (bullish sign).",
+  gap_pct: "Overnight gap — how much the open differed from yesterday's close.",
+  sma_slope_20:
+    "Slope of the 20-day moving average — rising/flat/falling trend.",
+  ret_10_vs_ret_20: "Whether 10-day and 20-day momentum agree in direction.",
 };
 
-function ShapPanel({ modelData, activeTf, signals }: {
+function ShapPanel({
+  modelData,
+  activeTf,
+  signals,
+}: {
   modelData: ModelDetailsResponse | undefined;
-  activeTf:  string;
-  signals:   { timeframe: string; sharpe_weight?: number | null; direction: string }[];
+  activeTf: string;
+  signals: {
+    timeframe: string;
+    sharpe_weight?: number | null;
+    direction: string;
+  }[];
 }) {
   const [open, setOpen] = React.useState(false);
 
@@ -288,12 +367,15 @@ function ShapPanel({ modelData, activeTf, signals }: {
   const bestTf = React.useMemo(() => {
     if (modelData?.timeframes?.[activeTf]) return activeTf;
     if (!signals.length) return "1d";
-    const sorted = [...signals].sort((a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0));
+    const sorted = [...signals].sort(
+      (a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0),
+    );
     return sorted[0].timeframe;
   }, [modelData, activeTf, signals]);
 
   const detail = modelData?.timeframes?.[bestTf];
-  const shap: Record<string, number> | null = (detail as any)?.shap_importance ?? null;
+  const shap: Record<string, number> | null =
+    (detail as any)?.shap_importance ?? null;
   const features = detail?.features_used ?? [];
 
   // Build top-5 SHAP bars (or feature list if no SHAP)
@@ -304,22 +386,24 @@ function ShapPanel({ modelData, activeTf, signals }: {
         .sort((a, b) => (shap[b.name] ?? 0) - (shap[a.name] ?? 0))
         .slice(0, 5)
         .map((f) => ({
-          name:        f.name,
-          value:       shap[f.name] ?? 0,
+          name: f.name,
+          value: shap[f.name] ?? 0,
           description: FEATURE_DESCRIPTIONS[f.name] ?? f.description,
         }));
     }
     // No SHAP yet — show first 5 features with placeholder
     return features.slice(0, 5).map((f) => ({
-      name:        f.name,
-      value:       null as number | null,
+      name: f.name,
+      value: null as number | null,
       description: FEATURE_DESCRIPTIONS[f.name] ?? f.description,
     }));
   }, [features, shap]);
 
   if (!detail || rows.length === 0) return null;
 
-  const maxVal = shap ? Math.max(...rows.map((r) => r.value as number), 0.001) : 1;
+  const maxVal = shap
+    ? Math.max(...rows.map((r) => r.value as number), 0.001)
+    : 1;
   const hasSHAP = shap !== null;
 
   return (
@@ -335,14 +419,23 @@ function ShapPanel({ modelData, activeTf, signals }: {
           </span>
           <span className="text-[10px] text-slate-600 font-mono">{bestTf}</span>
           {!hasSHAP && (
-            <span className="text-[9px] text-amber-500 bg-amber-950/30 border border-amber-800/40 rounded-full px-1.5 py-0.5">No SHAP yet</span>
+            <span className="text-[9px] text-amber-500 bg-amber-950/30 border border-amber-800/40 rounded-full px-1.5 py-0.5">
+              No SHAP yet
+            </span>
           )}
         </div>
         <svg
           className={`h-3.5 w-3.5 text-slate-600 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2.5}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M19 9l-7 7-7-7"
+          />
         </svg>
       </button>
 
@@ -351,24 +444,28 @@ function ShapPanel({ modelData, activeTf, signals }: {
           <p className="text-[10px] text-slate-500 leading-relaxed">
             {hasSHAP
               ? `Top 5 features by mean |SHAP value| — how much each shifted the ${bestTf} model's prediction on validation data.`
-              : `Features the ${bestTf} model was trained on. SHAP importance will appear after the next retrain with a tree-based winner.`
-            }
+              : `Features the ${bestTf} model was trained on. SHAP importance will appear after the next retrain with a tree-based winner.`}
           </p>
 
           <div className="space-y-3">
             {rows.map((row) => {
-              const pct = hasSHAP && row.value != null
-                ? Math.round((row.value / maxVal) * 100)
-                : 0;
+              const pct =
+                hasSHAP && row.value != null
+                  ? Math.round((row.value / maxVal) * 100)
+                  : 0;
               const barColor =
-                pct >= 70 ? "bg-violet-500" :
-                pct >= 40 ? "bg-sky-500" :
-                "bg-slate-600";
+                pct >= 70
+                  ? "bg-violet-500"
+                  : pct >= 40
+                    ? "bg-sky-500"
+                    : "bg-slate-600";
 
               return (
                 <div key={row.name} className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-mono font-bold text-sky-400 truncate">{row.name}</span>
+                    <span className="text-[11px] font-mono font-bold text-sky-400 truncate">
+                      {row.name}
+                    </span>
                     {hasSHAP && row.value != null && (
                       <span className="text-[10px] font-mono text-violet-400 tabular-nums flex-shrink-0">
                         {row.value.toFixed(4)}
@@ -383,18 +480,23 @@ function ShapPanel({ modelData, activeTf, signals }: {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <span className="text-[9px] text-slate-600 tabular-nums w-7 text-right">{pct}%</span>
+                      <span className="text-[9px] text-slate-600 tabular-nums w-7 text-right">
+                        {pct}%
+                      </span>
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-500 leading-relaxed">{row.description}</p>
+                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                    {row.description}
+                  </p>
                 </div>
               );
             })}
           </div>
 
           <p className="text-[9px] text-slate-700 border-t border-slate-800/50 pt-2">
-            SHAP = SHapley Additive exPlanations. Higher value = stronger influence on this prediction.
-            Source: {bestTf} model · {detail.winner_model} winner.
+            SHAP = SHapley Additive exPlanations. Higher value = stronger
+            influence on this prediction. Source: {bestTf} model ·{" "}
+            {detail.winner_model} winner.
           </p>
         </div>
       )}
@@ -431,21 +533,43 @@ function TrainNowEmptyState({
   if (done) {
     return (
       <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-950/20 border border-blue-800/40 text-sm text-blue-300">
-        <svg className="animate-spin h-4 w-4 text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        <svg
+          className="animate-spin h-4 w-4 text-blue-400 flex-shrink-0"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+          />
         </svg>
-        Training ML models for {symbol}… This takes 60–120 seconds. The page will refresh automatically.
+        Training ML models for {symbol}… This takes 60–120 seconds. The page
+        will refresh automatically.
       </div>
     );
   }
 
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-6 px-4 rounded-xl bg-slate-800/30 border border-slate-700/50 text-center">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-xl">🧠</div>
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-xl">
+        🧠
+      </div>
       <div>
-        <p className="text-sm font-semibold text-slate-200">No ML prediction yet for {symbol}</p>
-        <p className="text-xs text-slate-500 mt-0.5">Technical consensus requires a trained model.</p>
+        <p className="text-sm font-semibold text-slate-200">
+          No ML prediction yet for {symbol}
+        </p>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Technical consensus requires a trained model.
+        </p>
       </div>
       <button
         onClick={handleTrain}
@@ -454,9 +578,24 @@ function TrainNowEmptyState({
       >
         {loading ? (
           <>
-            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <svg
+              className="animate-spin h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
             </svg>
             Starting…
           </>
@@ -466,7 +605,8 @@ function TrainNowEmptyState({
       </button>
       {error && <p className="text-xs text-red-400">{error}</p>}
       <p className="text-[10px] text-slate-600 max-w-xs">
-        Training uses historical OHLCV data and runs locally. Sharpe-weighted ML models across 5 timeframes. Takes 60–120 seconds.
+        Training uses historical OHLCV data and runs locally. Sharpe-weighted ML
+        models across 5 timeframes. Takes 60–120 seconds.
       </p>
     </div>
   );
@@ -474,56 +614,160 @@ function TrainNowEmptyState({
 
 // ─── Explain payload builders ─────────────────────────────────────────────────
 
-function buildGasPayload(gasScore: number, techScore: number, sent30d: number | null, macroScore: number, macroLabel: string): ExplainPayload {
-  const sentScore0100 = ((sent30d ?? 0) + 1) / 2 * 100;
-  const sentRaw = sent30d !== null ? `${sent30d >= 0 ? "+" : ""}${sent30d.toFixed(2)}` : "N/A";
+function buildGasPayload(
+  gasScore: number,
+  techScore: number,
+  sent30d: number | null,
+  macroScore: number,
+  macroLabel: string,
+): ExplainPayload {
+  const sentScore0100 = (((sent30d ?? 0) + 1) / 2) * 100;
+  const sentRaw =
+    sent30d !== null
+      ? `${sent30d >= 0 ? "+" : ""}${sent30d.toFixed(2)}`
+      : "N/A";
   const sc = (s: number): SubComponent["color"] =>
-    s >= 65 ? "emerald" : s >= 55 ? "teal" : s >= 45 ? "amber" : s >= 35 ? "orange" : "rose";
+    s >= 65
+      ? "emerald"
+      : s >= 55
+        ? "teal"
+        : s >= 45
+          ? "amber"
+          : s >= 35
+            ? "orange"
+            : "rose";
   return {
-    target: "gas", title: "Global Alignment Score (GAS)", score: gasScore, scoreLabel: "/ 100",
+    target: "gas",
+    title: "Global Alignment Score (GAS)",
+    score: gasScore,
+    scoreLabel: "/ 100",
     summary: `The GAS blends Technical (40%), Sentiment (30%), and Macro (30%). Above 60 = bullish alignment; below 40 = bearish pressure.`,
     subComponents: [
-      { label: "Technical Score", value: techScore, rawLabel: `${techScore.toFixed(0)} / 100`, color: sc(techScore), description: `ML-driven consensus. 40% of GAS.` },
-      { label: "Sentiment Score", value: sentScore0100, rawLabel: sentRaw, color: sc(sentScore0100), description: `30-day news sentiment. 30% of GAS.` },
-      { label: "Macro Score", value: macroScore, rawLabel: `${macroScore.toFixed(0)} / 100 (${macroLabel})`, color: sc(macroScore), description: `FRED macro composite. 30% of GAS.` },
+      {
+        label: "Technical Score",
+        value: techScore,
+        rawLabel: `${techScore.toFixed(0)} / 100`,
+        color: sc(techScore),
+        description: `ML-driven consensus. 40% of GAS.`,
+      },
+      {
+        label: "Sentiment Score",
+        value: sentScore0100,
+        rawLabel: sentRaw,
+        color: sc(sentScore0100),
+        description: `30-day news sentiment. 30% of GAS.`,
+      },
+      {
+        label: "Macro Score",
+        value: macroScore,
+        rawLabel: `${macroScore.toFixed(0)} / 100 (${macroLabel})`,
+        color: sc(macroScore),
+        description: `FRED macro composite. 30% of GAS.`,
+      },
     ],
     methodology: `GAS = (Technical × 0.40) + (Sentiment × 0.30) + (Macro × 0.30). Pre-computed every 15 minutes.`,
   };
 }
 
-function buildTechnicalPayload(techScore: number, signals: TechnicalSignalDto[]): ExplainPayload {
+function buildTechnicalPayload(
+  techScore: number,
+  signals: TechnicalSignalDto[],
+): ExplainPayload {
   const bullish = signals.filter((s) => s.direction === "Bullish").length;
   const bearish = signals.filter((s) => s.direction === "Bearish").length;
   const neutral = signals.length - bullish - bearish;
   const tfSubs: SubComponent[] = signals.map((s) => ({
-    label: s.timeframe, value: s.direction === "Bullish" ? 75 : s.direction === "Bearish" ? 25 : 50,
+    label: s.timeframe,
+    value: s.direction === "Bullish" ? 75 : s.direction === "Bearish" ? 25 : 50,
     rawLabel: s.direction,
-    color: (s.direction === "Bullish" ? "emerald" : s.direction === "Bearish" ? "rose" : "amber") as SubComponent["color"],
+    color: (s.direction === "Bullish"
+      ? "emerald"
+      : s.direction === "Bearish"
+        ? "rose"
+        : "amber") as SubComponent["color"],
     description: `${s.timeframe} timeframe ML model output.`,
   }));
   return {
-    target: "technical", title: "Technical Confidence Score", score: techScore, scoreLabel: "/ 100", weight: "40% of GAS",
+    target: "technical",
+    title: "Technical Confidence Score",
+    score: techScore,
+    scoreLabel: "/ 100",
+    weight: "40% of GAS",
     summary: `${bullish} of ${signals.length} bullish, ${bearish} bearish, ${neutral} neutral.`,
-    subComponents: tfSubs.length > 0 ? tfSubs : [{ label: "No signals", value: 50, rawLabel: "N/A", color: "slate", description: "No models trained yet." }],
+    subComponents:
+      tfSubs.length > 0
+        ? tfSubs
+        : [
+            {
+              label: "No signals",
+              value: 50,
+              rawLabel: "N/A",
+              color: "slate",
+              description: "No models trained yet.",
+            },
+          ],
     methodology: `scikit-learn classifiers on OHLCV features (RSI, MACD, BBands, etc.). Sharpe-weighted voting.`,
   };
 }
 
-function buildMacroPayload(macroScore: number, macroLabel: string, macroData: any, vixLevel: number | null): ExplainPayload {
+function buildMacroPayload(
+  macroScore: number,
+  macroLabel: string,
+  macroData: any,
+  vixLevel: number | null,
+): ExplainPayload {
   const sc = (s: number): SubComponent["color"] =>
-    s >= 65 ? "emerald" : s >= 55 ? "teal" : s >= 45 ? "amber" : s >= 35 ? "orange" : "rose";
-  const vixScore = vixLevel != null ? vixLevel < 15 ? 75 : vixLevel <= 25 ? 50 : 25 : 50;
+    s >= 65
+      ? "emerald"
+      : s >= 55
+        ? "teal"
+        : s >= 45
+          ? "amber"
+          : s >= 35
+            ? "orange"
+            : "rose";
+  const vixScore =
+    vixLevel != null ? (vixLevel < 15 ? 75 : vixLevel <= 25 ? 50 : 25) : 50;
   const subs: SubComponent[] = [
-    { label: "Macro Composite", value: macroScore, rawLabel: `${macroScore.toFixed(0)} / 100 (${macroLabel})`, color: sc(macroScore), description: "FRED composite. 30% of GAS." },
-    { label: "VIX", value: vixScore, rawLabel: vixLevel != null ? vixLevel.toFixed(2) : "N/A", color: (vixLevel == null ? "slate" : vixLevel < 15 ? "sky" : vixLevel <= 25 ? "amber" : "rose") as SubComponent["color"], description: "<15 calm, 15–25 normal, >25 fear." },
+    {
+      label: "Macro Composite",
+      value: macroScore,
+      rawLabel: `${macroScore.toFixed(0)} / 100 (${macroLabel})`,
+      color: sc(macroScore),
+      description: "FRED composite. 30% of GAS.",
+    },
+    {
+      label: "VIX",
+      value: vixScore,
+      rawLabel: vixLevel != null ? vixLevel.toFixed(2) : "N/A",
+      color: (vixLevel == null
+        ? "slate"
+        : vixLevel < 15
+          ? "sky"
+          : vixLevel <= 25
+            ? "amber"
+            : "rose") as SubComponent["color"],
+      description: "<15 calm, 15–25 normal, >25 fear.",
+    },
   ];
   const yc = macroData?.data?.yield_curve;
   if (yc) {
-    const ycScore = yc.shape === "Normal" ? 65 : yc.shape === "Inverted" ? 30 : 50;
-    subs.push({ label: "Yield Curve", value: ycScore, rawLabel: yc.shape ?? "Unknown", color: sc(ycScore), description: `${yc.shape}. Inverted → recession signal.` });
+    const ycScore =
+      yc.shape === "Normal" ? 65 : yc.shape === "Inverted" ? 30 : 50;
+    subs.push({
+      label: "Yield Curve",
+      value: ycScore,
+      rawLabel: yc.shape ?? "Unknown",
+      color: sc(ycScore),
+      description: `${yc.shape}. Inverted → recession signal.`,
+    });
   }
   return {
-    target: "macro", title: "Macro Score", score: macroScore, scoreLabel: `/ 100 (${macroLabel})`, weight: "30% of GAS",
+    target: "macro",
+    title: "Macro Score",
+    score: macroScore,
+    scoreLabel: `/ 100 (${macroLabel})`,
+    weight: "30% of GAS",
     summary: `Macro: '${macroLabel}'. Aggregates FRED indicators.`,
     subComponents: subs,
     methodology: `FRED: Yield Curve, VIX, Unemployment, CPI YoY, ISM PMI. Each normalised 0–100. Refreshes every 5 minutes.`,
@@ -531,16 +775,37 @@ function buildMacroPayload(macroScore: number, macroLabel: string, macroData: an
 }
 
 function buildVolatilityPayload(vixLevel: number | null): ExplainPayload {
-  const vixScore = vixLevel != null ? vixLevel < 15 ? 80 : vixLevel <= 25 ? 50 : 20 : 50;
+  const vixScore =
+    vixLevel != null ? (vixLevel < 15 ? 80 : vixLevel <= 25 ? 50 : 20) : 50;
   return {
-    target: "macro", title: "Volatility Regime",
-    score: vixScore, scoreLabel: vixLevel != null ? `VIX ${vixLevel.toFixed(1)}` : "VIX N/A",
+    target: "macro",
+    title: "Volatility Regime",
+    score: vixScore,
+    scoreLabel: vixLevel != null ? `VIX ${vixLevel.toFixed(1)}` : "VIX N/A",
     summary: `Derived from CBOE VIX. Market fear / option pricing pressure.`,
-    subComponents: [{
-      label: "VIX Level", value: vixScore, rawLabel: vixLevel != null ? vixLevel.toFixed(2) : "N/A",
-      color: vixLevel == null ? "slate" : vixLevel < 15 ? "sky" : vixLevel <= 25 ? "amber" : "rose",
-      description: vixLevel == null ? "VIX unavailable." : vixLevel < 15 ? "Below 15 — calm." : vixLevel <= 25 ? "15–25 — normal." : "Above 25 — elevated fear.",
-    }],
+    subComponents: [
+      {
+        label: "VIX Level",
+        value: vixScore,
+        rawLabel: vixLevel != null ? vixLevel.toFixed(2) : "N/A",
+        color:
+          vixLevel == null
+            ? "slate"
+            : vixLevel < 15
+              ? "sky"
+              : vixLevel <= 25
+                ? "amber"
+                : "rose",
+        description:
+          vixLevel == null
+            ? "VIX unavailable."
+            : vixLevel < 15
+              ? "Below 15 — calm."
+              : vixLevel <= 25
+                ? "15–25 — normal."
+                : "Above 25 — elevated fear.",
+      },
+    ],
     methodology: `VIX = 30-day S&P 500 implied volatility. Source: FRED (VIXCLS).`,
   };
 }
@@ -551,22 +816,34 @@ function SnapshotMeta({ snapshot }: { snapshot: GasSnapshotDto | undefined }) {
   if (!snapshot) return null;
   const ageMin = snapshotAgeMinutes(snapshot.computed_at);
   const isStale = ageMin !== null && ageMin * 60_000 > STALE_THRESHOLD_MS;
-  const ageLabel = ageMin === null ? "age unknown" : ageMin < 1 ? "just now" : `${ageMin}m ago`;
+  const ageLabel =
+    ageMin === null
+      ? "age unknown"
+      : ageMin < 1
+        ? "just now"
+        : `${ageMin}m ago`;
   const sourceColor =
-    snapshot.source === "cache" ? "text-emerald-400" :
-      snapshot.source === "db_snapshot" ? "text-sky-400" : "text-amber-400";
+    snapshot.source === "cache"
+      ? "text-emerald-400"
+      : snapshot.source === "db_snapshot"
+        ? "text-sky-400"
+        : "text-amber-400";
   return (
     <div className="flex items-center gap-2 text-xs text-slate-500">
       <span className={sourceColor}>●</span>
       <span>
         GAS computed {ageLabel}
-        {isStale && <span className="ml-1 text-amber-400 font-medium">(stale — refreshing)</span>}
+        {isStale && (
+          <span className="ml-1 text-amber-400 font-medium">
+            (stale — refreshing)
+          </span>
+        )}
       </span>
       {snapshot.component_scores && (
         <span className="hidden sm:inline text-slate-600">
-          T:{snapshot.component_scores.technical?.toFixed(0)}
-          {" "}S:{snapshot.component_scores.sentiment?.toFixed(0)}
-          {" "}M:{snapshot.component_scores.macro?.toFixed(0)}
+          T:{snapshot.component_scores.technical?.toFixed(0)} S:
+          {snapshot.component_scores.sentiment?.toFixed(0)} M:
+          {snapshot.component_scores.macro?.toFixed(0)}
         </span>
       )}
     </div>
@@ -584,7 +861,9 @@ function PriceChartWidget({ symbol }: { symbol: string }) {
   const toggle = () => {
     setOpen((v) => {
       const next = !v;
-      try { localStorage.setItem("fin-eye-chart-open", String(next)); } catch {}
+      try {
+        localStorage.setItem("fin-eye-chart-open", String(next));
+      } catch {}
       return next;
     });
   };
@@ -592,11 +871,14 @@ function PriceChartWidget({ symbol }: { symbol: string }) {
   // Map yfinance symbols to TradingView format
   const tvSymbol = React.useMemo(() => {
     const s = symbol.toUpperCase();
-    if (s.endsWith("-USD"))   return `BINANCE:${s.replace("-", "")}`;  // BTC-USD → BINANCE:BTCUSD
-    if (s.endsWith("=F"))     return `NYMEX:${s.replace("=F", "")}`;   // CL=F → NYMEX:CL
-    if (s.endsWith("=X"))     return `FX:${s.replace("=X", "")}`;      // EURUSD=X → FX:EURUSD
-    if (s.startsWith("^"))    return `TVC:${s.slice(1)}`;             // ^GSPC → TVC:GSPC
-    return `NASDAQ:${s}`;                                              // default US equity
+    if (s.endsWith("-USD")) return `BINANCE:${s.replace("-", "")}`; // BTC-USD → BINANCE:BTCUSD
+    // BUG-FE-07: Gold (GC=F) trades on COMEX, not NYMEX — NYMEX:GC renders blank
+    if (s === "GC=F") return "COMEX:GC1!"; // Gold continuous futures
+    if (s === "SI=F") return "COMEX:SI1!"; // Silver continuous futures
+    if (s.endsWith("=F")) return `NYMEX:${s.replace("=F", "")}1!`; // CL=F, NG=F etc.
+    if (s.endsWith("=X")) return `FX:${s.replace("=X", "")}`; // EURUSD=X → FX:EURUSD
+    if (s.startsWith("^")) return `TVC:${s.slice(1)}`; // ^GSPC → TVC:GSPC
+    return `NASDAQ:${s}`; // default US equity
   }, [symbol]);
 
   return (
@@ -606,18 +888,39 @@ function PriceChartWidget({ symbol }: { symbol: string }) {
         className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-800/20 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <svg className="h-4 w-4 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+          <svg
+            className="h-4 w-4 text-sky-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"
+            />
           </svg>
-          <span className="text-sm font-semibold text-slate-200">Price Chart</span>
+          <span className="text-sm font-semibold text-slate-200">
+            Price Chart
+          </span>
           <span className="text-xs text-slate-500 font-mono">{symbol}</span>
-          <span className="text-[10px] text-slate-600 bg-slate-800/60 border border-slate-700/50 rounded px-1.5 py-0.5">TradingView</span>
+          <span className="text-[10px] text-slate-600 bg-slate-800/60 border border-slate-700/50 rounded px-1.5 py-0.5">
+            TradingView
+          </span>
         </div>
         <svg
           className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2.5}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M19 9l-7 7-7-7"
+          />
         </svg>
       </button>
 
@@ -632,7 +935,8 @@ function PriceChartWidget({ symbol }: { symbol: string }) {
             />
           </div>
           <p className="px-4 py-2 text-[10px] text-slate-700">
-            Chart powered by TradingView. Prices may be delayed. Educational use only.
+            Chart powered by TradingView. Prices may be delayed. Educational use
+            only.
           </p>
         </div>
       )}
@@ -643,7 +947,12 @@ function PriceChartWidget({ symbol }: { symbol: string }) {
 // ─── Page Component ──────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { symbol: activeSymbol, setSymbol: setActiveSymbol, seedDefaultOnce } = useSymbol();
+  const cryptoFearGreedData = useCryptoFearGreed();
+  const {
+    symbol: activeSymbol,
+    setSymbol: setActiveSymbol,
+    seedDefaultOnce,
+  } = useSymbol();
   const { user } = useAuth();
 
   // Apply user's default_symbol on first load if no localStorage symbol is set
@@ -667,7 +976,9 @@ export default function DashboardPage() {
     });
   }, []);
 
-  const [explainPayload, setExplainPayload] = useState<ExplainPayload | null>(null);
+  const [explainPayload, setExplainPayload] = useState<ExplainPayload | null>(
+    null,
+  );
   const closeExplain = useCallback(() => setExplainPayload(null), []);
 
   // Track previous GAS score to detect meaningful changes
@@ -687,7 +998,12 @@ export default function DashboardPage() {
     symbol: string;
   } | null>(null);
 
-  const { data: gasSnapshot, error: gasError, isLoading: gasLoading, isValidating: gasValidating } = useSWR(
+  const {
+    data: gasSnapshot,
+    error: gasError,
+    isLoading: gasLoading,
+    isValidating: gasValidating,
+  } = useSWR(
     `gas-snapshot-${activeSymbol}`,
     () => fetchGasSnapshot(activeSymbol),
     {
@@ -698,7 +1014,12 @@ export default function DashboardPage() {
         const curr = data?.gas_score;
         const prev = prevGasScoreRef.current;
         if (curr != null && prev != null && Math.abs(curr - prev) >= 5) {
-          setGasChangeBanner({ delta: curr - prev, prev, curr, symbol: activeSymbol });
+          setGasChangeBanner({
+            delta: curr - prev,
+            prev,
+            curr,
+            symbol: activeSymbol,
+          });
         }
         if (curr != null) prevGasScoreRef.current = curr;
 
@@ -706,7 +1027,11 @@ export default function DashboardPage() {
         const currRegime = data?.regime;
         const prevRegime = prevRegimeRef.current;
         if (currRegime && prevRegime && currRegime !== prevRegime) {
-          setRegimeBanner({ prev: prevRegime, curr: currRegime, symbol: activeSymbol });
+          setRegimeBanner({
+            prev: prevRegime,
+            curr: currRegime,
+            symbol: activeSymbol,
+          });
         }
         if (currRegime) prevRegimeRef.current = currRegime;
       },
@@ -716,44 +1041,55 @@ export default function DashboardPage() {
   // Reset refs and banners when symbol changes
   React.useEffect(() => {
     prevGasScoreRef.current = null;
-    prevRegimeRef.current   = null;
+    prevRegimeRef.current = null;
     setGasChangeBanner(null);
     setRegimeBanner(null);
   }, [activeSymbol]);
 
-  const { data: techData, error: techError, mutate: mutateTech } = useSWR(
-    `tech-${activeSymbol}`,
-    () => fetchTechnicalLatest(activeSymbol),
-    { refreshInterval: 120_000, shouldRetryOnError: false, keepPreviousData: true },
-  );
+  const {
+    data: techData,
+    error: techError,
+    mutate: mutateTech,
+  } = useSWR(`tech-${activeSymbol}`, () => fetchTechnicalLatest(activeSymbol), {
+    refreshInterval: 120_000,
+    shouldRetryOnError: false,
+    keepPreviousData: true,
+  });
 
   const signals = techData?.signals ?? [];
 
   const { data: sentData } = useSWR(
     `sent-${activeSymbol}`,
     () => fetchNewsSentiment(activeSymbol),
-    { refreshInterval: 120_000, shouldRetryOnError: false, keepPreviousData: true },
+    {
+      refreshInterval: 120_000,
+      shouldRetryOnError: false,
+      keepPreviousData: true,
+    },
   );
 
-  const { data: macroData } = useSWR(
-    "macro-latest",
-    () => fetchMacroLatest(),
-    { refreshInterval: 300_000, shouldRetryOnError: false, keepPreviousData: true },
-  );
+  const { data: macroData } = useSWR("macro-latest", () => fetchMacroLatest(), {
+    refreshInterval: 300_000,
+    shouldRetryOnError: false,
+    keepPreviousData: true,
+  });
 
   // Live price — refreshes every 5 minutes; used by LLM insight card for price targets.
   // Uses keepPreviousData so the card never flickers when the symbol changes.
   const { data: priceData } = useSWR(
     `price-${activeSymbol}`,
     () => fetchLatestPrice(activeSymbol),
-    { refreshInterval: 300_000, shouldRetryOnError: false, keepPreviousData: true },
+    {
+      refreshInterval: 300_000,
+      shouldRetryOnError: false,
+      keepPreviousData: true,
+    },
   );
 
-  const { data: watchlistData } = useSWR(
-    "watchlist",
-    fetchWatchlist,
-    { refreshInterval: 5 * 60_000, shouldRetryOnError: false },
-  );
+  const { data: watchlistData } = useSWR("watchlist", fetchWatchlist, {
+    refreshInterval: 5 * 60_000,
+    shouldRetryOnError: false,
+  });
   const watchlistSymbols = (watchlistData ?? []).map((w) => w.symbol);
   const { recent: recentSymbols } = useRecentSymbols(activeSymbol);
 
@@ -761,42 +1097,62 @@ export default function DashboardPage() {
   const { data: modelData } = useSWR(
     signals.length > 0 ? `model-details-shap-${activeSymbol}` : null,
     () => fetchModelDetails(activeSymbol),
-    { revalidateOnFocus: false, shouldRetryOnError: false, keepPreviousData: true },
+    {
+      revalidateOnFocus: false,
+      shouldRetryOnError: false,
+      keepPreviousData: true,
+    },
   );
 
   // Best active timeframe for SHAP (1d default, or highest-Sharpe signal)
   const shapActiveTf = React.useMemo(() => {
     if (!signals.length) return "1d";
-    const sorted = [...signals].sort((a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0));
+    const sorted = [...signals].sort(
+      (a, b) => (b.sharpe_weight ?? 0) - (a.sharpe_weight ?? 0),
+    );
     return sorted[0].timeframe;
   }, [signals]);
 
   void techError; // used implicitly via keepPreviousData
 
-  const gasScore: number = gasSnapshot?.gas_score
-    ?? (() => {
+  const gasScore: number =
+    gasSnapshot?.gas_score ??
+    (() => {
       const ts = techData?.technical_confidence_score ?? 50;
-      const sm = ((sentData?.sentiment_30d ?? 0) + 1) / 2 * 100;
+      const sm = (((sentData?.sentiment_30d ?? 0) + 1) / 2) * 100;
       const ms = macroData?.macro_score?.score ?? 50;
       return ts * 0.4 + sm * 0.3 + ms * 0.3;
     })();
 
   const regimeFromSnapshot = gasSnapshot?.regime;
-  const techScore = gasSnapshot?.component_scores?.technical ?? techData?.technical_confidence_score ?? 50;
+  const techScore =
+    gasSnapshot?.component_scores?.technical ??
+    techData?.technical_confidence_score ??
+    50;
   const sent30d = sentData?.sentiment_30d ?? null;
-  const macroScore = gasSnapshot?.component_scores?.macro ?? macroData?.macro_score?.score ?? 50;
+  const macroScore =
+    gasSnapshot?.component_scores?.macro ?? macroData?.macro_score?.score ?? 50;
   const macroLabel = macroData?.macro_score?.label ?? "Neutral";
   const vixLevel = macroData?.data?.vix?.value ?? null;
   const yieldSpread = macroData?.data?.yield_spread_10y_2y?.value ?? null;
   const isLoading = gasLoading && !gasSnapshot && !gasError;
   const currentPrice = priceData?.price ?? 0;
 
-  const mlOutput = useMemo(() => buildMlOutput(signals, techScore), [signals, techScore]);
+  const mlOutput = useMemo(
+    () => buildMlOutput(signals, techScore),
+    [signals, techScore],
+  );
 
-  const explainParamsStr = !isLoading ? JSON.stringify({
-    tech_score: techScore, sent_30d: sent30d, macro_score: macroScore,
-    macro_label: macroLabel, gas_score: gasScore, tech_signals: JSON.stringify(signals),
-  }) : null;
+  const explainParamsStr = !isLoading
+    ? JSON.stringify({
+        tech_score: techScore,
+        sent_30d: sent30d,
+        macro_score: macroScore,
+        macro_label: macroLabel,
+        gas_score: gasScore,
+        tech_signals: JSON.stringify(signals),
+      })
+    : null;
 
   const { data: explanationData } = useSWR(
     explainParamsStr ? [`explanation-${activeSymbol}`, explainParamsStr] : null,
@@ -804,38 +1160,59 @@ export default function DashboardPage() {
       const p = JSON.parse(paramsStr as string);
       return fetchExplanationSummary(activeSymbol, p as any);
     },
-    { refreshInterval: 60_000, shouldRetryOnError: false, keepPreviousData: true },
+    {
+      refreshInterval: 60_000,
+      shouldRetryOnError: false,
+      keepPreviousData: true,
+    },
   );
 
   const fallbackWhyBullets = useMemo(
     () => buildWhyBullets(techScore, signals, sent30d, macroScore, macroLabel),
     [techScore, signals, sent30d, macroScore, macroLabel],
   );
-  const sentScore0100 = ((sent30d ?? 0) + 1) / 2 * 100;
+  const sentScore0100 = (((sent30d ?? 0) + 1) / 2) * 100;
   const fallbackConflictData = useMemo(
     () => detectConflicts(techScore, sentScore0100, macroScore, signals),
     [techScore, sentScore0100, macroScore, signals],
   );
   const whyBullets = explanationData?.why_moving ?? fallbackWhyBullets;
   const conflictData = explanationData
-    ? { hasConflict: explanationData.has_conflict, conflicts: explanationData.conflicts, summary: explanationData.conflict_summary }
+    ? {
+        hasConflict: explanationData.has_conflict,
+        conflicts: explanationData.conflicts,
+        summary: explanationData.conflict_summary,
+      }
     : fallbackConflictData;
   const initialAiSummary = explanationData?.ai_summary ?? null;
 
   const handleTrainStarted = useCallback(() => {
-    toast({ title: "Training started", description: "ML models training in background — signals will appear in ~90 seconds.", type: "info", duration: 6000 });
+    toast({
+      title: "Training started",
+      description:
+        "ML models training in background — signals will appear in ~90 seconds.",
+      type: "info",
+      duration: 6000,
+    });
     const intervalId = setInterval(async () => {
       const fresh = await mutateTech();
       if (fresh?.signals && fresh.signals.length > 0) {
         clearInterval(intervalId);
-        toast({ title: "Training complete", description: `Signals for ${activeSymbol} are ready.`, type: "success" });
+        toast({
+          title: "Training complete",
+          description: `Signals for ${activeSymbol} are ready.`,
+          type: "success",
+        });
       }
     }, 5000);
     setTimeout(() => clearInterval(intervalId), 180_000);
   }, [mutateTech, toast, activeSymbol]);
 
   const openGasExplain = useCallback(
-    () => setExplainPayload(buildGasPayload(gasScore, techScore, sent30d, macroScore, macroLabel)),
+    () =>
+      setExplainPayload(
+        buildGasPayload(gasScore, techScore, sent30d, macroScore, macroLabel),
+      ),
     [gasScore, techScore, sent30d, macroScore, macroLabel],
   );
   const openTechnicalExplain = useCallback(
@@ -847,7 +1224,10 @@ export default function DashboardPage() {
     [vixLevel],
   );
   const openMacroExplain = useCallback(
-    () => setExplainPayload(buildMacroPayload(macroScore, macroLabel, macroData, vixLevel)),
+    () =>
+      setExplainPayload(
+        buildMacroPayload(macroScore, macroLabel, macroData, vixLevel),
+      ),
     [macroScore, macroLabel, macroData, vixLevel],
   );
   void openMacroExplain;
@@ -859,7 +1239,10 @@ export default function DashboardPage() {
 
       <div className="flex gap-6">
         <aside className="hidden xl:flex xl:flex-col xl:w-56 flex-shrink-0 space-y-4">
-          <WatchlistWidget activeSymbol={activeSymbol} onSelectSymbol={setActiveSymbol} />
+          <WatchlistWidget
+            activeSymbol={activeSymbol}
+            onSelectSymbol={setActiveSymbol}
+          />
           <WhatChangedToday
             symbols={watchlistSymbols}
             onSelectSymbol={setActiveSymbol}
@@ -877,11 +1260,16 @@ export default function DashboardPage() {
 
         <div className="min-w-0 flex-1 space-y-6">
           {/* Price Tape -- Sprint 20 */}
-          <PriceTape activeSymbol={activeSymbol} onSelectSymbol={setActiveSymbol} />
+          <PriceTape
+            activeSymbol={activeSymbol}
+            onSelectSymbol={setActiveSymbol}
+          />
 
           <header className="flex flex-col gap-1 border-b border-slate-800 pb-5">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-3xl font-black tracking-tight text-slate-100">{activeSymbol} Intelligence</h1>
+              <h1 className="text-3xl font-black tracking-tight text-slate-100">
+                {activeSymbol} Intelligence
+              </h1>
               <GradeBadge
                 grade={gasSnapshot?.signal_grade}
                 score={gasSnapshot?.signal_grade_score}
@@ -894,18 +1282,49 @@ export default function DashboardPage() {
               {/* Sprint 41 — Asset class badge */}
               {(() => {
                 const sym = activeSymbol.toUpperCase();
-                const isCrypto    = sym.endsWith("-USD") || sym.endsWith("-USDT");
+                const isCrypto = sym.endsWith("-USD") || sym.endsWith("-USDT");
                 const isCommodity = sym.endsWith("=F");
-                const isFX        = sym.endsWith("=X");
-                const isETF       = ["SPY","QQQ","IWM","GLD","TLT","EEM","VTI","IAU"].includes(sym);
-                if (isCrypto)    return <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-amber-950/40 border-amber-800/50 text-amber-400">₿ Crypto</span>;
-                if (isCommodity) return <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-yellow-950/40 border-yellow-800/50 text-yellow-400">🪨 Commodity</span>;
-                if (isFX)        return <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-sky-950/40 border-sky-800/50 text-sky-400">💱 FX</span>;
-                if (isETF)       return <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-violet-950/40 border-violet-800/50 text-violet-400">📈 ETF</span>;
+                const isFX = sym.endsWith("=X");
+                const isETF = [
+                  "SPY",
+                  "QQQ",
+                  "IWM",
+                  "GLD",
+                  "TLT",
+                  "EEM",
+                  "VTI",
+                  "IAU",
+                ].includes(sym);
+                if (isCrypto)
+                  return (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-amber-950/40 border-amber-800/50 text-amber-400">
+                      ₿ Crypto
+                    </span>
+                  );
+                if (isCommodity)
+                  return (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-yellow-950/40 border-yellow-800/50 text-yellow-400">
+                      🪨 Commodity
+                    </span>
+                  );
+                if (isFX)
+                  return (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-sky-950/40 border-sky-800/50 text-sky-400">
+                      💱 FX
+                    </span>
+                  );
+                if (isETF)
+                  return (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-violet-950/40 border-violet-800/50 text-violet-400">
+                      📈 ETF
+                    </span>
+                  );
                 return null;
               })()}
             </div>
-            <p className="text-sm text-slate-400">Real-time GAS, Regime, and Multi-Timeframe layers.</p>
+            <p className="text-sm text-slate-400">
+              Real-time GAS, Regime, and Multi-Timeframe layers.
+            </p>
             <div className="mt-0.5 flex flex-wrap items-center gap-4">
               <SnapshotMeta snapshot={gasSnapshot} />
               {macroData && (
@@ -946,7 +1365,10 @@ export default function DashboardPage() {
           )}
 
           <div className="xl:hidden space-y-4">
-            <WatchlistWidget activeSymbol={activeSymbol} onSelectSymbol={setActiveSymbol} />
+            <WatchlistWidget
+              activeSymbol={activeSymbol}
+              onSelectSymbol={setActiveSymbol}
+            />
             {watchlistSymbols.length > 0 && (
               <WhatChangedToday
                 symbols={watchlistSymbols}
@@ -956,7 +1378,9 @@ export default function DashboardPage() {
             )}
             {watchlistSymbols.length > 0 && (
               <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 px-1">Upcoming Earnings</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 px-1">
+                  Upcoming Earnings
+                </p>
                 <EarningsCalendarStrip symbols={watchlistSymbols} />
               </div>
             )}
@@ -968,25 +1392,30 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-6">
-
               {/* GAS score change explainer banner — Sprint 22 */}
               {gasChangeBanner && gasChangeBanner.symbol === activeSymbol && (
-                <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${
-                  gasChangeBanner.delta > 0
-                    ? "bg-emerald-950/25 border-emerald-800/40"
-                    : "bg-rose-950/25 border-rose-800/40"
-                }`}>
+                <div
+                  className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${
+                    gasChangeBanner.delta > 0
+                      ? "bg-emerald-950/25 border-emerald-800/40"
+                      : "bg-rose-950/25 border-rose-800/40"
+                  }`}
+                >
                   <span className="text-lg flex-shrink-0">
                     {gasChangeBanner.delta > 0 ? "📈" : "📉"}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold ${
-                      gasChangeBanner.delta > 0 ? "text-emerald-300" : "text-rose-300"
-                    }`}>
+                    <p
+                      className={`text-sm font-bold ${
+                        gasChangeBanner.delta > 0
+                          ? "text-emerald-300"
+                          : "text-rose-300"
+                      }`}
+                    >
                       GAS {gasChangeBanner.delta > 0 ? "↑" : "↓"}{" "}
-                      {Math.abs(gasChangeBanner.delta).toFixed(0)} pts
-                      {" "}—{" "}
-                      {gasChangeBanner.prev.toFixed(0)} → {gasChangeBanner.curr.toFixed(0)}
+                      {Math.abs(gasChangeBanner.delta).toFixed(0)} pts —{" "}
+                      {gasChangeBanner.prev.toFixed(0)} →{" "}
+                      {gasChangeBanner.curr.toFixed(0)}
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
                       {gasChangeBanner.delta > 0
@@ -1009,38 +1438,51 @@ export default function DashboardPage() {
               )}
 
               {/* Sprint 26 — Regime change notification banner */}
-              {regimeBanner && regimeBanner.symbol === activeSymbol && (() => {
-                const toRiskOn   = regimeBanner.curr === "Risk-On";
-                const toRiskOff  = regimeBanner.curr === "Risk-Off";
-                const borderCls  = toRiskOn  ? "border-emerald-800/40 bg-emerald-950/20"
-                                 : toRiskOff ? "border-rose-800/40 bg-rose-950/20"
-                                 : "border-amber-800/40 bg-amber-950/20";
-                const textCls    = toRiskOn  ? "text-emerald-300"
-                                 : toRiskOff ? "text-rose-300"
-                                 : "text-amber-300";
-                const icon       = toRiskOn ? "🟢" : toRiskOff ? "🔴" : "🟡";
-                const implication = toRiskOn
-                  ? "Conditions now favour risk assets — momentum strategies may perform better."
-                  : toRiskOff
-                  ? "Conditions now favour defensive positioning — reduce exposure and tighten stops."
-                  : "Mixed signals — neither risk-on nor risk-off is clearly dominant.";
-                return (
-                  <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${borderCls}`}>
-                    <span className="text-lg flex-shrink-0">{icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-bold ${textCls}`}>
-                        Regime flipped: {regimeBanner.prev} → {regimeBanner.curr}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">{implication}</p>
+              {regimeBanner &&
+                regimeBanner.symbol === activeSymbol &&
+                (() => {
+                  const toRiskOn = regimeBanner.curr === "Risk-On";
+                  const toRiskOff = regimeBanner.curr === "Risk-Off";
+                  const borderCls = toRiskOn
+                    ? "border-emerald-800/40 bg-emerald-950/20"
+                    : toRiskOff
+                      ? "border-rose-800/40 bg-rose-950/20"
+                      : "border-amber-800/40 bg-amber-950/20";
+                  const textCls = toRiskOn
+                    ? "text-emerald-300"
+                    : toRiskOff
+                      ? "text-rose-300"
+                      : "text-amber-300";
+                  const icon = toRiskOn ? "🟢" : toRiskOff ? "🔴" : "🟡";
+                  const implication = toRiskOn
+                    ? "Conditions now favour risk assets — momentum strategies may perform better."
+                    : toRiskOff
+                      ? "Conditions now favour defensive positioning — reduce exposure and tighten stops."
+                      : "Mixed signals — neither risk-on nor risk-off is clearly dominant.";
+                  return (
+                    <div
+                      className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${borderCls}`}
+                    >
+                      <span className="text-lg flex-shrink-0">{icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-bold ${textCls}`}>
+                          Regime flipped: {regimeBanner.prev} →{" "}
+                          {regimeBanner.curr}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {implication}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setRegimeBanner(null)}
+                        className="text-slate-600 hover:text-slate-400 transition-colors flex-shrink-0 text-lg leading-none"
+                        aria-label="Dismiss"
+                      >
+                        ×
+                      </button>
                     </div>
-                    <button
-                      onClick={() => setRegimeBanner(null)}
-                      className="text-slate-600 hover:text-slate-400 transition-colors flex-shrink-0 text-lg leading-none"
-                      aria-label="Dismiss"
-                    >×</button>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
               {/* Sprint 32 — Graceful degradation banners */}
               {gasError && (
@@ -1078,7 +1520,9 @@ export default function DashboardPage() {
 
               {/* Cross-asset pulse row */}
               <section>
-                <p className="text-[10px] text-slate-600 uppercase tracking-wider font-medium mb-2">Market Pulse</p>
+                <p className="text-[10px] text-slate-600 uppercase tracking-wider font-medium mb-2">
+                  Market Pulse
+                </p>
                 <CrossAssetRow
                   onSelectSymbol={setActiveSymbol}
                   activeSymbol={activeSymbol}
@@ -1112,7 +1556,10 @@ export default function DashboardPage() {
                 const isCrypto = sym.endsWith("-USD") || sym.endsWith("-USDT");
                 if (!isCrypto) return null;
                 return (
-                  <CryptoFearGreedPanel symbol={activeSymbol} />
+                  <CryptoFearGreedPanel
+                    symbol={activeSymbol}
+                    data={cryptoFearGreedData}
+                  />
                 );
               })()}
 
@@ -1120,24 +1567,49 @@ export default function DashboardPage() {
               <section className="tour-timeframes p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-bold text-slate-100">Technical Consensus</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Sharpe-weighted ML signal across all trained timeframes</p>
+                    <h3 className="text-base font-bold text-slate-100">
+                      Technical Consensus
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Sharpe-weighted ML signal across all trained timeframes
+                    </p>
                   </div>
                   <div className="flex items-baseline gap-2 flex-shrink-0">
-                    <span className={`text-4xl font-black tabular-nums ${techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"
-                      }`}>{techScore.toFixed(1)}</span>
+                    <span
+                      className={`text-4xl font-black tabular-nums ${
+                        techScore >= 60
+                          ? "text-emerald-400"
+                          : techScore >= 40
+                            ? "text-amber-400"
+                            : "text-rose-400"
+                      }`}
+                    >
+                      {techScore.toFixed(1)}
+                    </span>
                     <span className="text-slate-500 text-base">/ 100</span>
                     {currentPrice > 0 && (
                       <span className="ml-2 text-xs text-slate-500 font-mono tabular-nums">
                         ${currentPrice.toFixed(2)}
                       </span>
                     )}
-                    <span className={`ml-1 text-xs font-bold px-2 py-0.5 rounded-full border ${techScore >= 60 ? "text-emerald-400 bg-emerald-950/40 border-emerald-800/50" :
-                      techScore >= 40 ? "text-amber-400 bg-amber-950/40 border-amber-800/50" :
-                        "text-rose-400 bg-rose-950/40 border-rose-800/50"
-                      }`}>
-                      {techScore >= 80 ? "Strong Bullish" : techScore >= 60 ? "Bullish Lean" :
-                        techScore >= 40 ? "Mixed / Neutral" : techScore >= 20 ? "Bearish Lean" : "Strong Bearish"}
+                    <span
+                      className={`ml-1 text-xs font-bold px-2 py-0.5 rounded-full border ${
+                        techScore >= 60
+                          ? "text-emerald-400 bg-emerald-950/40 border-emerald-800/50"
+                          : techScore >= 40
+                            ? "text-amber-400 bg-amber-950/40 border-amber-800/50"
+                            : "text-rose-400 bg-rose-950/40 border-rose-800/50"
+                      }`}
+                    >
+                      {techScore >= 80
+                        ? "Strong Bullish"
+                        : techScore >= 60
+                          ? "Bullish Lean"
+                          : techScore >= 40
+                            ? "Mixed / Neutral"
+                            : techScore >= 20
+                              ? "Bearish Lean"
+                              : "Strong Bearish"}
                     </span>
                   </div>
                 </div>
@@ -1148,62 +1620,126 @@ export default function DashboardPage() {
                       onClick={toggleTechExplain}
                       className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors group"
                     >
-                      <svg className={`h-3.5 w-3.5 transition-transform duration-200 ${techExplainOpen ? "rotate-90" : "rotate-0"}`}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      <svg
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${techExplainOpen ? "rotate-90" : "rotate-0"}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M9 5l7 7-7 7"
+                        />
                       </svg>
                       <span className="group-hover:underline">
-                        {techExplainOpen ? "Hide explanation" : "How is this score calculated?"}
+                        {techExplainOpen
+                          ? "Hide explanation"
+                          : "How is this score calculated?"}
                       </span>
                     </button>
 
                     {techExplainOpen && (
                       <div className="mt-3 rounded-xl bg-slate-800/50 border border-slate-700/60 px-4 py-3 space-y-3">
                         <div className="flex items-center gap-3">
-                          <span className="text-[10px] text-slate-600 w-12 flex-shrink-0">0 Bear</span>
+                          <span className="text-[10px] text-slate-600 w-12 flex-shrink-0">
+                            0 Bear
+                          </span>
                           <div className="relative flex-1 h-2.5 rounded-full bg-slate-700 overflow-hidden">
-                            <div className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${techScore >= 60 ? "bg-emerald-500" : techScore >= 40 ? "bg-amber-500" : "bg-rose-500"
-                              }`} style={{ width: `${techScore}%` }} />
+                            <div
+                              className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${
+                                techScore >= 60
+                                  ? "bg-emerald-500"
+                                  : techScore >= 40
+                                    ? "bg-amber-500"
+                                    : "bg-rose-500"
+                              }`}
+                              style={{ width: `${techScore}%` }}
+                            />
                             <div className="absolute inset-y-0 left-1/2 w-px bg-slate-400/50" />
                           </div>
-                          <span className="text-[10px] text-slate-600 w-14 flex-shrink-0 text-right">100 Bull</span>
+                          <span className="text-[10px] text-slate-600 w-14 flex-shrink-0 text-right">
+                            100 Bull
+                          </span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                           <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 px-3 py-2">
                             <p className="text-slate-500 mb-0.5">Scale</p>
-                            <p className="text-slate-200 font-semibold">0 &ndash; 100</p>
-                            <p className="text-slate-500 text-[10px] mt-0.5">50 = perfectly neutral</p>
+                            <p className="text-slate-200 font-semibold">
+                              0 &ndash; 100
+                            </p>
+                            <p className="text-slate-500 text-[10px] mt-0.5">
+                              50 = perfectly neutral
+                            </p>
                           </div>
                           <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 px-3 py-2">
-                            <p className="text-slate-500 mb-0.5">Score {techScore.toFixed(1)}</p>
-                            <p className={`font-semibold ${techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"}`}>
-                              {techScore < 40 ? `${(50 - techScore).toFixed(0)} pts below neutral` :
-                                techScore > 60 ? `${(techScore - 50).toFixed(0)} pts above neutral` : "Near neutral (50)"}
+                            <p className="text-slate-500 mb-0.5">
+                              Score {techScore.toFixed(1)}
                             </p>
-                            <p className="text-slate-500 text-[10px] mt-0.5">vs midpoint of 50</p>
+                            <p
+                              className={`font-semibold ${techScore >= 60 ? "text-emerald-400" : techScore >= 40 ? "text-amber-400" : "text-rose-400"}`}
+                            >
+                              {techScore < 40
+                                ? `${(50 - techScore).toFixed(0)} pts below neutral`
+                                : techScore > 60
+                                  ? `${(techScore - 50).toFixed(0)} pts above neutral`
+                                  : "Near neutral (50)"}
+                            </p>
+                            <p className="text-slate-500 text-[10px] mt-0.5">
+                              vs midpoint of 50
+                            </p>
                           </div>
                           <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 px-3 py-2">
                             <p className="text-slate-500 mb-0.5">Method</p>
-                            <p className="text-slate-200 font-semibold">Sharpe-weighted avg</p>
-                            <p className="text-slate-500 text-[10px] mt-0.5">better models count more</p>
+                            <p className="text-slate-200 font-semibold">
+                              Sharpe-weighted avg
+                            </p>
+                            <p className="text-slate-500 text-[10px] mt-0.5">
+                              better models count more
+                            </p>
                           </div>
                         </div>
                         <p className="text-[11px] text-slate-500 leading-relaxed">
-                          Each timeframe outputs −1 (bearish) to +1 (bullish), weighted by{" "}
-                          <span className="text-sky-400 font-medium">Sharpe Ratio</span>, mapped to 0–100.
+                          Each timeframe outputs −1 (bearish) to +1 (bullish),
+                          weighted by{" "}
+                          <span className="text-sky-400 font-medium">
+                            Sharpe Ratio
+                          </span>
+                          , mapped to 0–100.
                         </p>
                         <div>
-                          <p className="text-[10px] text-slate-500 mb-1.5 font-medium uppercase tracking-wider">Inputs</p>
+                          <p className="text-[10px] text-slate-500 mb-1.5 font-medium uppercase tracking-wider">
+                            Inputs
+                          </p>
                           <div className="flex flex-wrap gap-2">
                             {signals.map((s) => (
-                              <div key={s.timeframe} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${s.direction === "Bullish" ? "bg-emerald-950/40 border-emerald-800/50 text-emerald-400" :
-                                s.direction === "Bearish" ? "bg-rose-950/40 border-rose-800/50 text-rose-400" :
-                                  "bg-amber-950/30 border-amber-800/40 text-amber-400"
-                                }`}>
-                                <span className="text-slate-300 font-mono font-bold">{s.timeframe}</span>
-                                <span>{s.direction === "Bullish" ? "▲" : s.direction === "Bearish" ? "▼" : "—"}</span>
-                                <span className="text-slate-400">{s.confidence.toFixed(0)}%</span>
-                                <span className="text-slate-600 text-[10px]">Sharpe {s.sharpe_weight?.toFixed(2) ?? "?"}</span>
+                              <div
+                                key={s.timeframe}
+                                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${
+                                  s.direction === "Bullish"
+                                    ? "bg-emerald-950/40 border-emerald-800/50 text-emerald-400"
+                                    : s.direction === "Bearish"
+                                      ? "bg-rose-950/40 border-rose-800/50 text-rose-400"
+                                      : "bg-amber-950/30 border-amber-800/40 text-amber-400"
+                                }`}
+                              >
+                                <span className="text-slate-300 font-mono font-bold">
+                                  {s.timeframe}
+                                </span>
+                                <span>
+                                  {s.direction === "Bullish"
+                                    ? "▲"
+                                    : s.direction === "Bearish"
+                                      ? "▼"
+                                      : "—"}
+                                </span>
+                                <span className="text-slate-400">
+                                  {s.confidence.toFixed(0)}%
+                                </span>
+                                <span className="text-slate-600 text-[10px]">
+                                  Sharpe {s.sharpe_weight?.toFixed(2) ?? "?"}
+                                </span>
                               </div>
                             ))}
                           </div>
@@ -1216,54 +1752,85 @@ export default function DashboardPage() {
                 {signals.length > 0 ? (
                   <>
                     {/* Sprint 28: Multi-timeframe agreement banner */}
-                    {signals.length > 1 && (() => {
-                      const b_ = signals.filter((s) => s.direction === "Bullish").length;
-                      const be_ = signals.filter((s) => s.direction === "Bearish").length;
-                      const t_ = signals.length;
-                      const dom_ = Math.max(b_, be_);
-                      const agr_ = dom_ / t_;
-                      const dir_ = b_ > be_ ? "Bullish" : be_ > b_ ? "Bearish" : "Mixed";
-                      const cls_ = (dir_ !== "Mixed" && agr_ >= 0.8)
-                        ? (dir_ === "Bullish" ? "border-emerald-800/40 bg-emerald-950/15 text-emerald-300" : "border-rose-800/40 bg-rose-950/15 text-rose-300")
-                        : (dir_ !== "Mixed" && agr_ >= 0.6)
-                        ? (dir_ === "Bullish" ? "border-emerald-900/40 bg-emerald-950/10 text-emerald-400" : "border-rose-900/40 bg-rose-950/10 text-rose-400")
-                        : "border-amber-800/40 bg-amber-950/15 text-amber-300";
-                      const ico_ = (dir_ !== "Mixed" && agr_ >= 0.6)
-                        ? (dir_ === "Bullish" ? "\u{1F7E2}" : "\u{1F534}")
-                        : "\u{1F7E1}";
-                      const msg_ = dir_ === "Mixed"
-                        ? "Timeframes are split — no clear direction"
-                        : agr_ >= 0.8 ? `${dom_}/${t_} timeframes agree: ${dir_}`
-                        : agr_ >= 0.6 ? `${dom_}/${t_} timeframes lean ${dir_}`
-                        : `${dom_}/${t_} timeframes lean ${dir_} — low conviction`;
-                      const sub_ = (dir_ === "Mixed" || agr_ < 0.6)
-                        ? "Timeframes conflict. Wait for confirmation before acting."
-                        : agr_ >= 0.8
-                        ? "Strong cross-timeframe consensus — higher-conviction signal."
-                        : "Moderate consensus — use with normal risk controls.";
-                      return (
-                        <div className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 ${cls_}`}>
-                          <span className="text-base flex-shrink-0">{ico_}</span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold">{msg_}</p>
-                            <p className="text-xs opacity-70 mt-0.5">{sub_}</p>
-                          </div>
-                          <div className="flex-shrink-0 hidden sm:flex flex-col items-end gap-0.5">
-                            <div className="flex gap-0.5 h-2">
-                              {signals.map((s, i) => (
-                                <div key={i} title={`${s.timeframe}: ${s.direction}`}
-                                  className={`w-4 rounded-sm ${
-                                    s.direction === "Bullish" ? "bg-emerald-500" :
-                                    s.direction === "Bearish" ? "bg-rose-500" : "bg-amber-400/40"
-                                  }`}
-                                />
-                              ))}
+                    {signals.length > 1 &&
+                      (() => {
+                        const b_ = signals.filter(
+                          (s) => s.direction === "Bullish",
+                        ).length;
+                        const be_ = signals.filter(
+                          (s) => s.direction === "Bearish",
+                        ).length;
+                        const t_ = signals.length;
+                        const dom_ = Math.max(b_, be_);
+                        const agr_ = dom_ / t_;
+                        const dir_ =
+                          b_ > be_ ? "Bullish" : be_ > b_ ? "Bearish" : "Mixed";
+                        const cls_ =
+                          dir_ !== "Mixed" && agr_ >= 0.8
+                            ? dir_ === "Bullish"
+                              ? "border-emerald-800/40 bg-emerald-950/15 text-emerald-300"
+                              : "border-rose-800/40 bg-rose-950/15 text-rose-300"
+                            : dir_ !== "Mixed" && agr_ >= 0.6
+                              ? dir_ === "Bullish"
+                                ? "border-emerald-900/40 bg-emerald-950/10 text-emerald-400"
+                                : "border-rose-900/40 bg-rose-950/10 text-rose-400"
+                              : "border-amber-800/40 bg-amber-950/15 text-amber-300";
+                        const ico_ =
+                          dir_ !== "Mixed" && agr_ >= 0.6
+                            ? dir_ === "Bullish"
+                              ? "\u{1F7E2}"
+                              : "\u{1F534}"
+                            : "\u{1F7E1}";
+                        const msg_ =
+                          dir_ === "Mixed"
+                            ? "Timeframes are split — no clear direction"
+                            : agr_ >= 0.8
+                              ? `${dom_}/${t_} timeframes agree: ${dir_}`
+                              : agr_ >= 0.6
+                                ? `${dom_}/${t_} timeframes lean ${dir_}`
+                                : `${dom_}/${t_} timeframes lean ${dir_} — low conviction`;
+                        const sub_ =
+                          dir_ === "Mixed" || agr_ < 0.6
+                            ? "Timeframes conflict. Wait for confirmation before acting."
+                            : agr_ >= 0.8
+                              ? "Strong cross-timeframe consensus — higher-conviction signal."
+                              : "Moderate consensus — use with normal risk controls.";
+                        return (
+                          <div
+                            className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 ${cls_}`}
+                          >
+                            <span className="text-base flex-shrink-0">
+                              {ico_}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold">{msg_}</p>
+                              <p className="text-xs opacity-70 mt-0.5">
+                                {sub_}
+                              </p>
                             </div>
-                            <p className="text-[9px] opacity-50">{b_}B &middot; {be_}Be &middot; {t_-b_-be_}N</p>
+                            <div className="flex-shrink-0 hidden sm:flex flex-col items-end gap-0.5">
+                              <div className="flex gap-0.5 h-2">
+                                {signals.map((s, i) => (
+                                  <div
+                                    key={i}
+                                    title={`${s.timeframe}: ${s.direction}`}
+                                    className={`w-4 rounded-sm ${
+                                      s.direction === "Bullish"
+                                        ? "bg-emerald-500"
+                                        : s.direction === "Bearish"
+                                          ? "bg-rose-500"
+                                          : "bg-amber-400/40"
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                              <p className="text-[9px] opacity-50">
+                                {b_}B &middot; {be_}Be &middot; {t_ - b_ - be_}N
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })()}
+                        );
+                      })()}
 
                     <TimeframeGrid signals={signals} symbol={activeSymbol} />
                     {/* SHAP “What drove this?” — Sprint 24 */}
@@ -1274,7 +1841,10 @@ export default function DashboardPage() {
                     />
                   </>
                 ) : (
-                  <TrainNowEmptyState symbol={activeSymbol} onTrainStarted={handleTrainStarted} />
+                  <TrainNowEmptyState
+                    symbol={activeSymbol}
+                    onTrainStarted={handleTrainStarted}
+                  />
                 )}
               </section>
 
@@ -1282,7 +1852,10 @@ export default function DashboardPage() {
               <PriceChartWidget symbol={activeSymbol} />
 
               {/* Row 3 – Price Targets & Kelly Sizing (Sprint 5) */}
-              <PriceTargetCard symbol={activeSymbol} isVisible={signals.length > 0} />
+              <PriceTargetCard
+                symbol={activeSymbol}
+                isVisible={signals.length > 0}
+              />
 
               {/* Row 4 – LLM Investment Manager Insight (todos-v5 Sprint 1) */}
               <LLMInsightCard
@@ -1332,17 +1905,25 @@ export default function DashboardPage() {
 
               {/* Row 5 – Quick links */}
               <section className="flex flex-wrap gap-4 pt-4 border-t border-slate-800/50">
-                <Link href="/macro" className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors">
+                <Link
+                  href="/macro"
+                  className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors"
+                >
                   View Full Macro Intel &rarr;
                 </Link>
-                <Link href="/news-sentiment" className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors">
+                <Link
+                  href="/news-sentiment"
+                  className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors"
+                >
                   View Full Sentiment Intel &rarr;
                 </Link>
-                <Link href="/watchlist-overview" className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors">
+                <Link
+                  href="/watchlist-overview"
+                  className="text-sm text-sky-400 hover:text-sky-300 font-medium transition-colors"
+                >
                   Watchlist Overview &rarr;
                 </Link>
               </section>
-
             </div>
           )}
         </div>

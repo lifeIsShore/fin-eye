@@ -244,6 +244,29 @@ async def _compute_technical_score(symbol: str) -> tuple[float, Optional[list]]:
 
 
 async def _compute_sentiment_score(symbol: str, db: AsyncSession) -> float:
+    # BUG-BE-09: For crypto symbols, use Crypto Fear & Greed index from
+    # external_signals table instead of always returning neutral 50.0.
+    sym_upper = symbol.upper()
+    if sym_upper.endswith("-USD"):
+        try:
+            from sqlalchemy import select as _select, desc as _desc  # noqa: PLC0415
+            from app.models.external_signal import ExternalSignal  # noqa: PLC0415
+            row = await db.execute(
+                _select(ExternalSignal.value)
+                .where(ExternalSignal.signal_name == "crypto_fear_greed_norm")
+                .order_by(_desc(ExternalSignal.fetched_at))
+                .limit(1)
+            )
+            val: Optional[float] = row.scalar_one_or_none()
+            if val is not None:
+                # norm is 0-1; map to 0-100
+                score = round(max(0.0, min(100.0, float(val) * 100.0)), 1)
+                logger.debug("Crypto Fear & Greed sentiment for %s: %.1f", sym_upper, score)
+                return score
+        except Exception as exc:
+            logger.warning("Crypto Fear & Greed lookup failed for %s: %s — using 50.0", sym_upper, exc)
+        return 50.0
+
     try:
         from sqlalchemy import select, func  # noqa: PLC0415
         from app.models.sentiment import SentimentAggregate  # noqa: PLC0415
@@ -253,20 +276,20 @@ async def _compute_sentiment_score(symbol: str, db: AsyncSession) -> float:
         result = await db.execute(
             select(func.avg(SentimentAggregate.sentiment_score))
             .where(
-                SentimentAggregate.symbol == symbol.upper(),
+                SentimentAggregate.symbol == sym_upper,
                 SentimentAggregate.date >= cutoff.date(),
             )
         )
         avg_raw: Optional[float] = result.scalar_one_or_none()
         if avg_raw is None:
-            logger.debug("No sentiment data for %s — using 50.0", symbol)
+            logger.debug("No sentiment data for %s — using 50.0", sym_upper)
             return 50.0
         score = ((float(avg_raw) + 1.0) / 2.0) * 100.0
         score = max(0.0, min(100.0, score))
-        logger.debug("Sentiment score for %s: %.1f (raw=%.3f)", symbol, score, avg_raw)
+        logger.debug("Sentiment score for %s: %.1f (raw=%.3f)", sym_upper, score, avg_raw)
         return round(score, 1)
     except Exception as exc:
-        logger.warning("Sentiment score failed for %s: %s — using 50.0", symbol, exc)
+        logger.warning("Sentiment score failed for %s: %s — using 50.0", sym_upper, exc)
         return 50.0
 
 
@@ -340,6 +363,14 @@ async def compute_gas_for_symbol(
         grade_result["tradeable"],
     )
 
+    # BUG-BE-14: capture previous grade BEFORE the upsert overwrites it
+    try:
+        from app.crud.gas_snapshot import get_latest as _get_latest  # noqa: PLC0415
+        _prev_snap_before = await _get_latest(db, symbol)
+        _prev_grade_before: Optional[str] = _prev_snap_before.signal_grade if _prev_snap_before else None
+    except Exception:
+        _prev_grade_before = None
+
     snap = await upsert_snapshot(
         db,
         symbol           = symbol,
@@ -367,16 +398,12 @@ async def compute_gas_for_symbol(
     snap_dict["signal_grade_reasons"] = grade_result["reasons"]
 
     # ── Sprint 27: record grade change in history table ──────────────────────
-    # Fetch the previous grade from the latest existing snapshot (before upsert).
-    # The upsert overwrites in-place so we read from the returned snap object.
+    # BUG-BE-14 FIX: read previous grade BEFORE upsert (was reading after, always equal).
+    # prev_grade was captured above before the upsert_snapshot call.
     try:
-        from sqlalchemy import select as _select  # noqa: PLC0415
         from app.models.signal_grade_history import SignalGradeHistory  # noqa: PLC0415
-        from app.crud.gas_snapshot import get_latest as _get_latest  # noqa: PLC0415
 
-        # Get the grade that was stored before this run
-        prev_snap = await _get_latest(db, symbol)
-        prev_grade = prev_snap.signal_grade if prev_snap else None
+        prev_grade = _prev_grade_before  # captured before upsert — BUG-BE-14
         new_grade  = grade_result["grade"]
 
         # Always write the first record; thereafter only write on grade change

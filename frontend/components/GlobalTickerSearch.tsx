@@ -14,11 +14,11 @@
  *   - Keyboard navigation: ↑/↓ arrows, Enter to select, Escape to close
  */
 
-import React, { useState, useRef, useEffect, useCallback, useDeferredValue } from "react";
+// BUG-FE-05: removed unused imports useDeferredValue and useSWR
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Search, Loader2 } from "lucide-react";
 import { useSymbol, normalizeTicker, isValidTicker } from "@/lib/symbolContext";
 import { searchTickers } from "@/lib/tickers";
-import useSWR from "swr";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -83,9 +83,13 @@ export function GlobalTickerSearch() {
     const [input, setInput]           = useState(symbol);
     const [showDrop, setShowDrop]     = useState(false);
     const [error, setError]           = useState(false);
-    const [activeIdx, setActiveIdx]   = useState(-1);
-    const [results, setResults]       = useState<SymbolResult[]>([]);
-    const [searching, setSearching]   = useState(false);
+    // BUG-FE-01: decouple hover highlight from keyboard navigation.
+    // activeIdx is a sequential 0-(N-1) keyboard counter only.
+    // hoverSymbol tracks which item the mouse is over independently.
+    const [activeIdx, setActiveIdx]     = useState(-1);
+    const [hoverSymbol, setHoverSymbol] = useState<string | null>(null);
+    const [results, setResults]         = useState<SymbolResult[]>([]);
+    const [searching, setSearching]     = useState(false);
 
     const inputRef    = useRef<HTMLInputElement>(null);
     const dropRef     = useRef<HTMLDivElement>(null);
@@ -141,10 +145,13 @@ export function GlobalTickerSearch() {
     const handleKey = (e: React.KeyboardEvent) => {
         if (e.key === "ArrowDown") {
             e.preventDefault();
+            // BUG-FE-01: activeIdx is purely sequential — never driven by _origIdx
             setActiveIdx((i) => Math.min(i + 1, results.length - 1));
+            setHoverSymbol(null); // clear hover when using keyboard
         } else if (e.key === "ArrowUp") {
             e.preventDefault();
             setActiveIdx((i) => Math.max(i - 1, 0));
+            setHoverSymbol(null);
         } else if (e.key === "Enter") {
             if (activeIdx >= 0 && results[activeIdx]) {
                 commit(results[activeIdx].symbol);
@@ -229,17 +236,24 @@ export function GlobalTickerSearch() {
                                 );
                             }
                             for (const item of items) {
-                                const idx = item._origIdx;
+                                const seqIdx = item._origIdx; // flat index into results[]
+                                const isActive = hoverSymbol
+                                    ? hoverSymbol === item.symbol   // mouse hover wins
+                                    : seqIdx === activeIdx;          // else keyboard
                                 rows.push(
                                     <button
                                         key={item.symbol}
                                         role="option"
-                                        aria-selected={idx === activeIdx}
+                                        aria-selected={isActive}
                                         type="button"
-                                        onMouseEnter={() => setActiveIdx(idx)}
+                                        onMouseEnter={() => {
+                                            // BUG-FE-01: hover sets hoverSymbol, not activeIdx
+                                            setHoverSymbol(item.symbol);
+                                        }}
+                                        onMouseLeave={() => setHoverSymbol(null)}
                                         onMouseDown={() => commit(item.symbol)}
                                         className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors ${
-                                            idx === activeIdx ? "bg-slate-800" : "hover:bg-slate-800/60"
+                                            isActive ? "bg-slate-800" : "hover:bg-slate-800/60"
                                         }`}
                                     >
                                         <div className="flex-shrink-0 w-16">
