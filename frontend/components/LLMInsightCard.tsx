@@ -345,6 +345,82 @@ interface LLMInsightCardProps {
   atrAbsolute?:   number | null;
 }
 
+// ── Sprint 41: fetch position sizing (Kelly) ───────────────────────────────────────
+
+interface KellySizing {
+  available: boolean;
+  suggested_pct?: number;
+  win_rate?: number;
+  n_resolved?: number;
+  timeframe_used?: string;
+  capped_at_25pct?: boolean;
+  note?: string;
+  inputs?: {
+    win_rate: number;
+    avg_win_pct: number;
+    avg_loss_pct: number;
+  };
+}
+
+
+async function fetchPositionSizing(symbol: string): Promise<KellySizing | null> {
+  try {
+    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+    const res = await fetch(
+      `${API_BASE_URL}/api/v1/technical/${encodeURIComponent(symbol.toUpperCase())}/position-sizing`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {}, cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+// ── Kelly suggestion row (shown inside [RISK MANAGEMENT] section) ───────────
+
+function KellyRow({ symbol }: { symbol: string }) {
+  const [data, setData] = React.useState<KellySizing | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchPositionSizing(symbol).then((d) => { if (!cancelled) setData(d); });
+    return () => { cancelled = true; };
+  }, [symbol]);
+
+  if (!data || !data.available || data.suggested_pct == null) return null;
+
+  const pct    = data.suggested_pct;
+  const color  = pct >= 15 ? "text-amber-400" : pct >= 8 ? "text-sky-400" : "text-slate-400";
+  const winPct = data.inputs?.win_rate != null
+    ? Math.round(data.inputs.win_rate * 100)
+    : null;
+
+
+  return (
+    <div className="mt-2 flex items-center gap-2 rounded-lg border border-slate-700/40 bg-slate-800/40 px-3 py-2">
+      <span className="text-sm flex-shrink-0">📐</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-slate-400">
+          <span className="font-semibold text-slate-200">Suggested position size: </span>
+          <span className={`font-mono font-bold tabular-nums ${color}`}>~{pct}%</span>
+          <span className="text-slate-500"> of portfolio</span>
+          {data.capped_at_25pct && (
+            <span className="ml-1 text-[10px] text-amber-500">(capped at 25%)</span>
+          )}
+        </p>
+        <p className="text-[10px] text-slate-600 mt-0.5">
+          Half-Kelly
+          {winPct != null ? `, based on ${winPct}% live win rate` : ""}
+          {data.n_resolved != null ? ` (${data.n_resolved} resolved predictions)` : ""}
+          {data.timeframe_used ? ` · ${data.timeframe_used} timeframe` : ""}
+          {" · Mathematical suggestion, not advice"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function LLMInsightCard({
   symbol, signals, currentPrice, macroScore, vix, yieldSpread,
   macroRegime, newsSentiment, gasScore, atrAbsolute,
@@ -524,6 +600,10 @@ export default function LLMInsightCard({
                   {text}
                   {isCurrentSection && <TypingCursor />}
                 </p>
+                {/* Sprint 41 — Kelly position sizing row inside RISK MANAGEMENT */}
+                {cfg.key === "risk_management" && isDone && (
+                  <KellyRow symbol={symbol} />
+                )}
               </div>
             );
           }

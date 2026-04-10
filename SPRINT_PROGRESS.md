@@ -1,5 +1,5 @@
 # Fin-Eye — Sprint Progress Tracker
-> Last updated: Sprint 36 complete
+> Last updated: April 2026 — Sprints 0–41 complete + Bug Fix Sessions 1 & 2 complete
 
 ## Completed Sprints
 
@@ -514,68 +514,79 @@ alembic upgrade head
 
 ---
 
-## Files to copy from outputs after this session
+## ✅ Bug Fix Session 1 — Complete (April 2026)
 
-```
-outputs/api_final.ts          → frontend/lib/api.ts
-outputs/page_dashboard.tsx    → frontend/app/page.tsx
-outputs/backtesting_page.tsx  → frontend/app/backtesting/page.tsx
-outputs/Nav_final.tsx         → frontend/components/Nav.tsx
-```
+**Playbook:** `new-bugs-01-04-26.md`
 
-## Manual steps (cumulative)
+| Bug | Files | Fix |
+|-----|-------|-----|
+| BUG-016 | `app/config.py` | `allowed_origins` default `["*"]` → `["http://localhost:3000"]` |
+| BUG-003 | `app/config.py`, `services/ml_pipeline.py` | `ML_ARTIFACT_DIR` env var; path decoupled from hardcoded local path |
+| BUG-010 | `services/model_registry.py` | `FileLock` on `save_winner()` — prevents concurrent JSONL corruption |
+| BUG-018 | `services/backtesting_service.py` | Invalid dates raise HTTP 422; `start_date >= end_date` also raises 422 |
+| BUG-009 | `services/gas_precompute.py` | `GAS_THRESHOLD_STRONG/MILD/MIXED/WEAK` named constants |
 
-```bash
-# Migrations (only needed once each)
-alembic upgrade head    # runs v5_001_ml_predictions + v6_001_model_drift_alerts
-
-# Python deps
-pip install slowapi>=0.1.9    # Sprint 7 SEC-03
-
-# No new migrations in Sprint 10.
-```
-
-## New files created this session (write directly to these paths)
-
-```
-frontend/components/WhatChangedToday.tsx        (NEW)
-frontend/components/FreshnessIndicator.tsx       (NEW)
-frontend/app/watchlist-overview/page.tsx         (NEW)
-```
+Verified already fixed: BUG-004, BUG-011, BUG-014, BUG-015.
 
 ---
 
-## ✅ Sprint 12 — Complete
+## ✅ Bug Fix Session 2 — Complete (April 2026)
 
-### Delivered
-- [x] **Backtesting: Strategy description cards** — `STRATEGY_DOCS` constant + `StrategyDocPanel` collapsible component added to `backtesting/page.tsx`. Replaces one-liner hints with full expandable panel: how-it-works explanation, entry/exit rules (emerald/rose), best-for/watch-out (sky/amber), parameter table with defaults and meanings. Works for all 3 strategies.
-- [x] **Watchlist Overview sparklines** — `GasSparkline` imported into `watchlist-overview/page.tsx`; 7-day sparkline inserted per card below component sub-bars, wrapped in `stopPropagation` div.
-- [x] **LLM Insight Card streaming** — Full SSE refactor of `LLMInsightCard.tsx`:
-  - Removed broken `useSWR` / missing `fetchLLMInsight` import path
-  - Wired existing `useStreamInsight` hook (was defined but unused)
-  - Sections now appear **progressively** as Ollama tokens arrive — no more 15-30s blank wait
-  - Typing cursor on the currently-streaming section
-  - Pulsing “Generating…” badge in header during stream
-  - Skeleton cards for sections not yet started
-  - Price target band appears as soon as `meta` event arrives (before sections complete)
-  - Regenerate button disabled during streaming, shows “Generating…” label
-  - Backend: `OllamaBackend.generate_stream()` async generator already added to `llm_service.py`
-  - Backend: `POST /generate-insight-stream` SSE endpoint already in `explanation.py`
+**Playbook:** `new-bugs-01-04-26.md` (updated) · **Log:** `docs/bugs/BUG_FIX_LOG.md`
 
-### No new migrations, no new Python deps
+| Bug | Files | Fix |
+|-----|-------|-----|
+| BUG-005 | `middleware/rate_limit.py` (NEW), `main.py` | slowapi `Limiter` wired globally; `RateLimitExceeded` → 429 JSON + `Retry-After: 60` |
+| BUG-007 | `services/scheduler.py` | `SQLAlchemyJobStore` (PostgreSQL, auto-created table); `_make_scheduler()` factory |
+| BUG-002 | `Dockerfile`, `.dockerignore` (NEW) | Multi-stage build; non-root `appuser`; build context exclusions |
+| BUG-012 | `services/gas_precompute.py` | Verified correct — both paths already clamp sentiment to `[0, 100]` |
 
-## Sprint 13 — Next Up
+Verified already fixed: BUG-001, BUG-012.
+**New files created:**
+```
+backend/app/middleware/rate_limit.py
+backend/.dockerignore
+```
 
-### High priority
-- [ ] Model-info deep-dive: regime-conditional accuracy tab (data-gated — needs ≥90 days of predictions)
-- [ ] Dashboard: portfolio-level GAS aggregate — weighted average GAS across watchlist
-- [ ] Admin GAS precompute trigger with per-symbol status progress bar
+**Scratch file to delete:** `backend/app/services/scheduler_header.py`
 
-### Medium priority
-- [ ] Explore page: sector heatmap + RRG chart surfaced at top level
-- [ ] Backtesting: add parameter sweep UI (try N values, show best Sharpe)
-- [ ] News sentiment page: article timeline with FinBERT label chips
+---
 
-### Data-gated (Sprint 14+)
-- [ ] Meta-model: “when to trust the base model”
-- [ ] Feature Analysis: regime-conditional accuracy (≥90 days of predictions)
+---
+
+## ✅ Sprint 41 — Asset Expansion + Advanced ML Intelligence
+
+**Completed:** April 2026
+
+> Full audit confirmed: all backend work was already implemented in prior sessions.
+> This sprint session added the remaining frontend utility files and confirmed full integration.
+
+### Backend (confirmed implemented)
+
+| Item | File | Status |
+|---|---|---|
+| Crypto symbols (BTC-USD, ETH-USD) in `DEFAULT_SYMBOLS` | `config.py` L152-167 | ✅ |
+| Commodity (GC=F, CL=F) + FX (EURUSD=X…) symbols | `config.py` L159-166 | ✅ |
+| `asset_class()` / `is_crypto()` / `is_fx()` helpers on `Settings` | `config.py` L192-210 | ✅ |
+| Seasonal sin/cos features (`day_sin`, `day_cos`, `month_sin`, `month_cos`) | `ml_pipeline.py` L229-248 | ✅ |
+| FX interest rate differential feature (`fx_rate_diff`) | `ml_pipeline.py` L241-247 | ✅ |
+| `LSTMWrapper` (bidirectional, attention, seq=20) | `ml_pipeline.py` L538-734 | ✅ |
+| LSTM included in `run_training_pipeline()` model competition | `ml_pipeline.py` L882 | ✅ |
+| `kelly_fraction()` helper | `prediction_service.py` L387-453 | ✅ |
+| `GET /technical/{symbol}/position-sizing` endpoint | `technical.py` L531-590 | ✅ |
+| Optuna overnight tuning (`tune_xgboost` + `tune_lightgbm`, 30 trials) | `optuna_tuner.py` | ✅ |
+| `job_run_optuna_tuning` scheduler job at 01:00 UTC | `scheduler.py` L466-525 | ✅ |
+| Graceful fallback for missing earnings/sector on crypto/FX/commodity | `technical_service.py` | ✅ |
+
+### Frontend (added this session)
+
+- **NEW** `frontend/lib/assetClass.ts` — pure client-side asset class detection: `getAssetClass()`, `ASSET_CLASS_META`, `isCrypto()`, `isFx()`, `isCommodity()`. Used for symbol classification without API calls.
+- **EXTENDED** `frontend/lib/api.ts` — added `PositionSizingDto` + `fetchPositionSizing()`, `FearGreedDto` + `fetchCryptoFearGreed()` + `fetchCnnFearGreed()`.
+- **NEW** `frontend/components/CryptoFearGreedBadge.tsx` — SVG gauge arc component with SWR polling, colour-scaled by score range.
+
+### Frontend (already existed from prior sessions)
+
+- `app/page.tsx` — Asset class badge (Crypto/Commodity/FX/ETF pill) at lines 1282-1323
+- `app/page.tsx` — `CryptoFearGreedPanel` + `useCryptoFearGreed()` at lines 49-153, wired in at lines 1553-1564
+- `components/LLMInsightCard.tsx` — `KellyRow` + `fetchPositionSizing()` + inline Kelly interface (lines 348-415); wired into `[RISK MANAGEMENT]` section at line 597-599
+

@@ -2825,3 +2825,77 @@ export async function runWalkForward(payload: {
   }
   return res.json();
 }
+
+// ── Sprint 41: Kelly Position Sizing ────────────────────────────────────────
+
+export interface PositionSizingDto {
+  symbol: string;
+  available: boolean;
+  timeframe_used?: string;
+  model_health?: string;
+  /** Suggested portfolio % (Half-Kelly, capped at 25%) */
+  suggested_pct?: number;
+  full_kelly?: number;
+  half_kelly?: number;
+  capped_at_25pct?: boolean;
+  confidence_scale?: number;
+  n_resolved?: number;
+  inputs?: {
+    win_rate: number;
+    avg_win_pct: number;
+    avg_loss_pct: number;
+  };
+  formula?: string;
+  note?: string;
+  message?: string;
+}
+
+export async function fetchPositionSizing(
+  symbol: string,
+  init?: RequestInit,
+): Promise<PositionSizingDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/technical/${encodeURIComponent(symbol.toUpperCase())}/position-sizing`,
+    {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) throw new Error(`Position sizing fetch failed: ${res.status}`);
+  return res.json() as Promise<PositionSizingDto>;
+}
+
+// ── Sprint 41: Fear & Greed (Crypto + CNN) ───────────────────────────────────
+
+export interface FearGreedDto {
+  score: number;
+  label: string;
+  norm: number;
+  source: string;
+  fetched_at?: string | null;
+}
+
+export async function fetchCryptoFearGreed(
+  init?: RequestInit,
+): Promise<FearGreedDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/macro/fear-greed/crypto`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Crypto Fear & Greed fetch failed: ${res.status}`);
+  return res.json() as Promise<FearGreedDto>;
+}
+
+export async function fetchCnnFearGreed(
+  init?: RequestInit,
+): Promise<FearGreedDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/macro/fear-greed/cnn`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`CNN Fear & Greed fetch failed: ${res.status}`);
+  return res.json() as Promise<FearGreedDto>;
+}

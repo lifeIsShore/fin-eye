@@ -528,6 +528,68 @@ async def get_kelly_sizing(
         return {"symbol": sym, "available": False, "message": str(exc)}
 
 
+# ── /{symbol}/position-sizing ───────────────────────────────────────────────
+
+@router.get("/{symbol}/position-sizing")
+async def get_position_sizing(
+    symbol: str,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Sprint 41 — Kelly Criterion position sizing.
+
+    Wraps kelly_fraction() from prediction_service using live accuracy stats.
+    Returns a suggested portfolio allocation percentage (Half-Kelly, capped at 25%).
+    Used by LLMInsightCard [RISK MANAGEMENT] section and PriceTargetCard.
+    """
+    from app.services.prediction_service import (
+        get_prediction_stats,
+        kelly_fraction as _kelly_fraction,
+    )  # noqa: PLC0415
+
+    sym = symbol.upper()
+    try:
+        stats    = await get_prediction_stats(db, sym)
+        tf_stats = stats.get("timeframes", {})
+        best_tf  = stats.get("best_performing_timeframe") or "1d"
+        best     = tf_stats.get(best_tf, {})
+
+        win_rate   = best.get("live_accuracy")
+        n_resolved = best.get("total_resolved", 0)
+        avg_win    = best.get("avg_return_correct")
+        avg_loss   = best.get("avg_return_wrong")
+
+        if win_rate is None or avg_win is None or avg_loss is None or n_resolved < 5:
+            return {
+                "symbol":      sym,
+                "available":   False,
+                "timeframe":   best_tf,
+                "n_resolved":  n_resolved,
+                "message": (
+                    f"Insufficient live data ({n_resolved} resolved predictions). "
+                    "Position sizing requires at least 5 resolved predictions."
+                ),
+            }
+
+        sizing = _kelly_fraction(
+            win_rate=win_rate,
+            avg_win_pct=avg_win,
+            avg_loss_pct=avg_loss,
+            n_resolved=n_resolved,
+        )
+        return {
+            "symbol":          sym,
+            "available":       True,
+            "timeframe_used":  best_tf,
+            "model_health":    stats.get("model_health"),
+            **sizing,
+        }
+
+    except Exception as exc:
+        logger.error("Position sizing error for %s: %s", sym, exc)
+        return {"symbol": sym, "available": False, "message": str(exc)}
+
+
 # ── /{symbol}/prediction-history ─────────────────────────────────────────────
 
 @router.get("/{symbol}/ohlcv")

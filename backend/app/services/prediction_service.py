@@ -382,3 +382,71 @@ async def get_prediction_stats(
         "best_performing_timeframe": best_tf,
         "model_health":              model_health,
     }
+
+
+# ── 4. Kelly Criterion position sizing ───────────────────────────────────────
+
+def kelly_fraction(
+    win_rate: float,
+    avg_win_pct: float,
+    avg_loss_pct: float,
+    *,
+    n_resolved: int = 0,
+) -> dict:
+    """
+    Sprint 41 — Half-Kelly position sizing helper.
+
+    Computes the Half-Kelly Criterion fraction for a symbol based on live
+    prediction accuracy stats. Capped at 25% of portfolio regardless.
+
+    Args:
+        win_rate:      Fraction of correct predictions (0–1). e.g. 0.59
+        avg_win_pct:   Average return when correct (as fraction). e.g. 0.018
+        avg_loss_pct:  Average return when wrong (as fraction, negative). e.g. -0.014
+        n_resolved:    Number of resolved predictions used to compute stats.
+
+    Returns dict with:
+        suggested_pct     – Half-Kelly as % of portfolio (already capped at 25%)
+        full_kelly        – raw full Kelly fraction
+        half_kelly        – full Kelly / 2 (before cap)
+        confidence_scale  – penalty applied for small sample sizes
+        formula           – string describing the calculation
+        note              – plain-English caution copy
+    """
+    if avg_loss_pct >= 0:
+        # avg_loss must be negative; clamp to a small negative value
+        avg_loss_pct = -0.001
+
+    b = avg_win_pct / abs(avg_loss_pct)     # win/loss ratio
+    q = 1.0 - win_rate
+
+    # Full Kelly: f* = (b*p - q) / b
+    full_kelly = (b * win_rate - q) / b
+    half_kelly = full_kelly / 2.0
+
+    # Cap at 25%
+    capped = max(0.0, min(half_kelly, 0.25))
+
+    # Confidence penalty for small samples (scales linearly: 0 at 0 pred → 1.0 at 30 pred)
+    confidence_scale = min(1.0, n_resolved / 30.0) if n_resolved < 30 else 1.0
+    adjusted = round(capped * confidence_scale * 100, 1)  # as a percentage
+
+    return {
+        "suggested_pct":    adjusted,
+        "full_kelly":       round(full_kelly, 4),
+        "half_kelly":       round(half_kelly, 4),
+        "capped_at_25pct":  half_kelly > 0.25,
+        "confidence_scale": round(confidence_scale, 3),
+        "n_resolved":       n_resolved,
+        "inputs": {
+            "win_rate":     round(win_rate, 4),
+            "avg_win_pct":  round(avg_win_pct * 100, 2),
+            "avg_loss_pct": round(avg_loss_pct * 100, 2),
+        },
+        "formula": "Half-Kelly = ((p*b - q) / b) / 2   where b=win/loss ratio, p=win_rate, q=1-p",
+        "note": (
+            "Half-Kelly Criterion — a mathematical position sizing suggestion. "
+            "Adjust for your own risk tolerance, portfolio size, and conviction. "
+            "NOT investment advice."
+        ),
+    }
