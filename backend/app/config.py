@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = Field(default="development", alias="ENVIRONMENT")
     debug: bool = Field(default=False, alias="DEBUG")
-    allowed_origins: list[str] = Field(default=["*"], alias="ALLOWED_ORIGINS")
+    allowed_origins: list[str] = Field(default=["http://localhost:3000"], alias="ALLOWED_ORIGINS")
 
     # Database
     database_url: str = Field(
@@ -142,6 +142,10 @@ class Settings(BaseSettings):
     discord_webhook_url: str = Field(default="", alias="DISCORD_WEBHOOK_URL")
 
     # ── App-Specific ──────────────────────────────────────────────────────────
+    ml_artifact_dir: str = Field(
+        default="",
+        alias="ML_ARTIFACT_DIR",
+    )
     model_store_dir: str = Field(default="model_store", alias="MODEL_STORE_DIR")
     backup_dir: str = Field(default="backups", alias="BACKUP_DIR")
     ohlcv_lookback_years: int = Field(default=5, alias="OHLCV_LOOKBACK_YEARS")

@@ -24,6 +24,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore  # BUG-007
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import get_settings
@@ -33,7 +34,32 @@ from app.services.metrics import get_metrics
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-scheduler = AsyncIOScheduler(timezone="UTC")
+
+# ── BUG-007 FIX: Persist jobs in PostgreSQL so misfired jobs survive restarts ─
+def _make_scheduler() -> AsyncIOScheduler:
+    """
+    Build AsyncIOScheduler with a SQLAlchemy jobstore backed by PostgreSQL.
+    APScheduler auto-creates the `apscheduler_jobs` table on first start —
+    no Alembic migration required.
+    Falls back to in-memory if DATABASE_URL is not set (e.g. unit tests).
+    """
+    sync_url = settings.database_url
+    if sync_url:
+        jobstores = {
+            "default": SQLAlchemyJobStore(
+                url=sync_url,
+                tablename="apscheduler_jobs",
+            )
+        }
+        logger.info("APScheduler: using SQLAlchemy jobstore (table=apscheduler_jobs)")
+    else:
+        jobstores = {}
+        logger.warning("APScheduler: DATABASE_URL not set — falling back to in-memory jobstore")
+
+    return AsyncIOScheduler(timezone="UTC", jobstores=jobstores)
+
+
+scheduler = _make_scheduler()
 
 
 # ── Job Implementations ────────────────────────────────────────────────────────
@@ -457,7 +483,6 @@ async def job_run_optuna_tuning() -> None:
     started = datetime.now(timezone.utc).isoformat()
     t0 = time.perf_counter()
 
-    # Read trained symbols from registry
     trained: set[tuple[str, str]] = set()
     try:
         if os.path.exists(REGISTRY_FILE):
@@ -579,7 +604,7 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="fear_greed_fetch", name="CNN + Crypto Fear & Greed Fetch",
         replace_existing=True, misfire_grace_time=300)
 
-    # Sprint 40 — Google Trends: daily at 08:00 UTC (right after macro refresh)
+    # Sprint 40 — Google Trends: daily at 08:15 UTC (right after macro refresh)
     scheduler.add_job(job_google_trends_fetch,
         trigger=CronTrigger(hour=8, minute=15),
         id="google_trends_fetch", name="Google Trends Daily Fetch",

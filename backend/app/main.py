@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
 from app.db.database import init_db, test_db_connection
@@ -14,6 +15,7 @@ from app.services.llm_service import close_ollama_service
 
 from app.middleware.metrics_middleware import MetricsMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware  # SEC-06
+from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler  # BUG-005
 
 import app.models  # noqa: F401 — side-effect: registers all ORM models with Base
 
@@ -81,6 +83,10 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+
+# ── BUG-005: Rate limiting ─────────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 
 @app.exception_handler(Exception)

@@ -41,7 +41,15 @@ from app.services.model_registry import JsonlFileModelRegistry, record_winners
 
 logger = logging.getLogger(__name__)
 
-ARTIFACT_DIR  = os.path.join(os.path.dirname(__file__), "..", "..", "data", "models")
+from app.config import get_settings as _get_settings
+
+def _resolve_artifact_dir() -> str:
+    s = _get_settings()
+    if s.ml_artifact_dir:
+        return s.ml_artifact_dir
+    return os.path.join(os.path.dirname(__file__), "..", "..", "data", "models")
+
+ARTIFACT_DIR  = _resolve_artifact_dir()
 REGISTRY_FILE = os.path.join(ARTIFACT_DIR, "model_registry.jsonl")
 os.makedirs(ARTIFACT_DIR, exist_ok=True)
 

@@ -33,6 +33,12 @@ _W_MACRO     = 0.30
 
 _CACHE_TTL_S = 900
 
+# ── GAS score thresholds (single source of truth) ─────────────────────────────
+GAS_THRESHOLD_STRONG = 75   # A-grade strong tailwind
+GAS_THRESHOLD_MILD   = 60   # B-grade mild support
+GAS_THRESHOLD_MIXED  = 45   # C-grade mixed signals
+GAS_THRESHOLD_WEAK   = 30   # F-grade disqualifier
+
 DEFAULT_SYMBOLS: list[str] = settings.ohlcv_symbols_default  # type: ignore[attr-defined]
 
 
@@ -77,9 +83,9 @@ def compute_signal_grade(
     disqualified = False
 
     # ── Hard disqualifiers → F ─────────────────────────────────────────────
-    if gas_score < 30:
+    if gas_score < GAS_THRESHOLD_WEAK:
         disqualified = True
-        reasons.append(f"GAS {gas_score:.0f} < 30 — high instability zone")
+        reasons.append(f"GAS {gas_score:.0f} < {GAS_THRESHOLD_WEAK} — high instability zone")
 
     # All components at default 50 = no real data computed
     if technical_score == 50.0 and sentiment_score == 50.0 and macro_score == 50.0:

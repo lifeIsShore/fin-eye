@@ -67,13 +67,31 @@ class BacktestingEngine:
                 start_dt = datetime.strptime(self.request.start_date, "%Y-%m-%d").date()
                 df = df[df.index >= start_dt]
             except ValueError:
-                pass
+                from fastapi import HTTPException  # noqa: PLC0415
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid start_date '{self.request.start_date}'. Expected YYYY-MM-DD."
+                )
+        else:
+            start_dt = None
         if self.request.end_date:
             try:
                 end_dt = datetime.strptime(self.request.end_date, "%Y-%m-%d").date()
                 df = df[df.index <= end_dt]
             except ValueError:
-                pass
+                from fastapi import HTTPException  # noqa: PLC0415
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid end_date '{self.request.end_date}'. Expected YYYY-MM-DD."
+                )
+        else:
+            end_dt = None
+        if start_dt and end_dt and start_dt >= end_dt:
+            from fastapi import HTTPException  # noqa: PLC0415
+            raise HTTPException(
+                status_code=422,
+                detail="start_date must be before end_date."
+            )
 
         if len(df) < 50:
             raise ValueError(

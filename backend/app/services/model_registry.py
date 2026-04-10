@@ -30,6 +30,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Protocol
 
+try:
+    from filelock import FileLock as _FileLock
+    _FILELOCK_AVAILABLE = True
+except ImportError:
+    _FILELOCK_AVAILABLE = False
+
 from app.services.technical_models import ModelKind, Timeframe, TimeframeWinner
 
 logger = logging.getLogger(__name__)
@@ -254,10 +260,18 @@ class JsonlFileModelRegistry:
     def __init__(self, path: str | Path) -> None:
         self.log_path   = Path(path)
         self.index_path = self.log_path.parent / "model_registry_index.json"
+        self._lock_path = str(self.log_path) + ".lock"
 
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.log_path.exists():
             self.log_path.write_text("", encoding="utf-8")
+
+    def _get_lock(self):
+        """Return a file lock context manager, or a no-op if filelock is unavailable."""
+        if _FILELOCK_AVAILABLE:
+            return _FileLock(self._lock_path)
+        import contextlib  # noqa: PLC0415
+        return contextlib.nullcontext()
 
     # ── Internal: read ────────────────────────────────────────────────────────
 
@@ -378,15 +392,16 @@ class JsonlFileModelRegistry:
         3. Append the new champion line.
         4. Rebuild the index JSON.
         """
-        record.version   = self._next_version(record.symbol, record.timeframe)
-        record.record_id = f"{record.symbol}_{record.timeframe.value}_{record.version}"
+        with self._get_lock():
+            record.version   = self._next_version(record.symbol, record.timeframe)
+            record.record_id = f"{record.symbol}_{record.timeframe.value}_{record.version}"
 
-        self._rewrite_retired(record.symbol, record.timeframe)
-        record.status = "champion"
-        self._append(record)
+            self._rewrite_retired(record.symbol, record.timeframe)
+            record.status = "champion"
+            self._append(record)
 
-        all_records = self._read_all()
-        self._rebuild_index(all_records)
+            all_records = self._read_all()
+            self._rebuild_index(all_records)
 
         logger.info(
             "Registry: saved champion %s  (sharpe=%.3f  acc=%.1%%  gate=%s)",
