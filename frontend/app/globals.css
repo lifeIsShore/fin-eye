@@ -1,9 +1,47 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* Sprint 43 — Page transition animation */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition-enter {
+  animation: page-fade-in 200ms ease-out forwards;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .page-transition-enter {
+    animation: none;
+  }
+}
+
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
     "Segoe UI", sans-serif;
+}
+
+/* Sprint 43 — Dark mode contrast improvements (WCAG AA)
+   text-slate-500 on bg-slate-900 ≈ 3.1:1 — fails for small body text.
+   Critical interactive/structural text raised to slate-400 (≈ 4.6:1).  */
+
+/* Footer links — raised from slate-500 to slate-400 */
+footer a {
+  color: rgb(148 163 184); /* slate-400 = 4.6:1 on slate-950 */
+}
+
+/* Form input placeholders — slate-500 is WCAG-acceptable for placeholders */
+input::placeholder,
+textarea::placeholder {
+  color: rgb(100 116 139); /* slate-500 */
 }
 
 /* Sprint 43 — Compact view density mode */

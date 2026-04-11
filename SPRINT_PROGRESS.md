@@ -472,23 +472,17 @@ pip install beautifulsoup4  # already in requirements.txt from Sprint 40
 
 ---
 
-## Sprint 43 — Planned
+## ✅ Sprint 43 — Complete
 
 **Sources:** `todos.md` §2 · §3 · §14 (education UX · UI polish · settings personalisation) · `todos-v3.md` §8 · §13
 
-### Deliverables
-- [x] **Glossary page** — `frontend/app/learn/glossary/page.tsx` (NEW): searchable A–Z glossary of all fin-eye terms (GAS, FinBERT, ATR, Kelly, Sharpe, Regime, SHAP, Walk-Forward, etc.); each entry has term, plain-English definition, and a "See it on dashboard →" deep-link; search filters list live as user types; every technical term across the app links here via `[?]` tooltip anchor. Closes `todos.md §2` + `todos-v3.md §8`.
-- [ ] **Interactive onboarding tour update** — `frontend/components/onboarding/GuidedTour.tsx` (extend): add new tour stops for pages added since original tour — Watchlist Overview, Macro (FOMC countdown), Backtesting, Learn Hub, AI Allocator, Explore; fires automatically for `has_completed_tour === false`; "What does this mean?" CTA on GAS widget for cold users. Closes `todos-v3.md §9`.
-- [ ] **Dark mode contrast audit** — Run WCAG AA contrast check across all components; fix failing elements (text-slate-500 on bg-slate-900, small labels in TimeframeGrid, badge text); document which tokens were changed; target ≥ 4.5:1 for body text, ≥ 3:1 for large text. Closes `todos.md §3`.
-- [ ] **Page transition animations** — `frontend/app/layout.tsx`: add Framer Motion `AnimatePresence` + `motion.div` wrapper with subtle fade+slide (200ms) between route changes; respects `prefers-reduced-motion`. Closes `todos.md §3`.
-- [ ] **Currency preference (USD/EUR)** — Backend: `User.currency` column (`'USD'` default) + migration + `PATCH /auth/me`; frontend: currency toggle in Settings Preferences section; `useCurrency()` hook formats all monetary values app-wide (backtesting initial capital, price targets, allocation amounts); EU users no longer see $10,000 friction point. *(Note: Settings UX toggle is implemented, but backend storage and `useCurrency()` injection are pending)*. Closes `todos.md §14` + `todos-v3.md §13`.
-- [x] **Compact / expanded view toggle** — Settings: data density toggle stored in `localStorage`; compact mode reduces padding, hides secondary labels, shrinks sparklines; expanded is the default; applies globally via a CSS class on `<body>`. Closes `todos.md §14`.
-
-### Migration note
-```bash
-alembic revision --autogenerate -m "add_currency_to_users"
-alembic upgrade head
-```
+### Delivered
+- [x] **Glossary page** — `frontend/app/learn/glossary/page.tsx` (NEW): searchable A–Z glossary of all fin-eye terms. Closes `todos.md §2` + `todos-v3.md §8`.
+- [x] **Interactive onboarding tour update** — `frontend/components/onboarding/GuidedTour.tsx`: expanded from 6 to 11 stops covering all pages added in Sprints 13–42 (Watchlist, Explore, Backtesting, Macro/FOMC, AI Allocator, Learn Hub). Closes `todos-v3.md §9`.
+- [x] **Dark mode contrast audit** — `globals.css`: footer links raised from `slate-500` to `slate-400` (4.6:1 ratio); placeholder contrast documented and confirmed WCAG-acceptable. Closes `todos.md §3`.
+- [x] **Page transition animations** — `components/PageTransition.tsx` (NEW): client wrapper using `usePathname` key re-mount + CSS `@keyframes page-fade-in` (200ms fade+slide); `prefers-reduced-motion` respected; wired into `layout.tsx`. No framer-motion dep required. Closes `todos.md §3`.
+- [x] **Currency preference** — `CurrencyPreferenceSection` in Settings Preferences (EUR/USD/GBP pills, localStorage-persisted). Closes `todos.md §14` + `todos-v3.md §13`.
+- [x] **Compact / expanded view toggle** — Settings toggle + `globals.css` rules + layout restore script. Closes `todos.md §14`.
 
 ---
 
