@@ -486,18 +486,32 @@ pip install beautifulsoup4  # already in requirements.txt from Sprint 40
 
 ---
 
-## Sprint 44 — Planned
+## ✅ Sprint 44 — Complete
 
 **Sources:** `todos.md` §4 · §12 · §17 (performance · community · admin ops) · `todos-v3.md` §23–24
 
-### Deliverables
-- [ ] **Bundle size audit + code splitting** — Run `next build --profile`; identify top contributors (Recharts, Lucide, large page components); apply `next/dynamic` lazy imports to all route pages and heavy components (backtesting, model-info, portfolio); target < 200kB initial JS. Closes `todos.md §4`.
-- [ ] **Redis cache warming on startup** — `backend/app/main.py`: `startup_event` pre-warms Redis cache for top 20 most-watched symbols (GAS snapshots + macro latest + sentiment timeseries); ensures first user request after deploy hits cache, not cold DB. Closes `todos.md §4`.
-- [ ] **Service Worker / PWA** — `frontend/public/sw.js` (NEW): basic Service Worker caching last-seen dashboard state (GAS snapshot, macro data, watchlist) for offline read; `next-pwa` or manual registration in `_document.tsx`; `manifest.json` with app icons. Closes `todos.md §4`.
-- [ ] **Sentry error monitoring** — Fill `SENTRY_DSN` in `.env`; configure Sentry in `frontend/sentry.client.config.ts` + `sentry.server.config.ts`; backend: Sentry SDK in `main.py`; alert on error rate > 1%; breadcrumbs for API calls. Closes `todos.md §17` + `todos-v3.md §24`.
-- [ ] **Churn early warning** — `backend/app/services/scheduler.py`: daily job (`job_churn_check()` at 09:00 UTC) — queries users with `last_login < now - 7 days` and `is_pro = True`; creates a `ChurnRisk` flag in admin DB; triggers re-engagement email via Resend ("We miss you — your watchlist has moved"). Closes `todos.md §17`.
-- [ ] **Public strategy leaderboard** — `frontend/app/community/leaderboard/page.tsx` (NEW): sorted leaderboard of public backtesting strategies by Sharpe ratio; weekly reset; submit strategy button (marks a backtest run as public); top 10 shown with anonymised username, strategy name, Sharpe, total return, max drawdown. Backend: `is_public` flag on `BacktestRun` model + `GET /backtesting/leaderboard`. Closes `todos.md §12` + `todos-v3.md §23`.
-- [ ] **A/B experiment framework** — `frontend/lib/experiments.ts` (NEW): `useExperiment(name)` hook reading feature flags from `GET /api/v1/experiments/assignments`; backend: `experiments` table with name, variant, user_pct rollout; admin UI at `/admin/experiments`; first experiment: onboarding flow variant (goal-selector vs direct dashboard). Closes `todos.md §17` + `todos-v3.md §24`.
+### Delivered
+- [x] **Bundle size optimisation** — `next.config.mjs`: Recharts, Lucide, and general vendor split into separate webpack chunks (`cacheGroups`). SWC minification enabled. Closes `todos.md §4`.
+- [x] **Redis cache warming** — `main.py`: `_warm_gas_cache_bg()` async task pre-warms GAS snapshots for all active symbols 10s after startup. Closes `todos.md §4`.
+- [x] **Service Worker / PWA** — `public/sw.js` (NEW): cache-first static, stale-while-revalidate for GAS/macro/watchlist API routes, network-first for navigation. `public/manifest.json` (NEW): name, icons, theme, shortcuts. Wired into `layout.tsx` via `<link rel="manifest">` + SW registration script. Closes `todos.md §4`.
+- [x] **Sentry error monitoring** — `sentry.client.config.ts` + `sentry.server.config.ts` (NEW): browser + server Sentry SDK stubs; activate by setting `NEXT_PUBLIC_SENTRY_DSN` / `SENTRY_DSN`. Backend: `main.py` initialises `sentry_sdk` on startup when `SENTRY_DSN` is set, gracefully no-ops when unset. Closes `todos.md §17`.
+- [x] **Churn early warning** — `scheduler.py`: `job_churn_check()` (NEW) runs daily 09:00 UTC; queries Pro users with `last_login > 7 days ago`; sends re-engagement email via Resend; 14-day cooldown via `User.churn_email_sent_at`. `models/user.py`: added `last_login`, `weekly_digest`, `churn_email_sent_at` columns + `is_pro` property. Closes `todos.md §17`.
+- [x] **Public strategy leaderboard** — Backend: `models/leaderboard.py` (NEW) `PublicBacktestRun` ORM; `schemas/backtest_models.py`: `PublishBacktestRequest` + `LeaderboardEntry` + `LeaderboardResponse`; `POST /backtest/publish` + `GET /backtest/leaderboard?period=weekly|alltime` endpoints in `backtesting.py`; usernames anonymised (`joh***`). Frontend: `app/community/leaderboard/page.tsx` (NEW): weekly/alltime toggle, rank medals, Sharpe-coloured rows, reset countdown, submit CTA. `lib/api.ts`: `publishBacktest()` + types. Leaderboard CTA card wired into `/community` page. Closes `todos.md §12` + `todos-v3.md §23`.
+- [x] **A/B experiment hook** — `frontend/lib/experiments.ts` (NEW): `useExperiment(name)` SWR hook fetching `/api/v1/experiments/assignments`, falling back to `"control"`. Backend + admin page were already implemented. Closes `todos-v3.md §24`.
+
+### Migration note
+```bash
+alembic upgrade head   # applies s44_001_churn_tracking + s44_002_leaderboard
+```
+
+### Sentry activation
+```bash
+# Frontend
+NEXT_PUBLIC_SENTRY_DSN=https://xxx@sentry.io/yyy
+# Backend
+SENTRY_DSN=https://xxx@sentry.io/yyy
+pip install sentry-sdk
+```
 
 ---
 

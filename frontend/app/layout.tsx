@@ -15,6 +15,15 @@ export const metadata = {
     description: "Understand the forces behind price movements",
 };
 
+// Sprint 44 — Service worker registration script (runs once after first paint)
+const REGISTER_SW_SCRIPT = `
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/sw.js').catch(function() {});
+    });
+  }
+`;
+
 // Sprint 43 — Restore compact/currency prefs on page load
 const RESTORE_PREFS_SCRIPT = `
   try {
@@ -30,6 +39,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <head>
                 {/* Restore compact mode before first paint to avoid flash */}
                 <script dangerouslySetInnerHTML={{ __html: RESTORE_PREFS_SCRIPT }} />
+                {/* Sprint 44 — PWA manifest + SW registration */}
+                <link rel="manifest" href="/manifest.json" />
+                <meta name="theme-color" content="#020617" />
+                <script dangerouslySetInnerHTML={{ __html: REGISTER_SW_SCRIPT }} />
             </head>
             <body className="min-h-screen bg-slate-950 text-slate-50 antialiased">
                 <AuthProvider>

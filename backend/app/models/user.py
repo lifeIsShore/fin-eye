@@ -46,6 +46,21 @@ class User(Base):
     trial_ends_at = Column(DateTime(timezone=True), nullable=True)   # null = never trialed
     paused_until  = Column(DateTime(timezone=True), nullable=True)   # null = not paused
 
+    # Engagement tracking (Sprint 33 + Sprint 44)
+    last_login          = Column(DateTime(timezone=True), nullable=True)   # updated on every login
+    weekly_digest       = Column(Boolean, default=False, nullable=False)   # Sprint 33 opt-in
+    churn_email_sent_at = Column(DateTime(timezone=True), nullable=True)   # Sprint 44 cooldown
+
+    # Convenience bool — true when on pro tier or within active trial
+    @property
+    def is_pro(self) -> bool:
+        from datetime import datetime, timezone  # noqa: PLC0415
+        if self.subscription_tier in ("pro", "institutional"):
+            return True
+        if self.trial_ends_at and self.trial_ends_at > datetime.now(timezone.utc):
+            return True
+        return False
+
     # Relationships
     portfolios = relationship("Portfolio", back_populates="owner", cascade="all, delete-orphan")
     watchlist_items = relationship("WatchlistItem", back_populates="owner", cascade="all, delete-orphan")

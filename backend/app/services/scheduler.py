@@ -602,6 +602,91 @@ async def job_run_optuna_tuning() -> None:
     get_metrics().record_pipeline_run("optuna_tuning", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, True, detail)
 
 
+# Sprint 44 — Churn early warning job implementation
+
+async def job_churn_check() -> None:
+    """
+    Sprint 44 — Pro user churn early warning.
+    Sends a re-engagement email to Pro users inactive for >7 days.
+    14-day cooldown prevents repeat emails. Requires RESEND_API_KEY in .env.
+    """
+    from sqlalchemy import select, update  # noqa: PLC0415
+    from app.models.user import User       # noqa: PLC0415
+
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    sent = errors = 0
+
+    try:
+        cutoff_login   = datetime.now(timezone.utc) - timedelta(days=7)
+        cooldown_after = datetime.now(timezone.utc) - timedelta(days=14)
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(User).where(
+                    User.subscription_tier.in_(["pro", "institutional"]),
+                    User.last_login < cutoff_login,
+                    (
+                        User.churn_email_sent_at.is_(None)
+                        | (User.churn_email_sent_at < cooldown_after)
+                    ),
+                ).limit(200)
+            )
+            users = result.scalars().all()
+            logger.info("Churn check: %d candidate(s)", len(users))
+
+            resend_key = getattr(settings, "resend_api_key", None)
+            if not resend_key:
+                logger.warning("Churn check: RESEND_API_KEY not configured — skipping sends")
+                return
+
+            import httpx  # noqa: PLC0415
+            for user in users:
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.post(
+                            "https://api.resend.com/emails",
+                            headers={"Authorization": f"Bearer {resend_key}"},
+                            json={
+                                "from":    "Fin-Eye <noreply@fin-eye.app>",
+                                "to":      [user.email],
+                                "subject": "We miss you — your watchlist has moved",
+                                "html": (
+                                    f"<p>Hi {user.name or 'there'},</p>"
+                                    "<p>You haven’t visited Fin-Eye in a while. Your watchlist "
+                                    "symbols may have had significant GAS score changes.</p>"
+                                    "<p><a href='https://fin-eye.app'>Check your dashboard →</a></p>"
+                                    "<p style='color:#94a3b8;font-size:12px'>Active Pro account. "
+                                    "<a href='https://fin-eye.app/settings'>Manage preferences</a>.</p>"
+                                ),
+                            },
+                        )
+                    resp.raise_for_status()
+                    await session.execute(
+                        update(User).where(User.id == user.id)
+                        .values(churn_email_sent_at=datetime.now(timezone.utc))
+                    )
+                    sent += 1
+                except Exception as exc:
+                    logger.warning("Churn email failed for %s: %s", user.id, exc)
+                    errors += 1
+
+            await session.commit()
+
+        detail = f"sent={sent} errors={errors} candidates={len(users)}"
+        logger.info("Churn check complete: %s", detail)
+        get_metrics().record_pipeline_run(
+            "churn_check", started, datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+    except Exception as exc:
+        logger.error("job_churn_check failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "churn_check", started, datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+
+
 # ── Scheduler Setup ────────────────────────────────────────────────────────────
 
 def setup_scheduler() -> AsyncIOScheduler:
@@ -736,6 +821,12 @@ def setup_scheduler() -> AsyncIOScheduler:
         trigger=CronTrigger(hour=1, minute=0),
         id="optuna_tuning", name="Overnight Optuna Hyperparameter Tuning",
         replace_existing=True, misfire_grace_time=7200)
+
+    # Sprint 44 — Churn early warning: daily at 09:00 UTC
+    scheduler.add_job(job_churn_check,
+        trigger=CronTrigger(hour=9, minute=0),
+        id="churn_check", name="Pro User Churn Early Warning",
+        replace_existing=True, misfire_grace_time=3600)
 
     logger.info(
         "Scheduler configured with %d jobs: %s",

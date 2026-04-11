@@ -231,6 +231,21 @@ export default function CommunityPage() {
             </div>
 
             {/* ── Disclaimer ──────────────────────────────────────────────────── */}
+            {/* Sprint 44 — Strategy Leaderboard CTA */}
+            <Link
+                href="/community/leaderboard"
+                className="flex items-center justify-between rounded-xl border border-amber-700/30 bg-amber-950/20 px-5 py-4 hover:bg-amber-950/30 transition-colors"
+            >
+                <div className="flex items-center gap-3">
+                    <span className="text-2xl">🏆</span>
+                    <div>
+                        <p className="text-sm font-semibold text-amber-300">Strategy Leaderboard</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Top community backtests ranked by Sharpe ratio — weekly reset.</p>
+                    </div>
+                </div>
+                <ExternalLink className="h-4 w-4 text-slate-500 flex-shrink-0" />
+            </Link>
+
             <p className="text-xs text-slate-600 border-t border-slate-800/50 pt-4">
                 Community platforms are moderated independently. Fin-Eye is not responsible
                 for content posted by community members. Nothing discussed constitutes

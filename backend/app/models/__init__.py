@@ -26,3 +26,5 @@ from app.models.model_drift_alert import ModelDriftAlert
 from app.models.signal_grade_history import SignalGradeHistory  # noqa: F401
 # Sprint 40 — external signals (fear/greed, trends, reddit, wikipedia)
 from app.models.external_signal import ExternalSignal  # noqa: F401
+# Sprint 44 — community strategy leaderboard
+from app.models.leaderboard import PublicBacktestRun  # noqa: F401

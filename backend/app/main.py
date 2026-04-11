@@ -17,6 +17,20 @@ from app.middleware.metrics_middleware import MetricsMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware  # SEC-06
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler  # BUG-005
 
+# Sprint 44 — Sentry error monitoring (no-op when SENTRY_DSN is unset)
+try:
+    import sentry_sdk  # type: ignore
+    _sentry_dsn = __import__("os").environ.get("SENTRY_DSN", "")
+    if _sentry_dsn:
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            traces_sample_rate=0.05,
+            environment=__import__("os").environ.get("APP_ENV", "production"),
+        )
+        logger.info("Sentry initialised (DSN configured)")
+except ImportError:
+    pass  # sentry-sdk not installed — monitoring disabled
+
 import app.models  # noqa: F401 — side-effect: registers all ORM models with Base
 
 from app.api.v1.health import router as health_router

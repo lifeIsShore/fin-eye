@@ -120,3 +120,37 @@ class WalkForwardResponse(BaseModel):
     # Combined OOS equity curve (folds stitched together)
     combined_oos_equity: List[EquityPoint]
     overfitting_warning: bool
+
+
+# ── Sprint 44: Public Leaderboard ───────────────────────────────────────
+
+class PublishBacktestRequest(BaseModel):
+    """Body for POST /backtest/publish — attaches a name and makes the run public."""
+    strategy_name: str = Field(..., max_length=80, description="Display name for the leaderboard")
+    symbol: str
+    strategy: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    sharpe_ratio: float
+    total_return_pct: float
+    max_drawdown_pct: float
+    total_trades: int
+
+
+class LeaderboardEntry(BaseModel):
+    rank: int
+    strategy_name: str
+    symbol: str
+    strategy: str
+    sharpe_ratio: float
+    total_return_pct: float
+    max_drawdown_pct: float
+    total_trades: int
+    username: str              # anonymised: first 3 chars + ***
+    submitted_at: str          # ISO date string
+
+
+class LeaderboardResponse(BaseModel):
+    entries: List[LeaderboardEntry]
+    period: str                # "weekly" | "alltime"
+    reset_date: Optional[str] = None   # next Monday ISO date when period="weekly"

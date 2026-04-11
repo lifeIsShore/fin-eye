@@ -2956,3 +2956,54 @@ export async function fetchSocialSignals(
   if (!res.ok) throw new Error(`Social signals fetch failed: ${res.status}`);
   return res.json() as Promise<SocialSignalsDto>;
 }
+
+// ── Sprint 44: Community Leaderboard ─────────────────────────────────
+
+export interface LeaderboardEntry {
+  rank: number;
+  strategy_name: string;
+  symbol: string;
+  strategy: string;
+  sharpe_ratio: number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  total_trades: number;
+  username: string;
+  submitted_at: string;
+}
+
+export interface LeaderboardResponse {
+  entries: LeaderboardEntry[];
+  period: string;
+  reset_date: string | null;
+}
+
+export interface PublishBacktestRequest {
+  strategy_name: string;
+  symbol: string;
+  strategy: string;
+  start_date?: string;
+  end_date?: string;
+  sharpe_ratio: number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  total_trades: number;
+}
+
+export async function publishBacktest(
+  payload: PublishBacktestRequest,
+): Promise<LeaderboardEntry> {
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("access_token") ?? "")
+    : "";
+  const res = await fetch(`${API_BASE_URL}/api/v1/backtest/publish`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Publish failed: ${res.status}`);
+  return res.json() as Promise<LeaderboardEntry>;
+}
