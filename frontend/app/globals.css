@@ -5,3 +5,22 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
     "Segoe UI", sans-serif;
 }
+
+/* Sprint 43 — Compact view density mode */
+.fin-eye-compact main {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+.fin-eye-compact .space-y-6 > * + * {
+  margin-top: 0.75rem;
+}
+.fin-eye-compact .space-y-4 > * + * {
+  margin-top: 0.5rem;
+}
+.fin-eye-compact p.text-xs,
+.fin-eye-compact p.text-sm {
+  display: none;
+}
+.fin-eye-compact [data-compact-show] {
+  display: block;
+}

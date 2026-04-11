@@ -85,6 +85,7 @@ const SIDEBAR_SECTIONS: NavSection[] = [
         title: "Learn",
         items: [
             { href: "/learn", label: "Learn Hub", icon: <BookOpen className="h-4 w-4" /> },
+            { href: "/learn/glossary", label: "Glossary", icon: <BookOpen className="h-4 w-4" />, badge: "NEW" as NavBadge },
             { href: "/community", label: "Community", icon: <MessageCircle className="h-4 w-4" /> },
         ],
     },

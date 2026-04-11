@@ -14,9 +14,22 @@ export const metadata = {
     description: "Understand the forces behind price movements",
 };
 
+// Sprint 43 — Restore compact/currency prefs on page load
+const RESTORE_PREFS_SCRIPT = `
+  try {
+    if (localStorage.getItem('fin-eye-compact') === 'true') {
+      document.documentElement.classList.add('fin-eye-compact');
+    }
+  } catch (e) {}
+`;
+
 export default function RootLayout({ children }: { children: ReactNode }) {
     return (
         <html lang="en">
+            <head>
+                {/* Restore compact mode before first paint to avoid flash */}
+                <script dangerouslySetInnerHTML={{ __html: RESTORE_PREFS_SCRIPT }} />
+            </head>
             <body className="min-h-screen bg-slate-950 text-slate-50 antialiased">
                 <AuthProvider>
                     <ConsentGate>

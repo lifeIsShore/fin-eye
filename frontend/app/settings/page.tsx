@@ -714,6 +714,85 @@ function DataPipelineSection() {
     );
 }
 
+// ─── Sprint 43: Currency preference ────────────────────────────────────────
+
+function CurrencyPreferenceSection() {
+    const [currency, setCurrency] = useState<string>(() => {
+        if (typeof window === "undefined") return "EUR";
+        return localStorage.getItem("fin-eye-currency") ?? "EUR";
+    });
+    const [saved, setSaved] = useState(false);
+
+    const options = [
+        { value: "EUR", label: "€ EUR", desc: "Euro" },
+        { value: "USD", label: "$ USD", desc: "US Dollar" },
+        { value: "GBP", label: "£ GBP", desc: "British Pound" },
+    ];
+
+    const handleSave = (val: string) => {
+        setCurrency(val);
+        localStorage.setItem("fin-eye-currency", val);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+    };
+
+    return (
+        <div className="rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-4 space-y-3">
+            <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-300">Currency Display</span>
+                <span className="text-[10px] text-slate-500 bg-slate-800 rounded-full px-2 py-0.5">Applies to monetary values</span>
+            </div>
+            <p className="text-xs text-slate-500">Choose how monetary amounts are displayed across backtesting, allocation, and price targets.</p>
+            <div className="flex gap-2 flex-wrap">
+                {options.map((opt) => (
+                    <button
+                        key={opt.value}
+                        onClick={() => handleSave(opt.value)}
+                        className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                            currency === opt.value
+                                ? "border-sky-600 bg-sky-600/20 text-sky-300"
+                                : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                        }`}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
+            {saved && <p className="text-xs text-emerald-400">Currency preference saved.</p>}
+        </div>
+    );
+}
+
+// ─── Sprint 43: Compact / expanded view toggle ───────────────────────────────
+
+function CompactViewToggle() {
+    const [compact, setCompact] = useState<boolean>(() => {
+        if (typeof window === "undefined") return false;
+        return localStorage.getItem("fin-eye-compact") === "true";
+    });
+
+    const toggle = (val: boolean) => {
+        setCompact(val);
+        localStorage.setItem("fin-eye-compact", String(val));
+        // Apply class to <body> so global CSS can target it
+        if (val) {
+            document.documentElement.classList.add("fin-eye-compact");
+        } else {
+            document.documentElement.classList.remove("fin-eye-compact");
+        }
+    };
+
+    return (
+        <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3">
+            <div className="space-y-0.5">
+                <p className="text-sm text-slate-300">Compact View</p>
+                <p className="text-xs text-slate-500">Reduces padding, hides secondary labels, and shrinks sparklines for a denser layout.</p>
+            </div>
+            <Toggle checked={compact} onChange={toggle} />
+        </div>
+    );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────
 
 // ─── Risk Profile Quiz — Sprint 24 ────────────────────────────────────────────────
@@ -1036,6 +1115,12 @@ export default function SettingsPage() {
                         </div>
                         {symbolStatus && <StatusMessage type={symbolStatus.type} message={symbolStatus.message} />}
                     </div>
+
+                    {/* Currency preference — Sprint 43 */}
+                    <CurrencyPreferenceSection />
+
+                    {/* Compact / expanded view toggle — Sprint 43 */}
+                    <CompactViewToggle />
 
                     {/* Theme */}
                     <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3">

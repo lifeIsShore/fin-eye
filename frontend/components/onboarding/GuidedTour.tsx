@@ -28,27 +28,27 @@ export function GuidedTour() {
         },
         {
             target: ".tour-gas-score",
-            content: "This is the Global Alignment Score (GAS). It aggregates Technical, Sentiment, and Macro data into a single 0-100 metric. Higher is better!",
+            content: "This is the Global Alignment Score (GAS) — your single 0–100 market health metric. It blends Technical (40%), Sentiment (30%), and Macro (30%). Above 60 = bullish alignment.",
             placement: "bottom",
         },
         {
             target: ".tour-regime",
-            content: "Here we identify the current Market Regime (Volatility and Trend) so you know exactly what game the market is playing today.",
+            content: "The Regime widget classifies the current market environment as Risk-On, Risk-Off, or Transitional — so you know which playbook applies right now.",
             placement: "bottom",
         },
         {
             target: ".tour-timeframes",
-            content: "The Technical Consensus grid shows AI-driven momentum predictions ranging from the 1-minute chart up to the 1-week chart.",
+            content: "The Technical Consensus grid shows AI-driven ML signals across all trained timeframes (1m to 1wk), each weighted by its Sharpe Ratio so better models count more.",
             placement: "left",
         },
         {
             target: ".tour-why-moving",
-            content: "Don't know why a stock is jumping? The 'Why is it moving?' panel synthesizes all data layers to give you a plain-English explanation.",
+            content: "The 'Why is it moving?' panel synthesizes all data layers into plain-English bullets — great for quick pre-market prep.",
             placement: "top",
         },
         {
             target: ".tour-learn-tab",
-            content: "Want to master the platform? Check out our Educational Content in the Learn section to read up on Macro, Backtesting, and more! You're all set.",
+            content: "New to the platform? The Learn Hub has deep-dives on GAS, FinBERT, Kelly Criterion, Walk-Forward validation, and more. The Glossary explains every term.",
             placement: "right",
         },
     ];
