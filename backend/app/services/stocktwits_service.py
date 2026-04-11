@@ -192,6 +192,71 @@ class StockTwitsService:
 
         return summary, bullish[:5], bearish[:5]
 
+    # ── Sprint 42: External-signal persistence ──────────────────────────────
+    async def fetch_and_store_external_signals(
+        self,
+        db,  # AsyncSession — typed loosely to avoid circular import
+        symbols: list[str],
+    ) -> dict:
+        """
+        Compute stocktwits_sentiment_norm + stocktwits_mentions per symbol
+        and persist in `external_signals` table.
+
+        Signals stored:
+          source="stocktwits", signal_name="stocktwits_mentions"         → raw count
+          source="stocktwits", signal_name="stocktwits_sentiment_norm"   → 0.0–1.0
+        """
+        from app.models.external_signal import ExternalSignal  # noqa: PLC0415
+
+        ok, failed = [], []
+        ts = datetime.now(timezone.utc)
+        _MENTION_CAP = 30.0  # StockTwits returns ~30 msgs max
+
+        for symbol in symbols:
+            try:
+                comments = await self.fetch_messages(symbol)
+                count = len(comments)
+                if count == 0:
+                    bull_ratio = 0.5
+                else:
+                    pos = sum(1 for c in comments if c.sentiment_label == "Positive")
+                    neg = sum(1 for c in comments if c.sentiment_label == "Negative")
+                    labeled = pos + neg
+                    bull_ratio = (pos / labeled) if labeled > 0 else 0.5
+
+                mentions_norm = round(min(count / _MENTION_CAP, 1.0), 4)
+                sentiment_norm = round(bull_ratio, 4)
+
+                db.add(ExternalSignal(
+                    source="stocktwits",
+                    symbol=symbol.upper(),
+                    signal_name="stocktwits_mentions",
+                    value=float(count),
+                    raw_json=None,
+                    fetched_at=ts,
+                ))
+                db.add(ExternalSignal(
+                    source="stocktwits",
+                    symbol=symbol.upper(),
+                    signal_name="stocktwits_sentiment_norm",
+                    value=sentiment_norm,
+                    raw_json=None,
+                    fetched_at=ts,
+                ))
+
+                ok.append(symbol)
+                logger.info(
+                    "StockTwits signals %s: mentions=%d norm=%.4f sentiment_norm=%.4f",
+                    symbol, count, mentions_norm, sentiment_norm,
+                )
+            except Exception as exc:
+                logger.warning("StockTwits external signal failed for %s: %s", symbol, exc)
+                failed.append(symbol)
+
+        await db.commit()
+        logger.info("StockTwits external signals: ok=%d failed=%d", len(ok), len(failed))
+        return {"ok": ok, "failed": failed}
+
     def _mock_data(self, ticker: str) -> List[SentimentComment]:
         """Fallback mock data when StockTwits is unavailable."""
         now = datetime.now(timezone.utc)

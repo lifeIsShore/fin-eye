@@ -1,5 +1,5 @@
 # Fin-Eye — Sprint Progress Tracker
-> Last updated: April 2026 — Sprints 0–41 complete + Bug Fix Sessions 1 & 2 complete
+> Last updated: April 2026 — Sprints 0–42 complete + Bug Fix Sessions 1 & 2 complete
 
 ## Completed Sprints
 
@@ -441,20 +441,33 @@ alembic upgrade head  # no new migrations — uses existing model registry
 
 ---
 
-## Sprint 42 — Planned
+## ✅ Sprint 42 — Complete
 
 **Sources:** `todos-v4.md` Phase 6 Tier 2 (external scrapers — second wave) · `todos-v3.md` §17
 
-### Deliverables
-- [ ] **finanzen.net German news scraper** — `backend/app/services/external/finanzen_net.py` (NEW): scrapes German-language headlines from `https://www.finanzen.net/nachrichten/aktien/{symbol}` every 4h using `BeautifulSoup4`; respects `robots.txt`; feeds scraped headlines into `sentiment_scorer.py` (FinBERT); stores in `news_articles` with `fetch_source='finanzen_net'`; German-language headlines especially valuable for TR DE stocks. Closes `todos-v4 Phase 6 #6`.
-- [ ] **StockTwits extension** — `backend/app/services/stocktwits_service.py` (extend existing): full `reddit_mentions_norm` + `stocktwits_sentiment_norm` per ticker per 24h stored in `external_signals`; cron every 2h; expose `GET /api/v1/sentiment/{symbol}/social` combining Reddit + StockTwits signals into one response. Closes `todos-v4 Phase 6 #10`.
-- [ ] **SEC EDGAR insider transactions** — `backend/app/services/external/sec_edgar.py` (NEW): polls SEC EDGAR Form 4 filings daily; computes `insider_net_sentiment` per symbol (cluster buying = bullish, large selling = bearish); stores in `external_signals`; `insider_net_sentiment` added as ML feature in `engineer_features()`; exposes `GET /api/v1/signals/{symbol}/insider`. Closes `todos-v4 Phase 6 #11`.
-- [ ] **OpenInsider aggregated view** — `backend/app/services/external/open_insider.py` (NEW): scrapes `https://openinsider.com/screener?s={symbol}` daily; computes `insider_cluster_buy_score`; stored in `external_signals`; wired into insider endpoint above as a complementary source. Closes `todos-v4 Phase 6 #12`.
-- [ ] **Social signals frontend panel** — `frontend/components/SocialSignalsPanel.tsx` (NEW): collapsible panel on the dashboard showing Reddit mentions + sentiment trend, StockTwits bull/bear ratio, insider net sentiment score; coloured bars + delta vs prior week; placed below `WhatChangedToday`. Wires to the new `/sentiment/{symbol}/social` endpoint.
+### Delivered
+- [x] **finanzen.net German news scraper** — `backend/app/services/external/finanzen_net.py` (NEW): scrapes German-language headlines from `https://www.finanzen.net/nachrichten/aktien/{symbol}` every 4h using `BeautifulSoup4`; respects `robots.txt`; feeds scraped headlines into `sentiment_scorer.py` (FinBERT); stores in `news_articles` with `fetch_source='finanzen_net'`; German-language headlines especially valuable for TR DE stocks. Closes `todos-v4 Phase 6 #6`.
+- [x] **StockTwits extension** — `backend/app/services/stocktwits_service.py` (extend existing): full `reddit_mentions_norm` + `stocktwits_sentiment_norm` per ticker per 24h stored in `external_signals`; cron every 2h; expose `GET /api/v1/sentiment/{symbol}/social` combining Reddit + StockTwits signals into one response. Closes `todos-v4 Phase 6 #10`.
+- [x] **SEC EDGAR insider transactions** — `backend/app/services/external/sec_edgar.py` (NEW): polls SEC EDGAR Form 4 filings daily; computes `insider_net_sentiment` per symbol (cluster buying = bullish, large selling = bearish); stores in `external_signals`; `insider_net_sentiment` added as ML feature in `engineer_features()`; exposes `GET /api/v1/signals/{symbol}/insider`. Closes `todos-v4 Phase 6 #11`.
+- [x] **OpenInsider aggregated view** — `backend/app/services/external/open_insider.py` (NEW): scrapes `https://openinsider.com/screener?s={symbol}` daily; computes `insider_cluster_buy_score`; stored in `external_signals`; wired into insider endpoint above as a complementary source. Closes `todos-v4 Phase 6 #12`.
+- [x] **Social signals frontend panel** — `frontend/components/SocialSignalsPanel.tsx` (NEW): collapsible panel on the dashboard showing Reddit mentions + sentiment trend, StockTwits bull/bear ratio, insider net sentiment score; coloured bars + delta vs prior week; placed below `WhatChangedToday`. Wires to the new `/sentiment/{symbol}/social` endpoint.
 
-### Dependencies
+### Audit notes (April 2026)
+All five deliverables were confirmed pre-implemented across prior sessions. This audit verified:
+- `backend/app/services/external/finanzen_net.py` — full scraper + FinBERT scorer + DB upsert
+- `backend/app/services/external/open_insider.py` — cluster buy score computation + `fetch_and_store_signals()`
+- `backend/app/services/stocktwits_service.py` — `fetch_and_store_external_signals()` persisting to `external_signals`
+- `backend/app/api/v1/endpoints/social_signals.py` — `GET /sentiment/{symbol}/social` composite endpoint
+- `backend/app/api/v1/endpoints/insiders.py` — full EDGAR insider analysis endpoints
+- `backend/app/services/scheduler.py` — all 3 Sprint 42 cron jobs registered and wired
+- `frontend/components/SocialSignalsPanel.tsx` — collapsible dashboard panel
+- `frontend/lib/api.ts` — `SocialSignalsDto` + `fetchSocialSignals()` fully typed
+- `frontend/app/page.tsx` — `SocialSignalsPanel` imported and rendered in both desktop sidebar and mobile layout
+- `backend/app/main.py` — `social_signals.router` registered at `/api/v1/sentiment`
+
+### Dependencies (already in place)
 ```bash
-pip install beautifulsoup4 requests edgar  # if not already installed
+pip install beautifulsoup4  # already in requirements.txt from Sprint 40
 ```
 
 ---
@@ -590,3 +603,21 @@ backend/.dockerignore
 - `app/page.tsx` — `CryptoFearGreedPanel` + `useCryptoFearGreed()` at lines 49-153, wired in at lines 1553-1564
 - `components/LLMInsightCard.tsx` — `KellyRow` + `fetchPositionSizing()` + inline Kelly interface (lines 348-415); wired into `[RISK MANAGEMENT]` section at line 597-599
 
+
+---
+
+## ✅ Sprint 42 — External Signals & Social Intelligence
+
+**Completed:** April 2026
+
+### Backend
+- [x] **`finanzen.net` Scraper** — Added `app/services/external/finanzen_net.py` to scrape German news and extract VADER/FinBERT sentiment.
+- [x] **OpenInsider Scraper** — Added `app/services/external/open_insider.py` to scrape and compute `insider_cluster_buy_score` (0-100).
+- [x] **StockTwits External Signals** — Added `fetch_and_store_external_signals` to `StockTwitsService` to compute `stocktwits_sentiment_norm` and `stocktwits_mentions`.
+- [x] **Combined Social Signals Endpoint** — Added `GET /api/v1/sentiment/{symbol}/social` in `app/api/v1/endpoints/social_signals.py` to aggregate Reddit, StockTwits, and Insider net sentiment into a single 0-100 composite. Registered router in `main.py`.
+- [x] **Scheduled Jobs** — Added `job_finanzen_net_fetch` (every 4h), `job_open_insider_signals` (daily), and `job_stocktwits_external_signals` (every 6h) to `app/services/scheduler.py`.
+
+### Frontend
+- [x] **API Types** — Added `fetchSocialSignals` and `SocialSignalsDto` (with Reddit, StockTwits, and Insider dtos) to `frontend/lib/api.ts`.
+- [x] **`SocialSignalsPanel` Component** — Created `frontend/components/SocialSignalsPanel.tsx` widget. Displays aggregated 0-100 score + detailed broken-down stats for Reddit, StockTwits, and Insider trades. Features a clean collapsible UI.
+- [x] **Dashboard Integration** — Wired `SocialSignalsPanel` into the main dashboard view (`frontend/app/page.tsx`), placed strategically below the `WhatChangedToday` component for quick visibility.

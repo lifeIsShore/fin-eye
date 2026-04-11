@@ -2899,3 +2899,60 @@ export async function fetchCnnFearGreed(
   if (!res.ok) throw new Error(`CNN Fear & Greed fetch failed: ${res.status}`);
   return res.json() as Promise<FearGreedDto>;
 }
+
+// ── Sprint 42: Social Signals ─────────────────────────────────────────────────
+
+export interface RedditSignalDto {
+  mentions: number;
+  sentiment_score: number;
+  sentiment_label: string;
+  bullish_pct: number;
+  bearish_pct: number;
+  subreddits: string[];
+}
+
+export interface StockTwitsSignalDto {
+  total_messages: number;
+  bullish_count: number;
+  bearish_count: number;
+  neutral_count: number;
+  bullish_pct: number;
+  bearish_pct: number;
+  bull_bear_ratio: number | null;
+  sentiment_label: string;
+}
+
+export interface InsiderSignalDto {
+  sentiment_score: number;
+  sentiment_label: string;
+  buy_transactions: number;
+  sell_transactions: number;
+  net_shares: number;
+  lookback_days: number;
+}
+
+export interface SocialSignalsDto {
+  symbol: string;
+  reddit: RedditSignalDto | null;
+  stocktwits: StockTwitsSignalDto | null;
+  insider: InsiderSignalDto | null;
+  composite_score: number;
+  composite_label: string;
+  disclaimer: string;
+}
+
+export async function fetchSocialSignals(
+  symbol: string,
+  init?: RequestInit,
+): Promise<SocialSignalsDto> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/sentiment/${encodeURIComponent(symbol.toUpperCase())}/social`,
+    {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) throw new Error(`Social signals fetch failed: ${res.status}`);
+  return res.json() as Promise<SocialSignalsDto>;
+}

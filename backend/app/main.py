@@ -28,7 +28,7 @@ from app.api.v1.endpoints import (
     portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts, strategies,
     showcase, ops, analytics, experiments, email, api_keys, risk, admin_gas, options, sectors,
     insiders, earnings, shorts, adv_sentiment, fed_policy, indicators,
-    admin_bulk, symbols, allocation, billing,
+    admin_bulk, symbols, allocation, billing, social_signals,
 )
 from app.api.v1.endpoints.admin_ml import router as admin_ml_router  # Sprint 6
 from app.api.public.v1 import router as public_v1_router
@@ -159,6 +159,7 @@ app.include_router(fed_policy.router,     prefix="/api/v1/fed-policy",     tags=
 app.include_router(indicators.router,     prefix="/api/v1/indicators",     tags=["Custom Indicators"])
 app.include_router(allocation.router,     prefix="/api/v1/allocation",     tags=["AI Allocation"])
 app.include_router(billing.router,        prefix="/api/v1/billing",        tags=["Billing & Monetisation"])
+app.include_router(social_signals.router, prefix="/api/v1/sentiment",      tags=["Social Signals"])
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
 app.include_router(admin_bulk.router_admin, prefix="/api/v1/admin",       tags=["Admin — Pipeline"])

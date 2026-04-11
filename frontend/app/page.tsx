@@ -32,6 +32,7 @@ import ScoreExplainPanel, {
   type SubComponent,
 } from "../components/ScoreExplainPanel";
 import WhatChangedToday from "../components/WhatChangedToday";
+import SocialSignalsPanel from "../components/SocialSignalsPanel";
 import FreshnessIndicator from "../components/FreshnessIndicator";
 import DataSourceStatus from "../components/DataSourceStatus";
 import CrossAssetRow from "../components/CrossAssetRow";
@@ -1256,6 +1257,7 @@ export default function DashboardPage() {
               <EarningsCalendarStrip symbols={watchlistSymbols} />
             </div>
           )}
+          <SocialSignalsPanel symbol={activeSymbol} />
         </aside>
 
         <div className="min-w-0 flex-1 space-y-6">
@@ -1384,6 +1386,7 @@ export default function DashboardPage() {
                 <EarningsCalendarStrip symbols={watchlistSymbols} />
               </div>
             )}
+            <SocialSignalsPanel symbol={activeSymbol} />
           </div>
 
           {isLoading ? (

@@ -410,6 +410,83 @@ async def job_reddit_external_signals() -> None:
         )
         logger.error("job_reddit_external_signals failed: %s", exc)
 
+# ── Sprint 42: External signals & scrapers ──────────────────────────────────
+
+async def job_finanzen_net_fetch() -> None:
+    from app.services.external.finanzen_net import fetch_and_store_news  # noqa: PLC0415
+    from app.models.bulk_ops import TickerUniverse                       # noqa: PLC0415
+    from sqlalchemy import select as sql_select                          # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            # Finanzen.net only for German stocks (.DE)
+            result = await session.execute(
+                sql_select(TickerUniverse.symbol)
+                .where(TickerUniverse.is_active == True, TickerUniverse.symbol.endswith('.DE'))  # noqa: E712
+            )
+            symbols = [r[0] for r in result.fetchall()]
+            summary = await fetch_and_store_news(session, symbols=symbols)
+        detail = f"ok={len(summary['ok'])} failed={len(summary['failed'])} added={summary['articles_added']}"
+        get_metrics().record_pipeline_run(
+            "finanzen_net_fetch", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, True, detail
+        )
+    except Exception as exc:
+        logger.error("job_finanzen_net_fetch failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "finanzen_net_fetch", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, False, str(exc)
+        )
+
+async def job_open_insider_signals() -> None:
+    from app.services.external.open_insider import fetch_and_store_signals  # noqa: PLC0415
+    from app.models.bulk_ops import TickerUniverse                          # noqa: PLC0415
+    from sqlalchemy import select as sql_select                             # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            # OpenInsider is US only
+            result = await session.execute(
+                sql_select(TickerUniverse.symbol)
+                .where(TickerUniverse.is_active == True, ~TickerUniverse.symbol.endswith('.DE'))  # noqa: E712
+            )
+            symbols = [r[0] for r in result.fetchall()]
+            summary = await fetch_and_store_signals(session, symbols=symbols)
+        detail = f"ok={len(summary['ok'])} failed={len(summary['failed'])}"
+        get_metrics().record_pipeline_run(
+            "open_insider_signals", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, True, detail
+        )
+    except Exception as exc:
+        logger.error("job_open_insider_signals failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "open_insider_signals", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, False, str(exc)
+        )
+
+async def job_stocktwits_external_signals() -> None:
+    from app.services.stocktwits_service import StockTwitsService  # noqa: PLC0415
+    from app.models.bulk_ops import TickerUniverse                 # noqa: PLC0415
+    from sqlalchemy import select as sql_select                    # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        svc = StockTwitsService()
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                sql_select(TickerUniverse.symbol)
+                .where(TickerUniverse.is_active == True)  # noqa: E712
+            )
+            symbols = [r[0] for r in result.fetchall()]
+            summary = await svc.fetch_and_store_external_signals(session, symbols=symbols)
+        detail = f"ok={len(summary['ok'])} failed={len(summary['failed'])}"
+        get_metrics().record_pipeline_run(
+            "stocktwits_external_signals", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, True, detail
+        )
+    except Exception as exc:
+        logger.error("job_stocktwits_external_signals failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "stocktwits_external_signals", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, False, str(exc)
+        )
+
 
 # ── todos-v5 Phase 5.3 — Prediction outcome resolver ─────────────────────────
 
@@ -620,6 +697,24 @@ def setup_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(job_reddit_external_signals,
         trigger=CronTrigger(hour="0,6,12,18", minute=45),
         id="reddit_external_signals", name="Reddit External Signals (6h)",
+        replace_existing=True, misfire_grace_time=1800)
+
+    # Sprint 42 — Finanzen.net external signals: every 4 hours
+    scheduler.add_job(job_finanzen_net_fetch,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="2,6,10,14,18,22", minute=30),
+        id="finanzen_net_fetch", name="Finanzen.net News Fetch",
+        replace_existing=True, misfire_grace_time=600)
+
+    # Sprint 42 — OpenInsider signals: daily at 09:00 UTC
+    scheduler.add_job(job_open_insider_signals,
+        trigger=CronTrigger(hour=9, minute=0),
+        id="open_insider_signals", name="OpenInsider Daily Fetch",
+        replace_existing=True, misfire_grace_time=3600)
+
+    # Sprint 42 — StockTwits external signals: every 6 hours
+    scheduler.add_job(job_stocktwits_external_signals,
+        trigger=CronTrigger(hour="2,8,14,20", minute=45),
+        id="stocktwits_external_signals", name="StockTwits External Signals (6h)",
         replace_existing=True, misfire_grace_time=1800)
 
     # todos-v5 Phase 5.3 — Prediction outcome resolver, every hour at :45
