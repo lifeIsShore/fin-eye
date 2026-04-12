@@ -28,3 +28,6 @@ from app.models.signal_grade_history import SignalGradeHistory  # noqa: F401
 from app.models.external_signal import ExternalSignal  # noqa: F401
 # Sprint 44 — community strategy leaderboard
 from app.models.leaderboard import PublicBacktestRun  # noqa: F401
+# Sprint 45 — B2B tenant + compliance audit log
+from app.models.tenant import Tenant  # noqa: F401
+from app.models.compliance_audit_log import ComplianceAuditLog  # noqa: F401

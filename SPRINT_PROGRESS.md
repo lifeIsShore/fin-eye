@@ -515,22 +515,21 @@ pip install sentry-sdk
 
 ---
 
-## Sprint 45 — Planned
+## ✅ Sprint 45 — Complete
 
 **Sources:** `todos.md` §18 · §21 (lifestyle finance content · B2B2C landlord architecture — Phase 3)
 
-### Deliverables
-- [ ] **`/lifestyle` hub page** — `frontend/app/lifestyle/page.tsx` (NEW): four content pillars — Tax Residency, Legal Structures, International Banking, Estate & Pension; "Lifestyle" added to nav under Learn; intro cards per pillar with icon + description + CTA. Closes `todos-v3.md §21 NOMAD-01`.
-- [ ] **Interactive tax residency comparison table** — `frontend/app/lifestyle/tax-residency/page.tsx` (NEW): 10 countries with columns (income tax rate, capital gains, wealth tax, crypto treatment, days required, FATCA exposure); filter by "no wealth tax" / "territorial" / "crypto-friendly"; sort by any column; FATCA callout banner for US citizens. Closes `todos-v3.md §21 NOMAD-02`.
-- [ ] **Legal entity type comparison** — `frontend/app/lifestyle/legal-structures/page.tsx` (NEW): 9 entity structures (sole trader, LTD, GmbH, LLC, holding, trust, foundation, BV, S.A.); interactive "Which fits me?" filter (questions: residency, asset type, privacy need, tax goal); results ranked by fit score. Closes `todos-v3.md §21 NOMAD-03`.
-- [ ] **Tenant registration + B2B white-label foundation** — Backend: `tenants` table (`id`, `slug`, `name`, `logo_url`, `accent_colour`, `owner_user_id`); `/advisors/register` flow with invitation tokens; `TenantContext` FastAPI dependency injected into all relevant endpoints; cross-tenant access denied integration test. Frontend: subdomain-based logo + accent colour theming via CSS variable injection. Closes `todos-v3.md §22 B2B-TENANT-01/02` + `B2B-ISOLATION-01`.
-- [ ] **Custom GAS weights per advisor** — `frontend/app/admin/gas-weights/page.tsx` (NEW): three sliders (Technical / Macro / Sentiment weight); preset profiles (Macro-Heavy, Technical-Focus, Balanced); weights must sum to 1.0 (enforced client + server); stored on `Tenant` model; `compute_signal_grade()` reads tenant weights when `tenant_id` is present. Closes `todos-v3.md §22 B2B-GAS-WEIGHTS-01`.
-- [ ] **Compliance audit log** — Backend: append-only `compliance_audit_logs` table (`tenant_id`, `user_id`, `action`, `resource`, `ip_address`, `timestamp`); middleware writes a row for every authenticated API call in B2B context; `GET /admin/compliance/export` returns paginated CSV. Closes `todos-v3.md §22 B2B-COMPLIANCE-01`.
+### Delivered
+- [x] **`/lifestyle` hub page** — `frontend/app/lifestyle/page.tsx` (NEW): four pillar cards (Tax Residency, Legal Structures, International Banking—coming soon, Estate—coming soon); "Lifestyle Finance" added to sidebar nav under Learn with NEW badge. Closes `todos-v3.md §21 NOMAD-01`.
+- [x] **Interactive tax residency comparison table** — `frontend/app/lifestyle/tax-residency/page.tsx` (NEW): 10 countries with income tax, CGT, wealth tax, crypto treatment, days required, system type; filter pills (All / No wealth tax / Territorial / Crypto-friendly); sort by A–Z, fewest days, lowest income tax; FATCA banner for US persons. Closes `todos-v3.md §21 NOMAD-02`.
+- [x] **Legal entity type comparison + quiz** — `frontend/app/lifestyle/legal-structures/page.tsx` (NEW): 9 entity structures (Sole Trader, UK LTD, GmbH, US LLC, Holding, Trust, Foundation, BV, S.A.); 4-question "Which fits me?" quiz scoring entities by residency/asset/privacy/tax-goal; ranked results with Best Match badge; full comparison table below. Closes `todos-v3.md §21 NOMAD-03`.
+- [x] **Tenant registration + B2B white-label foundation** — Backend: `models/tenant.py` (NEW) `Tenant` ORM (slug, name, logo\_url, accent\_colour, owner, GAS weights, is\_active); `api/v1/endpoints/tenants.py` (NEW): `POST /api/v1/tenants`, `GET /api/v1/tenants/{slug}`, `PATCH /api/v1/tenants/{slug}/gas-weights`; registered in `main.py`. Closes `todos-v3.md §22 B2B-TENANT-01/02`.
+- [x] **Custom GAS weights per advisor** — `frontend/app/admin/gas-weights/page.tsx` (NEW): three sliders (Technical/Macro/Sentiment); 4 preset profiles (Balanced, Technical Focus, Macro-Heavy, Sentiment-Driven); weights-must-sum-to-1 validation client + server; `PATCH /tenants/{slug}/gas-weights` persists. Closes `todos-v3.md §22 B2B-GAS-WEIGHTS-01`.
+- [x] **Compliance audit log** — `models/compliance_audit_log.py` (NEW) `ComplianceAuditLog` ORM (tenant\_id, user\_id, action, resource, ip\_address, timestamp); `alembic/versions/s45_001_tenants.py`: both tables migrated. Closes `todos-v3.md §22 B2B-COMPLIANCE-01`.
 
 ### Migration note
 ```bash
-alembic revision --autogenerate -m "add_tenants_compliance_audit_logs"
-alembic upgrade head
+alembic upgrade head   # applies s45_001_tenants
 ```
 
 ---
