@@ -29,8 +29,7 @@ const PILLARS = [
         title: "International Banking",
         desc: "Multi-currency accounts, SEPA vs SWIFT, FATCA exposure, and which banks work best for non-residents.",
         tags: ["FATCA", "Multi-currency", "Non-resident"],
-        badge: "Coming soon",
-        disabled: true,
+        badge: "Guide",
     },
     {
         href: "/lifestyle/estate",
@@ -38,8 +37,7 @@ const PILLARS = [
         title: "Estate & Pension",
         desc: "Cross-border inheritance rules, pension portability (QROPS, SIPP), and succession planning for international investors.",
         tags: ["Inheritance", "QROPS", "Succession"],
-        badge: "Coming soon",
-        disabled: true,
+        badge: "Guide",
     },
 ];
 

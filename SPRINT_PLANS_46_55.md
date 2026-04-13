@@ -167,9 +167,27 @@ frontend/app/auth/                      # Verification banner + resend button
 
 ---
 
-## Sprint 47 — Autonomous Trading Bot: Paper Trading Foundation
+## ✅ Sprint 47 — Autonomous Trading Bot: Paper Trading Foundation
 **Priority:** HIGH — most requested advanced feature, Phase 2C from todos.md
 **Sources:** todos.md §2 Phase 2C · Phase 2D
+**Completed:** April 2026
+
+### Delivered
+- [x] **`backend/app/models/bot.py`** — `BotConfig`, `BotPosition`, `BotAuditLog` ORM models
+- [x] **`alembic/versions/s47_001_bot_tables.py`** — migration for all 3 bot tables (`bot_configs`, `bot_positions`, `bot_audit_log`)
+- [x] **`models/__init__.py`** — all 3 bot models registered
+- [x] **`services/bot_service.py`** — full decision engine: `evaluate_symbol()` with BUY/SELL/HOLD/SKIP/HALT logic, Kelly-based position sizing (capped 25%), stop-loss at 2×ATR, daily loss circuit breaker, `get_bot_performance()`
+- [x] **`api/v1/endpoints/bot.py`** — 9 endpoints: `GET /config`, `PATCH /config`, `POST /enable`, `POST /disable`, `POST /halt`, `POST /resume`, `GET /positions`, `GET /audit-log`, `GET /performance`
+- [x] **`services/scheduler.py`** — `job_bot_evaluate` registered at `:02/:17/:32/:47` UTC (2 min after GAS precompute), mon–fri 13–21h
+- [x] **`main.py`** — `bot.router` registered at `/api/v1/bot`
+- [x] **`frontend/app/bot/paper/page.tsx`** — full dashboard: status banner (ACTIVE/HALTED/INACTIVE + config summary), 4-stat performance grid (PnL/Win Rate/Best/Worst), open positions table with unrealised PnL, audit log with symbol filter + colour-coded action badges, settings slide-over (strategy/min-grade/position sliders/portfolio value)
+- [x] **`frontend/lib/api.ts`** — `BotConfigDto`, `BotPositionDto`, `BotAuditLogEntry`, `BotPerformanceDto` + all 9 fetch/action helpers
+- [x] **`frontend/components/Nav.tsx`** — “Trading Bot” added to Tools section with BETA badge
+
+### Migration
+```bash
+alembic upgrade head   # s47_001_bot_tables
+```
 
 ### Goal
 Build the paper trading bot foundation: position tracking, decision engine, audit log, kill switch.
@@ -1230,18 +1248,18 @@ frontend/lib/api.ts                 # Compliance + seat management helpers
 
 ## Sprint Execution Order Summary
 
-| Sprint | Name | Priority | Backend | Frontend | DB | Est. Sessions |
-|--------|------|----------|---------|----------|-----|--------------|
-| 46 | Security Hardening | 🔴 CRITICAL | Heavy | Light | 1 migration | 1 |
-| 47 | Paper Trading Bot | 🟠 HIGH | Heavy | Heavy | 3 tables | 2 |
-| 48 | Lifestyle Banking + Estate | 🟡 MEDIUM | None | Medium | None | 1 |
-| 49 | Activation Tracking + Streak + NPS | 🟠 HIGH | Medium | Medium | 1 migration | 1 |
-| 50 | Referral Program + Social Proof | 🟡 MEDIUM | Medium | Medium | 1 migration | 1 |
-| 51 | TypeScript Strict + Lighthouse CI | 🟡 MEDIUM | None | Heavy | None | 1 |
-| 52 | Discussion Threads + Poll | 🟡 MEDIUM | Medium | Medium | 2 migrations | 1 |
-| 53 | Shareable Report Card | 🟡 MEDIUM | None | Light | None | 1 |
-| 54 | Bond Ladder Builder | 🟢 LOW-MED | Light | Medium | None | 1 |
-| 55 | B2B Billing + Compliance Export | 🟢 LOW | Medium | Medium | 1 migration | 1 |
+| Sprint | Name | Priority | Backend | Frontend | DB | Status |
+|--------|------|----------|---------|----------|-----|--------|
+| 46 | Security Hardening | 🔴 CRITICAL | Heavy | Light | 1 migration | ✅ Complete |
+| 47 | Paper Trading Bot | 🟠 HIGH | Heavy | Heavy | 3 tables | ✅ Complete |
+| 48 | Lifestyle Banking + Estate | 🟡 MEDIUM | None | Medium | None | ✅ Complete |
+| 49 | Activation Tracking + Streak + NPS | 🟠 HIGH | Medium | Medium | 1 migration | Planned |
+| 50 | Referral Program + Social Proof | 🟡 MEDIUM | Medium | Medium | 1 migration | Planned |
+| 51 | TypeScript Strict + Lighthouse CI | 🟡 MEDIUM | None | Heavy | None | Planned |
+| 52 | Discussion Threads + Poll | 🟡 MEDIUM | Medium | Medium | 2 migrations | Planned |
+| 53 | Shareable Report Card | 🟡 MEDIUM | None | Light | None | Planned |
+| 54 | Bond Ladder Builder | 🟢 LOW-MED | Light | Medium | None | Planned |
+| 55 | B2B Billing + Compliance Export | 🟢 LOW | Medium | Medium | 1 migration | Planned |
 
 ---
 

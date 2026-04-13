@@ -3007,3 +3007,119 @@ export async function publishBacktest(
   if (!res.ok) throw new Error(`Publish failed: ${res.status}`);
   return res.json() as Promise<LeaderboardEntry>;
 }
+
+// ── Sprint 47: Paper Trading Bot ────────────────────────────────
+
+export interface BotConfigDto {
+  is_enabled: boolean;
+  mode: string;
+  strategy: string;
+  min_grade: string;
+  max_position_pct: number;
+  max_total_pct: number;
+  max_sector_pct: number;
+  daily_loss_limit: number;
+  portfolio_value: number;
+  halt_flag: boolean;
+}
+
+export interface BotPositionDto {
+  id: string;
+  symbol: string;
+  entry_price: number;
+  entry_grade: string;
+  entry_gas: number;
+  size_units: number;
+  size_usd: number;
+  position_pct: number;
+  opened_at: string;
+  closed_at?: string | null;
+  close_price?: number | null;
+  close_reason?: string | null;
+  pnl_usd?: number | null;
+  pnl_pct?: number | null;
+  is_open: boolean;
+  unrealised_pnl_usd?: number | null;
+  unrealised_pnl_pct?: number | null;
+}
+
+export interface BotAuditLogEntry {
+  id: string;
+  logged_at: string;
+  symbol?: string | null;
+  action: string;
+  grade?: string | null;
+  gas_score?: number | null;
+  price?: number | null;
+  size_usd?: number | null;
+  reason: string;
+  regime?: string | null;
+}
+
+export interface BotPerformanceDto {
+  total_trades: number;
+  open_positions: number;
+  total_pnl_usd: number;
+  total_pnl_pct: number;
+  win_rate?: number | null;
+  avg_hold_hours?: number | null;
+  best_trade_usd?: number | null;
+  best_trade_pct?: number | null;
+  worst_trade_usd?: number | null;
+  worst_trade_pct?: number | null;
+  deployed_usd: number;
+  deployed_pct: number;
+}
+
+function _botHeaders(): Record<string, string> {
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("access_token") ?? "")
+    : "";
+  return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+}
+
+export async function fetchBotConfig(): Promise<BotConfigDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bot/config`, { headers: _botHeaders() });
+  if (!res.ok) throw new Error(`Bot config fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function updateBotConfig(patch: Partial<Omit<BotConfigDto, "is_enabled" | "mode" | "halt_flag">>): Promise<BotConfigDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bot/config`, {
+    method: "PATCH", headers: _botHeaders(), body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`Bot config update failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchBotPositions(): Promise<BotPositionDto[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bot/positions`, { headers: _botHeaders() });
+  if (!res.ok) throw new Error(`Bot positions fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchBotAuditLog(limit = 100, symbol?: string): Promise<BotAuditLogEntry[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (symbol) params.set("symbol", symbol);
+  const res = await fetch(`${API_BASE_URL}/api/v1/bot/audit-log?${params}`, { headers: _botHeaders() });
+  if (!res.ok) throw new Error(`Bot audit log fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchBotPerformance(): Promise<BotPerformanceDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bot/performance`, { headers: _botHeaders() });
+  if (!res.ok) throw new Error(`Bot performance fetch failed: ${res.status}`);
+  return res.json();
+}
+
+async function _botAction(path: string, body?: object): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bot/${path}`, {
+    method: "POST", headers: _botHeaders(), body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`Bot action failed: ${res.status}`);
+}
+
+export const enableBot  = () => _botAction("enable");
+export const disableBot = () => _botAction("disable");
+export const resumeBot  = () => _botAction("resume");
+export const haltBot    = (closeAll = false) => _botAction("halt", { close_all: closeAll });

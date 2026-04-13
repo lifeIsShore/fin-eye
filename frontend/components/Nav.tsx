@@ -10,7 +10,7 @@ import {
     Activity, BarChart2, FlaskConical, Menu, X, Zap,
     LayoutDashboard, Globe, Newspaper, Users,
     TrendingDown, Calendar, PieChart, Landmark, BarChart,
-    Shield, FlaskConical as Backtest, Briefcase, Bell,
+    Shield, FlaskConical as Backtest, Briefcase, Bell, Bot,
     ShoppingBag, BookOpen, MessageCircle, Eye, ChevronLeft,
     ChevronRight, LayoutList,
 } from "lucide-react";
@@ -78,6 +78,7 @@ const SIDEBAR_SECTIONS: NavSection[] = [
             { href: "/portfolio/retirement", label: "Retirement Risk", icon: <TrendingDown className="h-4 w-4" />, badge: "NEW" },
             { href: "/portfolio/build", label: "AI Allocator", icon: <Zap className="h-4 w-4" />, badge: "AI" },
             { href: "/alerts", label: "Alerts", icon: <Bell className="h-4 w-4" /> },
+            { href: "/bot/paper", label: "Trading Bot", icon: <Bot className="h-4 w-4" />, badge: "BETA" },
             { href: "/showcase", label: "Pro Tools", icon: <ShoppingBag className="h-4 w-4" /> },
         ],
     },
