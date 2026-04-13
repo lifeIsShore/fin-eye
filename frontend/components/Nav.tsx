@@ -12,7 +12,7 @@ import {
     TrendingDown, Calendar, PieChart, Landmark, BarChart,
     Shield, FlaskConical as Backtest, Briefcase, Bell, Bot,
     ShoppingBag, BookOpen, MessageCircle, Eye, ChevronLeft,
-    ChevronRight, LayoutList,
+    ChevronRight, LayoutList, Database,
 } from "lucide-react";
 
 // ── Sidebar nav structure ─────────────────────────────────────────────────────
@@ -89,6 +89,14 @@ const SIDEBAR_SECTIONS: NavSection[] = [
             { href: "/learn/glossary", label: "Glossary", icon: <BookOpen className="h-4 w-4" />, badge: "NEW" as NavBadge },
             { href: "/lifestyle", label: "Lifestyle Finance", icon: <Globe className="h-4 w-4" />, badge: "NEW" as NavBadge },
             { href: "/community", label: "Community", icon: <MessageCircle className="h-4 w-4" /> },
+        ],
+    },
+    {
+        title: "Admin",
+        items: [
+            { href: "/admin/pipeline", label: "Data Pipeline", icon: <Database className="h-4 w-4" /> },
+            { href: "/admin/gas", label: "GAS Precompute", icon: <Zap className="h-4 w-4" /> },
+            { href: "/admin/analytics", label: "Analytics", icon: <BarChart2 className="h-4 w-4" /> },
         ],
     },
 ];
