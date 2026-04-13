@@ -139,6 +139,14 @@ async def register(
     except Exception:
         logger.warning("Email: failed to send welcome email for user_id=%s", user.id, exc_info=True)
 
+    # SEC-07: Send email verification link
+    try:
+        from app.services.email_service import send_verification_email  # noqa: PLC0415
+        if user.verification_token:
+            await send_verification_email(user.email, user.verification_token)
+    except Exception:
+        logger.warning("Email: failed to send verification email for user_id=%s", user.id, exc_info=True)
+
     return user
 
 

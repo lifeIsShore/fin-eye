@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.db.database import get_db
 from app.models.watchlist import WatchlistItem
 from app.models.user import User
-from app.api.v1.deps import get_current_user
+from app.api.v1.deps import get_current_user, get_current_active_verified_user
 from app.services.alert_service import seed_watchlist_alerts
 
 router = APIRouter()
@@ -58,7 +58,7 @@ async def list_watchlist(
 async def add_to_watchlist(
     body: WatchlistAddRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_verified_user),
 ) -> Any:
     """Add a ticker to the user's watchlist. Silently succeeds if already present."""
     symbol = body.symbol.strip().upper()

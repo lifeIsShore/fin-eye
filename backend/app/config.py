@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     # Application
     app_name: str = Field(default="Fin-Eye Backend", alias="APP_NAME")
     app_version: str = "0.1.0"
+    app_env: str = Field(default="development", alias="APP_ENV")  # SEC-02: 'development' | 'production'
     environment: str = Field(default="development", alias="ENVIRONMENT")
     debug: bool = Field(default=False, alias="DEBUG")
     allowed_origins: list[str] = Field(default=["http://localhost:3000"], alias="ALLOWED_ORIGINS")

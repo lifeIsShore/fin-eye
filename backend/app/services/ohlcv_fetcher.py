@@ -135,24 +135,28 @@ class OHLCVFetcher:
     async def _upsert_daily(self, session: AsyncSession, rows: list[dict]) -> int:
         if not rows:
             return 0
-        stmt = (
-            pg_insert(OHLCVDaily)
-            .values(rows)
-            .on_conflict_do_update(
-                constraint="uq_ohlcv_symbol_date",
-                set_={
-                    "open": pg_insert(OHLCVDaily).excluded.open,
-                    "high": pg_insert(OHLCVDaily).excluded.high,
-                    "low": pg_insert(OHLCVDaily).excluded.low,
-                    "close": pg_insert(OHLCVDaily).excluded.close,
-                    "adj_close": pg_insert(OHLCVDaily).excluded.adj_close,
-                    "volume": pg_insert(OHLCVDaily).excluded.volume,
-                },
+        total_inserted = 0
+        for i in range(0, len(rows), 1000):
+            chunk = rows[i:i+1000]
+            stmt = (
+                pg_insert(OHLCVDaily)
+                .values(chunk)
+                .on_conflict_do_update(
+                    constraint="uq_ohlcv_symbol_date",
+                    set_={
+                        "open": pg_insert(OHLCVDaily).excluded.open,
+                        "high": pg_insert(OHLCVDaily).excluded.high,
+                        "low": pg_insert(OHLCVDaily).excluded.low,
+                        "close": pg_insert(OHLCVDaily).excluded.close,
+                        "adj_close": pg_insert(OHLCVDaily).excluded.adj_close,
+                        "volume": pg_insert(OHLCVDaily).excluded.volume,
+                    },
+                )
             )
-        )
-        await session.execute(stmt)
+            await session.execute(stmt)
+            total_inserted += len(chunk)
         await session.flush()
-        return len(rows)
+        return total_inserted
 
     # ── Intraday ───────────────────────────────────────────────────────────────
 
@@ -248,23 +252,27 @@ class OHLCVFetcher:
     async def _upsert_intraday(self, session: AsyncSession, rows: list[dict]) -> int:
         if not rows:
             return 0
-        stmt = (
-            pg_insert(OHLCVIntraday)
-            .values(rows)
-            .on_conflict_do_update(
-                constraint="uq_ohlcv_intraday",
-                set_={
-                    "open": pg_insert(OHLCVIntraday).excluded.open,
-                    "high": pg_insert(OHLCVIntraday).excluded.high,
-                    "low": pg_insert(OHLCVIntraday).excluded.low,
-                    "close": pg_insert(OHLCVIntraday).excluded.close,
-                    "volume": pg_insert(OHLCVIntraday).excluded.volume,
-                },
+        total_inserted = 0
+        for i in range(0, len(rows), 1000):
+            chunk = rows[i:i+1000]
+            stmt = (
+                pg_insert(OHLCVIntraday)
+                .values(chunk)
+                .on_conflict_do_update(
+                    constraint="uq_ohlcv_intraday",
+                    set_={
+                        "open": pg_insert(OHLCVIntraday).excluded.open,
+                        "high": pg_insert(OHLCVIntraday).excluded.high,
+                        "low": pg_insert(OHLCVIntraday).excluded.low,
+                        "close": pg_insert(OHLCVIntraday).excluded.close,
+                        "volume": pg_insert(OHLCVIntraday).excluded.volume,
+                    },
+                )
             )
-        )
-        await session.execute(stmt)
+            await session.execute(stmt)
+            total_inserted += len(chunk)
         await session.flush()
-        return len(rows)
+        return total_inserted
 
     # ── Validation ─────────────────────────────────────────────────────────────
 

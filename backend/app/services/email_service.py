@@ -350,9 +350,6 @@ async def send_day7_email(
     )
 
 
-# ─── Weekly Digest (CORE-EMAIL-02) ────────────────────────────────────────────
-
-
 async def send_weekly_digest(
     to: str,
     name: Optional[str],
@@ -465,4 +462,42 @@ async def send_weekly_digest(
         f"Fin-Eye Weekly Digest — {week_str}",
         _base_template(content, unsubscribe_url=unsub_url),
         tags=[{"name": "type", "value": "weekly_digest"}],
+    )
+
+
+# ─── SEC-07: Email Verification ───────────────────────────────────────────
+
+async def send_verification_email(to: str, token: str) -> bool:
+    """
+    SEC-07: Send the email-verification link to a newly registered user.
+    The link points to the frontend /verify-email?token=... route which
+    calls POST /api/v1/auth/verify-email on the backend.
+    Token expires 24h after generation.
+    """
+    verify_url = f"{_frontend_url()}/verify-email?token={token}"
+
+    content = f"""
+    <h2 style="margin:0 0 16px;font-size:22px;color:#f1f5f9;">
+      Verify your email address ✉️
+    </h2>
+    <p style="color:#94a3b8;line-height:1.7;margin:0 0 16px;">
+      Thanks for signing up for Fin-Eye! Please verify your email address
+      to unlock full access to the platform.
+    </p>
+    <p style="color:#94a3b8;line-height:1.7;margin:0 0 24px;">
+      This link expires in <strong style="color:#f1f5f9;">24 hours</strong>.
+    </p>
+    {_btn(verify_url, 'Verify My Email →')}
+    <p style="margin-top:24px;color:#64748b;font-size:13px;">
+      If you didn’t sign up for Fin-Eye, you can safely ignore this email.
+    </p>
+    <p style="margin-top:8px;color:#475569;font-size:12px;word-break:break-all;">
+      Or copy this link: {verify_url}
+    </p>
+    """
+    return await _send(
+        to,
+        "Verify your Fin-Eye email address",
+        _base_template(content),
+        tags=[{"name": "type", "value": "verification"}],
     )

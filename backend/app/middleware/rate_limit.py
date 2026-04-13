@@ -34,6 +34,7 @@ settings = get_settings()
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=[f"{settings.rate_limit_anon}/minute"],
+    config_filename=".non_existent_env_to_bypass_slowapi_encoding_bug",
 )
 
 

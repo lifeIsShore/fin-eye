@@ -488,6 +488,86 @@ async def job_stocktwits_external_signals() -> None:
         )
 
 
+async def job_bot_evaluate() -> None:
+    """
+    Sprint 47 — Paper Trading Bot evaluation cycle.
+    Runs every 15 minutes during market hours (2 min after GAS precompute).
+    Evaluates each bot-enabled user’s watchlist symbols and fires BUY/SELL/HOLD decisions.
+    """
+    from app.services.bot_service import run_bot_cycle  # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            stats = await run_bot_cycle(session)
+        detail = (
+            f"users={stats['users']} evals={stats['evaluations']} "
+            f"buys={stats['buys']} sells={stats['sells']} "
+            f"halts={stats['halts']} errors={stats['errors']}"
+        )
+        if stats["buys"] + stats["sells"] > 0:
+            logger.info("Bot cycle: %s", detail)
+        get_metrics().record_pipeline_run(
+            "bot_evaluate", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+    except Exception as exc:
+        logger.error("job_bot_evaluate failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "bot_evaluate", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+
+
+async def job_earnings_signals_fetch() -> None:
+    """
+    Daily job: compute earnings-derived ML features for all active tickers.
+    Stores earnings_days_until_norm, earnings_surprise_score_norm,
+    earnings_beat_streak_norm in external_signals table.
+    Runs at 07:00 UTC (before market open, after FOMC countdown page refreshes).
+    Skips crypto/FX/commodity tickers — no earnings data available for those.
+    """
+    from app.services.earnings_signal_store import compute_and_store_earnings_signals  # noqa: PLC0415
+    from app.models.bulk_ops import TickerUniverse                                      # noqa: PLC0415
+    from sqlalchemy import select as sql_select                                         # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as session:
+            # Only equities — earnings data not available for crypto/FX/commodities
+            result = await session.execute(
+                sql_select(TickerUniverse.symbol)
+                .where(
+                    TickerUniverse.is_active == True,         # noqa: E712
+                    TickerUniverse.yf_valid.isnot(False),
+                    # Exclude crypto (ends -USD), FX (ends =X), commodities (ends =F)
+                    ~TickerUniverse.symbol.like("%-USD"),
+                    ~TickerUniverse.symbol.like("%=X"),
+                    ~TickerUniverse.symbol.like("%=F"),
+                )
+                .order_by(TickerUniverse.tr_rank.nullslast())
+                .limit(200)  # cap: yfinance is slow, 200 * ~0.5s ≈ 100s
+            )
+            symbols = [r[0] for r in result.fetchall()]
+            summary = await compute_and_store_earnings_signals(session, symbols=symbols)
+        detail = f"ok={len(summary['ok'])} failed={len(summary['failed'])}"
+        get_metrics().record_pipeline_run(
+            "earnings_signals_fetch", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+        logger.info("Earnings ML signals: %s", detail)
+    except Exception as exc:
+        logger.error("job_earnings_signals_fetch failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "earnings_signals_fetch", started,
+            datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+
+
 # ── todos-v5 Phase 5.3 — Prediction outcome resolver ─────────────────────────
 
 async def job_resolve_prediction_outcomes() -> None:
@@ -603,6 +683,109 @@ async def job_run_optuna_tuning() -> None:
 
 
 # Sprint 44 — Churn early warning job implementation
+
+async def job_bot_evaluate() -> None:
+    """
+    Sprint 47 — Paper trading bot: evaluate every bot-enabled user's watchlist
+    every 15 minutes during market hours (Mon–Fri 13:00–21:00 UTC).
+    Runs 2 min after GAS precompute to ensure fresh GAS snapshots.
+    """
+    from sqlalchemy import select as sa_select  # noqa: PLC0415
+    from app.models.user import User            # noqa: PLC0415
+    from app.models.watchlist import WatchlistItem  # noqa: PLC0415
+    from app.models.bot import BotConfig        # noqa: PLC0415
+    from app.models.gas_snapshot import GasSnapshot  # noqa: PLC0415
+    from app.services.bot_service import evaluate_symbol, get_or_create_config  # noqa: PLC0415
+    from app.services.technical_service import generate_timeframe_signal  # noqa: PLC0415
+    import asyncio as _asyncio  # noqa: PLC0415
+
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    evaluated = buys = sells = errors = 0
+
+    try:
+        async with AsyncSessionLocal() as db:
+            # Find all users with bot enabled
+            cfg_result = await db.execute(
+                sa_select(BotConfig).where(
+                    BotConfig.is_enabled == True,  # noqa: E712
+                    BotConfig.halt_flag == False,  # noqa: E712
+                )
+            )
+            configs = cfg_result.scalars().all()
+
+            if not configs:
+                return
+
+            logger.info("Bot evaluate: %d active bot(s)", len(configs))
+
+            for cfg in configs:
+                # Get this user's watchlist
+                wl_result = await db.execute(
+                    sa_select(WatchlistItem.symbol)
+                    .where(WatchlistItem.user_id == cfg.user_id)
+                )
+                symbols = [r[0] for r in wl_result.fetchall()]
+
+                for symbol in symbols:
+                    try:
+                        # Fetch latest GAS snapshot
+                        snap_result = await db.execute(
+                            sa_select(GasSnapshot)
+                            .where(GasSnapshot.symbol == symbol)
+                            .order_by(GasSnapshot.computed_at.desc())
+                            .limit(1)
+                        )
+                        snap = snap_result.scalar_one_or_none()
+                        if not snap:
+                            continue
+
+                        gas   = snap.gas_score or 50.0
+                        grade = snap.signal_grade or "C"
+
+                        # Get current price (best effort)
+                        price = 0.0
+                        confidence = 0.5
+                        try:
+                            loop = _asyncio.get_running_loop()
+                            sig = await loop.run_in_executor(
+                                None, generate_timeframe_signal, symbol, "1d"
+                            )
+                            price      = sig.get("_current_price", 0.0)
+                            confidence = sig.get("_confidence_raw", 0.5)
+                        except Exception:
+                            pass
+
+                        result = await evaluate_symbol(
+                            db, cfg.user_id, symbol, cfg,
+                            gas_score=gas, grade=grade,
+                            current_price=price, confidence=confidence,
+                            regime=snap.regime,
+                        )
+                        evaluated += 1
+                        if result["action"] == "BUY":  buys  += 1
+                        if result["action"] == "SELL": sells += 1
+
+                    except Exception as exc:
+                        logger.debug("Bot eval error %s/%s: %s", cfg.user_id, symbol, exc)
+                        errors += 1
+
+            await db.commit()
+
+        detail = f"configs={len(configs)} evaluated={evaluated} buys={buys} sells={sells} errors={errors}"
+        if buys + sells > 0:
+            logger.info("Bot evaluate complete: %s", detail)
+        get_metrics().record_pipeline_run(
+            "bot_evaluate", started, datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+    except Exception as exc:
+        logger.error("job_bot_evaluate failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "bot_evaluate", started, datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+
 
 async def job_churn_check() -> None:
     """
@@ -784,6 +967,20 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="reddit_external_signals", name="Reddit External Signals (6h)",
         replace_existing=True, misfire_grace_time=1800)
 
+    # Sprint 47 — Paper trading bot: runs 2 min after GAS precompute during market hours
+    scheduler.add_job(job_bot_evaluate,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="13-21", minute="2,17,32,47"),
+        id="bot_evaluate", name="Paper Trading Bot Evaluation",
+        replace_existing=True, misfire_grace_time=120)
+
+    # Earnings calendar ML signals: daily at 07:00 UTC (before market open)
+    # Feeds earnings_days_until_norm, earnings_surprise_score_norm, earnings_beat_streak_norm
+    # into the external_signals table for ML pipeline consumption.
+    scheduler.add_job(job_earnings_signals_fetch,
+        trigger=CronTrigger(hour=7, minute=0),
+        id="earnings_signals_fetch", name="Earnings Calendar ML Signals",
+        replace_existing=True, misfire_grace_time=3600)
+
     # Sprint 42 — Finanzen.net external signals: every 4 hours
     scheduler.add_job(job_finanzen_net_fetch,
         trigger=CronTrigger(day_of_week="mon-fri", hour="2,6,10,14,18,22", minute=30),
@@ -827,6 +1024,12 @@ def setup_scheduler() -> AsyncIOScheduler:
         trigger=CronTrigger(hour=9, minute=0),
         id="churn_check", name="Pro User Churn Early Warning",
         replace_existing=True, misfire_grace_time=3600)
+
+    # Sprint 47 — Paper trading bot: every 15 min during market hours, 2 min after GAS precompute
+    scheduler.add_job(job_bot_evaluate,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="13-21", minute="2,17,32,47"),
+        id="bot_evaluate", name="Paper Trading Bot Evaluate",
+        replace_existing=True, misfire_grace_time=120)
 
     logger.info(
         "Scheduler configured with %d jobs: %s",

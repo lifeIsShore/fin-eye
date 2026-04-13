@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from app.db.database import get_db
 from app.models.portfolio import Portfolio, PortfolioItem
 from app.models.user import User
-from app.api.v1.deps import get_current_user
+from app.api.v1.deps import get_current_user, get_current_active_verified_user
 from app.services.portfolio_service import calculate_portfolio_analysis
 
 router = APIRouter()

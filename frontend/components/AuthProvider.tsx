@@ -8,6 +8,7 @@ export interface User {
     email: string;
     is_pro: boolean;
     is_admin: boolean;
+    is_verified: boolean;       // SEC-07
     name?: string | null;
     default_symbol?: string | null;  // Sprint 23
     risk_profile?: string | null;     // Sprint 24

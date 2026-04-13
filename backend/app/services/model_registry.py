@@ -409,6 +409,21 @@ class JsonlFileModelRegistry:
             record.accuracy * 100, "✓" if record.quality_gate else "✗",
         )
 
+        # SEC-08: Upload artifact to R2 (async, non-blocking fire-and-forget)
+        if record.artifact_path:
+            try:
+                import asyncio  # noqa: PLC0415
+                from app.services.model_storage import upload_model  # noqa: PLC0415
+                from pathlib import Path as _Path  # noqa: PLC0415
+                _local = _Path(record.artifact_path)
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(upload_model(_local))
+                except RuntimeError:
+                    pass  # No running loop — skip upload silently
+            except Exception as _exc:
+                logger.debug("R2 upload dispatch failed (non-fatal): %s", _exc)
+
     def list_winners(self) -> List[ModelRecord]:
         """Return every record in the log (all statuses)."""
         return self._read_all()

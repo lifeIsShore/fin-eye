@@ -39,6 +39,10 @@ class User(Base):
     totp_secret  = Column(String(256), nullable=True)   # Fernet-encrypted; null until setup
     totp_enabled = Column(Boolean, default=False, nullable=False)
 
+    # Email verification — Sprint 46 SEC-07
+    verification_token            = Column(String(128), nullable=True, unique=True, index=True)
+    verification_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 

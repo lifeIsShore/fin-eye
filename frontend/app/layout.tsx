@@ -8,6 +8,7 @@ import { ConsentGate } from "../components/ConsentGate";
 import { SymbolProvider } from "../lib/symbolContext";
 import { ToastProvider } from "../components/ToastProvider";
 import CommandPalette from "../components/CommandPalette";
+import EmailVerificationBanner from "../components/EmailVerificationBanner";
 import { PageTransition } from "../components/PageTransition";
 
 export const metadata = {
@@ -89,6 +90,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                                                 <MobileNav />
                                             </div>
                                         </header>
+
+                                        {/* ── Email verification banner (SEC-07) ─── */}
+                                        <EmailVerificationBanner />
 
                                         {/* ── Page content ────────────────────── */}
                                         <main className="flex-1 px-4 sm:px-6 py-6">

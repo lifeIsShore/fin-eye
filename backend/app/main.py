@@ -42,7 +42,7 @@ from app.api.v1.endpoints import (
     portfolios, backtesting, events, watchlist, legal, gdpr, cms, alerts, strategies,
     showcase, ops, analytics, experiments, email, api_keys, risk, admin_gas, options, sectors,
     insiders, earnings, shorts, adv_sentiment, fed_policy, indicators,
-    admin_bulk, symbols, allocation, billing, social_signals, tenants,
+    admin_bulk, symbols, allocation, billing, social_signals, tenants, bot,
 )
 from app.api.v1.endpoints.admin_ml import router as admin_ml_router  # Sprint 6
 from app.api.public.v1 import router as public_v1_router
@@ -56,9 +56,39 @@ logger   = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("🚀 Starting Fin-Eye Backend...")
 
+    # SEC-02: Production config lock
+    if settings.app_env == "production":
+        assert not settings.debug, (
+            "DEBUG must be False in production. Set DEBUG=False in .env."
+        )
+        assert "*" not in settings.allowed_origins, (
+            "ALLOWED_ORIGINS must not contain '*' in production. "
+            "Set ALLOWED_ORIGINS=[\"https://fin-eye.app\"] in .env."
+        )
+        assert settings.secret_key not in ("change-in-production", "", "REPLACE_ME"), (
+            "JWT_SECRET must be a real secret in production. "
+            "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+        logger.info("🔒 Production config assertions passed")
+    logger.info("⚙️  Running in %s mode", settings.app_env)
+
     init_db()
     await test_db_connection()
     await init_redis()
+
+    # SEC-08: Sync missing ML model artifacts from R2 cloud storage
+    try:
+        from app.services.model_storage import sync_models_from_r2  # noqa: PLC0415
+        sync_result = await sync_models_from_r2()
+        if not sync_result.get("skipped"):
+            logger.info(
+                "📦 R2 model sync: downloaded=%d already_present=%d failed=%d",
+                sync_result["downloaded"],
+                sync_result["already_present"],
+                sync_result["failed"],
+            )
+    except Exception as exc:
+        logger.warning("⚠️  R2 model sync failed (non-fatal): %s", exc)
 
     scheduler = setup_scheduler()
     scheduler.start()
@@ -81,7 +111,18 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("⚠️  GAS cache warm failed (non-fatal): %s", exc)
 
+    async def _sync_r2_models_bg():
+        await asyncio.sleep(5)
+        try:
+            from app.services.model_storage import sync_models_from_r2  # noqa: PLC0415
+            stats = await sync_models_from_r2()
+            if stats["downloaded"] > 0:
+                logger.info("☁️  R2 sync: downloaded %d missing model(s)", stats["downloaded"])
+        except Exception as exc:
+            logger.warning("⚠️  R2 model sync failed (non-fatal): %s", exc)
+
     asyncio.create_task(_warm_gas_cache_bg())
+    asyncio.create_task(_sync_r2_models_bg())
 
     yield
 
@@ -175,6 +216,7 @@ app.include_router(allocation.router,     prefix="/api/v1/allocation",     tags=
 app.include_router(billing.router,        prefix="/api/v1/billing",        tags=["Billing & Monetisation"])
 app.include_router(social_signals.router, prefix="/api/v1/sentiment",      tags=["Social Signals"])
 app.include_router(tenants.router,       prefix="/api/v1/tenants",        tags=["B2B Tenants"])
+app.include_router(bot.router,           prefix="/api/v1/bot",            tags=["Paper Trading Bot"])
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
 app.include_router(admin_bulk.router_admin, prefix="/api/v1/admin",       tags=["Admin — Pipeline"])

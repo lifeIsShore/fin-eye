@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import useSWR from "swr";
 import {
   BarChart,
@@ -20,6 +20,37 @@ import {
   type SurpriseScoreDto,
   type UpcomingEarningsDto,
 } from "../../lib/api";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+// ─── ML Signal types ──────────────────────────────────────────────────
+
+interface MlFeatureDetail {
+  value: number;
+  raw_days_until?: number | null;
+  raw_score?: number;
+  raw_streak?: number;
+  label?: string;
+  interpretation: string;
+  description: string;
+}
+
+interface EarningsMlSignals {
+  symbol: string;
+  ml_features: {
+    earnings_days_until_norm: MlFeatureDetail;
+    earnings_surprise_score_norm: MlFeatureDetail;
+    earnings_beat_streak_norm: MlFeatureDetail;
+  };
+  summary: {
+    quarters_beat: number;
+    quarters_missed: number;
+    quarters_inline: number;
+    avg_eps_surprise_pct: number | null;
+    upcoming_date: string | null;
+  };
+  methodology: string;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -386,6 +417,134 @@ function MethodologyCard() {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+
+// ─── ML Signal Impact Panel ───────────────────────────────────────
+
+function MlFeatureBar({ label, value, description, interpretation }: {
+  label: string; value: number; description: string; interpretation: string;
+}) {
+  const pct = Math.round(value * 100);
+  const barColor = pct >= 60 ? "bg-emerald-500" : pct >= 40 ? "bg-slate-500" : "bg-rose-500";
+  const textColor = pct >= 60 ? "text-emerald-400" : pct >= 40 ? "text-slate-300" : "text-rose-400";
+  const badgeColor = interpretation.toLowerCase().includes("bullish")
+    ? "text-emerald-400 bg-emerald-950/30 border-emerald-800/40"
+    : interpretation.toLowerCase().includes("bearish")
+    ? "text-rose-400 bg-rose-950/30 border-rose-800/40"
+    : "text-slate-400 bg-slate-800/40 border-slate-700/40";
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-mono font-semibold text-sky-400">{label}</span>
+        <span className={`text-xs font-bold tabular-nums ${textColor}`}>{value.toFixed(3)}</span>
+      </div>
+      <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] text-slate-500 leading-relaxed flex-1">{description}</p>
+        <span className={`flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badgeColor}`}>
+          {interpretation}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MlSignalPanel({ symbol }: { symbol: string }) {
+  const [open, setOpen] = useState(true);
+  const [data, setData] = useState<EarningsMlSignals | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!symbol) return;
+    setLoading(true); setError(null);
+    fetch(`${API_BASE}/api/v1/earnings/${encodeURIComponent(symbol.toUpperCase())}/ml-signals`)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<EarningsMlSignals>; })
+      .then(d => { setData(d); setLoading(false); })
+      .catch(e => { setError(String(e)); setLoading(false); });
+  }, [symbol]);
+
+  return (
+    <div className="rounded-xl border border-violet-800/40 bg-violet-950/10 overflow-hidden">
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 hover:bg-violet-900/10 transition-colors">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🤖</span>
+          <span className="text-sm font-semibold text-violet-300">ML Signal Impact</span>
+          <span className="text-[10px] text-violet-500 bg-violet-950/50 border border-violet-800/40 rounded-full px-2 py-0.5">
+            Live features • Fed into model daily
+          </span>
+        </div>
+        <svg className={`h-4 w-4 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="border-t border-violet-800/30 px-5 py-5 space-y-5">
+          <p className="text-xs text-slate-400 leading-relaxed">
+            These three normalised values are computed daily from earnings data and injected into
+            every ML model as features via the <code className="text-sky-400">external_signals</code> table.
+            They directly influence the <strong className="text-slate-200">Technical Consensus score</strong> on the dashboard.
+          </p>
+
+          {loading && (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="h-3 w-3 animate-spin rounded-full border border-violet-500 border-t-transparent" />
+              Loading ML feature values…
+            </div>
+          )}
+          {error && <p className="text-xs text-rose-400">Could not load features: {error}. Model will use zero-fill fallback.</p>}
+
+          {data && (
+            <div className="space-y-5">
+              <MlFeatureBar
+                label="earnings_days_until_norm"
+                value={data.ml_features.earnings_days_until_norm.value}
+                description={data.ml_features.earnings_days_until_norm.description}
+                interpretation={data.ml_features.earnings_days_until_norm.interpretation}
+              />
+              <MlFeatureBar
+                label="earnings_surprise_score_norm"
+                value={data.ml_features.earnings_surprise_score_norm.value}
+                description={data.ml_features.earnings_surprise_score_norm.description}
+                interpretation={data.ml_features.earnings_surprise_score_norm.interpretation}
+              />
+              <MlFeatureBar
+                label="earnings_beat_streak_norm"
+                value={data.ml_features.earnings_beat_streak_norm.value}
+                description={data.ml_features.earnings_beat_streak_norm.description}
+                interpretation={data.ml_features.earnings_beat_streak_norm.interpretation}
+              />
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/60">
+                {[
+                  { label: "Beats",   value: data.summary.quarters_beat,   color: "text-emerald-300" },
+                  { label: "Misses",  value: data.summary.quarters_missed, color: "text-rose-300" },
+                  { label: "Inline",  value: data.summary.quarters_inline, color: "text-slate-300" },
+                  { label: "Avg EPS", value: data.summary.avg_eps_surprise_pct != null
+                    ? `${data.summary.avg_eps_surprise_pct > 0 ? "+" : ""}${data.summary.avg_eps_surprise_pct.toFixed(1)}%`
+                    : "—",
+                    color: (data.summary.avg_eps_surprise_pct ?? 0) > 0 ? "text-emerald-400" : "text-rose-400" },
+                ].map(s => (
+                  <div key={s.label} className="rounded-lg bg-slate-800/40 px-3 py-2 text-center">
+                    <p className={`text-sm font-black ${s.color}`}>{s.value}</p>
+                    <p className="text-[10px] text-slate-600">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[10px] text-slate-600 leading-relaxed border-t border-slate-800/50 pt-3">{data.methodology}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function EarningsPage() {
   const [inputValue, setInputValue] = useState("AAPL");

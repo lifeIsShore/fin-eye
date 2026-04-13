@@ -162,6 +162,82 @@ async def get_upcoming_earnings(symbol: str) -> Optional[UpcomingEarningsDto]:
     return _upcoming_to_dto(analysis.upcoming) if analysis.upcoming else None
 
 
+@router.get(
+    "/{symbol}/ml-signals",
+    summary="Earnings-derived ML feature values for a symbol",
+)
+async def get_earnings_ml_signals(symbol: str) -> dict:
+    """
+    Returns the three earnings-derived features that Fin-Eye injects into the ML
+    pipeline as external signals. Useful for understanding how upcoming earnings
+    and historical beat/miss patterns influence the model's predictions.
+
+    Features:
+    - **earnings_days_until_norm** (0–1): 1 = earnings today, 0 = no earnings or >60 days
+    - **earnings_surprise_score_norm** (0–1): 1 = perfect beater, 0 = consistent misser
+    - **earnings_beat_streak_norm** (0–1): consecutive beat streak / 8 (capped)
+    """
+    analysis = await _fetch(symbol)
+    score = analysis.surprise_score
+
+    days_until = analysis.upcoming.days_until if analysis.upcoming else None
+    days_norm = max(0.0, round(1.0 - (days_until or 999) / 60.0, 4)) if days_until is not None and days_until >= 0 else 0.0
+    surprise_norm = round(score.score / 100.0, 4)
+    streak = min(score.consecutive_beats, 8)
+    streak_norm = round(streak / 8.0, 4)
+
+    # ML signal strength interpretation
+    def _interp(val: float) -> str:
+        if val >= 0.75: return "Strong bullish signal"
+        if val >= 0.55: return "Mild bullish signal"
+        if val >= 0.45: return "Neutral"
+        if val >= 0.25: return "Mild bearish signal"
+        return "Strong bearish signal"
+
+    return {
+        "symbol": symbol.upper(),
+        "ml_features": {
+            "earnings_days_until_norm": {
+                "value": days_norm,
+                "raw_days_until": days_until,
+                "interpretation": (
+                    "Earnings imminent — elevated volatility expected" if days_norm > 0.5
+                    else "No imminent earnings"
+                ),
+                "description": "1 = earnings today, 0 = >60 days away or no data. Captures pre-earnings drift.",
+            },
+            "earnings_surprise_score_norm": {
+                "value": surprise_norm,
+                "raw_score": score.score,
+                "label": score.label,
+                "interpretation": _interp(surprise_norm),
+                "description": "Historical EPS beat/miss composite (last 4Q). >0.6 = systematic beater.",
+            },
+            "earnings_beat_streak_norm": {
+                "value": streak_norm,
+                "raw_streak": score.consecutive_beats,
+                "interpretation": (
+                    f"{score.consecutive_beats}Q consecutive beat streak" if score.consecutive_beats > 0
+                    else "No recent beat streak"
+                ),
+                "description": "Consecutive beats / 8 (capped). Long streaks = analyst sandbagging, bullish.",
+            },
+        },
+        "summary": {
+            "quarters_beat":  score.quarters_beat,
+            "quarters_missed": score.quarters_missed,
+            "quarters_inline": score.quarters_inline,
+            "avg_eps_surprise_pct": score.avg_eps_surprise_pct,
+            "upcoming_date": analysis.upcoming.earnings_date if analysis.upcoming else None,
+        },
+        "methodology": (
+            "These three values are stored daily in the external_signals table and "
+            "injected into the ML training pipeline via inject_external_features(). "
+            "Models are retrained nightly with these features when ENABLE_HYPERTUNING=True."
+        ),
+    }
+
+
 @router.post(
     "/calendar",
     response_model=List[UpcomingEarningsDto],

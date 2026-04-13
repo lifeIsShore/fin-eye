@@ -252,6 +252,8 @@ def engineer_features(df: pd.DataFrame, horizon: int = DEFAULT_HORIZON) -> pd.Da
     for _ext_col in [
         "fear_greed_norm", "crypto_fear_greed_norm", "google_trends_norm",
         "reddit_mentions_norm", "reddit_sentiment_norm", "wikipedia_attention_zscore",
+        # Earnings-calendar features (injected daily via earnings_signal_store)
+        "earnings_days_until_norm", "earnings_surprise_score_norm", "earnings_beat_streak_norm",
     ]:
         if _ext_col not in d.columns:
             d[_ext_col] = 0.0
@@ -355,6 +357,10 @@ FEATURES = [
     "reddit_mentions_norm",
     "reddit_sentiment_norm",
     "wikipedia_attention_zscore",
+    # Earnings calendar features — proximity to earnings + historical surprise pattern
+    "earnings_days_until_norm",      # 0=far/no earnings, 1=today
+    "earnings_surprise_score_norm",  # historical beat rate (0=misser, 1=beater)
+    "earnings_beat_streak_norm",     # consecutive beat streak, normed 0-1
     # Seasonal encoding (Sprint 41) - always computed from the DatetimeIndex
     "sin_dow", "cos_dow", "sin_month", "cos_month",
     # FX interest rate differential (Sprint 41) - zero for non-FX symbols
@@ -1012,6 +1018,19 @@ def run_training_pipeline(
         artifact_name = f"{symbol}_{timeframe}_winner.joblib"
         artifact_path = os.path.join(ARTIFACT_DIR, artifact_name)
         joblib.dump(best_obj, artifact_path)
+
+        # SEC-08: upload to R2 in background (non-blocking, fail-safe)
+        try:
+            from app.services.model_storage import upload_model  # noqa: PLC0415
+            import asyncio as _aio  # noqa: PLC0415
+            try:
+                loop = _aio.get_running_loop()
+                loop.create_task(upload_model(Path(artifact_path)))
+            except RuntimeError:
+                # No running loop (called from sync context) — skip async upload
+                pass
+        except Exception:
+            pass  # upload failure never blocks training
 
         # ── MLflow: log winner ────────────────────────────────────────────────
         mlflow_run_id = None

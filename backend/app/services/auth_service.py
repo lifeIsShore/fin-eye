@@ -33,15 +33,25 @@ async def create_user(
 ) -> User:
     """
     Create a new user. Raises ValueError if email already registered.
+    Sets a verification token (24h TTL) — caller should send the verification email.
     """
+    import secrets as _secrets  # noqa: PLC0415
+    from datetime import datetime, timezone, timedelta  # noqa: PLC0415
+
     existing = await get_user_by_email(db, email)
     if existing:
         raise ValueError("Email already registered.")
+
+    token = _secrets.token_urlsafe(64)
+    expiry = datetime.now(timezone.utc) + timedelta(hours=24)
 
     user = User(
         email=email.lower(),
         hashed_password=hash_password(password),
         name=name,
+        verification_token=token,
+        verification_token_expires_at=expiry,
+        # is_verified stays False — user must click email link
     )
     db.add(user)
     await db.flush()   # get the id without committing

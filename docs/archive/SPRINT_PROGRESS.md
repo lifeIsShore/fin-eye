@@ -1,5 +1,6 @@
 # Fin-Eye — Sprint Progress Tracker
-> Last updated: April 2026 — Sprints 0–42 complete + Bug Fix Sessions 1 & 2 complete
+> Last updated: April 2026 — Sprints 0–45 complete + Bug Fix Sessions 1 & 2 complete
+> **Next sprints:** See `SPRINT_PLANS_46_55.md` for detailed plans for Sprints 46–55
 
 ## Completed Sprints
 
