@@ -13,7 +13,7 @@ import { PageTransition } from "../components/PageTransition";
 import { NpsSurvey } from "../components/NpsSurvey";
 
 export const metadata = {
-    title: "Fin-Eye",
+    title: "Yagmur Terminal",
     description: "Understand the forces behind price movements",
 };
 
@@ -29,8 +29,8 @@ const REGISTER_SW_SCRIPT = `
 // Sprint 43 — Restore compact/currency prefs on page load
 const RESTORE_PREFS_SCRIPT = `
   try {
-    if (localStorage.getItem('fin-eye-compact') === 'true') {
-      document.documentElement.classList.add('fin-eye-compact');
+    if (localStorage.getItem('yagmur-terminal-compact') === 'true') {
+      document.documentElement.classList.add('yagmur-terminal-compact');
     }
   } catch (e) {}
 `;
@@ -78,7 +78,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                                             {/* Mobile logo (hidden on desktop — logo lives in sidebar) */}
                                             <div className="lg:hidden flex-shrink-0">
                                                 <Link href="/">
-                                                    <span className="text-base font-bold text-slate-100">Fin-Eye</span>
+                                                    <span className="text-base font-bold text-slate-100">Yagmur Terminal</span>
                                                 </Link>
                                             </div>
 
@@ -106,7 +106,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                                         <footer className="border-t border-slate-800 px-4 sm:px-6 py-5">
                                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                                 <p className="text-xs text-slate-500">
-                                                    Fin-Eye is for educational purposes only and does not constitute
+                                                    Yagmur Terminal is for educational purposes only and does not constitute
                                                     investment advice. Trading involves risk of loss.
                                                 </p>
                                                 <nav className="flex flex-wrap gap-3 text-xs text-slate-500">

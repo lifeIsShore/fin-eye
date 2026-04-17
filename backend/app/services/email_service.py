@@ -1,7 +1,7 @@
 """
 app/services/email_service.py
 
-Resend-powered email service for Fin-Eye.
+Resend-powered email service for Yagmur Terminal.
 
 Handles:
   - Transactional onboarding sequence (CORE-EMAIL-01)
@@ -92,7 +92,7 @@ def _base_template(content: str, unsubscribe_url: Optional[str] = None) -> str:
     if unsubscribe_url:
         footer = f"""
         <p style="margin-top:32px;font-size:12px;color:#888;text-align:center;">
-          You're receiving this because you signed up for Fin-Eye.<br>
+          You're receiving this because you signed up for Yagmur Terminal.<br>
           <a href="{unsubscribe_url}" style="color:#888;">Unsubscribe from marketing emails</a>
         </p>"""
     return f"""
@@ -101,7 +101,7 @@ def _base_template(content: str, unsubscribe_url: Optional[str] = None) -> str:
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Fin-Eye</title>
+      <title>Yagmur Terminal</title>
     </head>
     <body style="margin:0;padding:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;color:#e2e8f0;">
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;">
@@ -113,7 +113,7 @@ def _base_template(content: str, unsubscribe_url: Optional[str] = None) -> str:
               <tr>
                 <td style="background:linear-gradient(135deg,#1e40af,#0891b2);padding:32px 40px;">
                   <h1 style="margin:0;font-size:24px;font-weight:700;color:#fff;letter-spacing:-0.5px;">
-                    📈 Fin-Eye
+                    📈 Yagmur Terminal
                   </h1>
                   <p style="margin:4px 0 0;font-size:13px;color:#bfdbfe;">
                     Market Intelligence Platform
@@ -130,7 +130,7 @@ def _base_template(content: str, unsubscribe_url: Optional[str] = None) -> str:
               <tr>
                 <td style="background:#0f172a;padding:24px 40px;border-top:1px solid #334155;">
                   <p style="margin:0;font-size:12px;color:#64748b;text-align:center;">
-                    ⚠️ Fin-Eye is an <strong>educational tool only</strong>. Nothing in this email
+                    ⚠️ Yagmur Terminal is an <strong>educational tool only</strong>. Nothing in this email
                     constitutes financial advice or a recommendation to buy or sell any security.
                     Always consult a qualified financial advisor before making investment decisions.
                   </p>
@@ -178,7 +178,7 @@ async def send_welcome_email(
 
     content = f"""
     <h2 style="margin:0 0 16px;font-size:22px;color:#f1f5f9;">
-      Welcome to Fin-Eye, {display}! 👋
+      Welcome to Yagmur Terminal, {display}! 👋
     </h2>
     <p style="color:#94a3b8;line-height:1.7;margin:0 0 16px;">
       You're now part of a community of data-driven investors using quantitative signals
@@ -226,7 +226,7 @@ async def send_welcome_email(
     """
     return await _send(
         to,
-        "Welcome to Fin-Eye — your market intelligence dashboard is ready",
+        "Welcome to Yagmur Terminal — your market intelligence dashboard is ready",
         _base_template(content, unsubscribe_url=unsub_url),
         tags=[{"name": "sequence", "value": "onboarding_1"}],
     )
@@ -251,7 +251,7 @@ async def send_day3_email(
       Hey {display} — have you tried the backtesting engine? 🧪
     </h2>
     <p style="color:#94a3b8;line-height:1.7;margin:0 0 16px;">
-      One of Fin-Eye's most powerful features is the <strong style="color:#f1f5f9;">backtesting engine</strong>.
+      One of Yagmur Terminal's most powerful features is the <strong style="color:#f1f5f9;">backtesting engine</strong>.
       It lets you test momentum strategies on any ticker — with a buy-and-hold benchmark,
       max drawdown, Sharpe ratio, and an overfitting warning if your results look too good to be true.
     </p>
@@ -272,7 +272,7 @@ async def send_day3_email(
     """
     return await _send(
         to,
-        "Fin-Eye tip: backtest any strategy in 30 seconds",
+        "Yagmur Terminal tip: backtest any strategy in 30 seconds",
         _base_template(content, unsubscribe_url=unsub_url),
         tags=[{"name": "sequence", "value": "onboarding_2"}],
     )
@@ -344,7 +344,7 @@ async def send_day7_email(
     """
     return await _send(
         to,
-        "Fin-Eye: 3 features that power users rely on",
+        "Yagmur Terminal: 3 features that power users rely on",
         _base_template(content, unsubscribe_url=unsub_url),
         tags=[{"name": "sequence", "value": "onboarding_3"}],
     )
@@ -429,7 +429,7 @@ async def send_weekly_digest(
     <p style="margin:0 0 24px;color:#64748b;font-size:13px;">{week_str}</p>
 
     <p style="color:#94a3b8;line-height:1.7;margin:0 0 24px;">
-      Hi {display}, here's your Fin-Eye weekly roundup — macro context, recent content,
+      Hi {display}, here's your Yagmur Terminal weekly roundup — macro context, recent content,
       and a reminder that all signals are <strong style="color:#f1f5f9;">educational only</strong>.
       Nothing here is a recommendation to buy or sell.
     </p>
@@ -459,7 +459,7 @@ async def send_weekly_digest(
     """
     return await _send(
         to,
-        f"Fin-Eye Weekly Digest — {week_str}",
+        f"Yagmur Terminal Weekly Digest — {week_str}",
         _base_template(content, unsubscribe_url=unsub_url),
         tags=[{"name": "type", "value": "weekly_digest"}],
     )
@@ -481,7 +481,7 @@ async def send_verification_email(to: str, token: str) -> bool:
       Verify your email address ✉️
     </h2>
     <p style="color:#94a3b8;line-height:1.7;margin:0 0 16px;">
-      Thanks for signing up for Fin-Eye! Please verify your email address
+      Thanks for signing up for Yagmur Terminal! Please verify your email address
       to unlock full access to the platform.
     </p>
     <p style="color:#94a3b8;line-height:1.7;margin:0 0 24px;">
@@ -489,7 +489,7 @@ async def send_verification_email(to: str, token: str) -> bool:
     </p>
     {_btn(verify_url, 'Verify My Email →')}
     <p style="margin-top:24px;color:#64748b;font-size:13px;">
-      If you didn’t sign up for Fin-Eye, you can safely ignore this email.
+      If you didn’t sign up for Yagmur Terminal, you can safely ignore this email.
     </p>
     <p style="margin-top:8px;color:#475569;font-size:12px;word-break:break-all;">
       Or copy this link: {verify_url}
@@ -497,7 +497,7 @@ async def send_verification_email(to: str, token: str) -> bool:
     """
     return await _send(
         to,
-        "Verify your Fin-Eye email address",
+        "Verify your Yagmur Terminal email address",
         _base_template(content),
         tags=[{"name": "type", "value": "verification"}],
     )

@@ -1247,6 +1247,64 @@ frontend/lib/api.ts                 # Compliance + seat management helpers
 
 ---
 
+---
+
+## Sprint 56 — Advanced Monte Carlo Simulation System
+**Priority:** HIGH — transitions platform from static deterministic analysis to robust probabilistic forecasting.
+**Sources:** Architecture roadmap (ML modeling) and User specification (Portfolio/Retirement tooling).
+
+### Goal
+Implement a robust Monte Carlo simulation engine powered by vectorized NumPy arrays for rapid, massive-scale parallel path generation. This engine will act as a central mathematical service consumed across the stack: by the bot for dynamic VaR risk sizing, by the backtester for extrapolating historical metrics into probability cones, and by a new interactive `/portfolio/montecarlo` frontend.
+
+### Architecture & Design Rules
+1. **Performance**: Must use matrix math (NumPy `cumprod`, `linalg.cholesky`) instead of Python `for` loops across paths. Goal: 10,000 paths mapped over 5 years must execute in <250ms.
+2. **Payload Size**: Never return the raw simulation path arrays to the frontend (massive bandwidth bloat). Backend must calculate specific percentiles (e.g. 5th, 25th, Median, 75th, 95th) per time-step and only return those aggregated slices.
+3. **Distribution Models**: Support Geometric Brownian Motion (GBM) for standard equities, and Merton Jump-Diffusion to accurately model crypto/meme-stock "fat tail" crash risk.
+
+### Deliverables
+
+#### Phase 1: Core Calculation Engine (Backend Math Core)
+- [ ] `BE` Create schemas in `backend/app/schemas/montecarlo_models.py`:
+  - `MCAssetParams`: Symbol, starting value, drift (`mu`), volatility (`sigma`), model type.
+  - `MCPortfolioParams`: List of assets, covariance matrix, regular cash inflows/outflows.
+  - `MCPercentileResult`: Time-step representations for P5, P25, P50, P75, P95.
+- [ ] `BE` Create central service `backend/app/services/mc_engine.py`:
+  - `run_gbm_paths(S0, mu, sigma, T, steps, paths)` using fast Cholesky decomposition.
+  - `run_merton_jump_diffusion(...)` incorporating Poisson crash variables for fat tails.
+  - `run_portfolio_simulation(...)` handling correlated assets and multi-dimensional matrices.
+
+#### Phase 2: API Layer & Endpoints
+- [ ] `BE` Create API Router in `backend/app/api/v1/endpoints/montecarlo.py`:
+  - Endpoint `POST /api/v1/montecarlo/asset` returning `MCSimulationResult`.
+  - Endpoint `POST /api/v1/montecarlo/portfolio` handling matrix array processing.
+- [ ] `BE` Secure endpoints: rate-limit to 5 requests per minute; cap max paths (e.g. 50,000 max) to prevent memory OOM attacks.
+- [ ] `BE` Register router dynamically in `backend/app/main.py`.
+
+#### Phase 3: Bot ML Integration (Dynamic Risk via CVaR)
+- [ ] `BE` Hook into `backend/app/services/bot_service.py` -> `evaluate_symbol()`:
+  - Instead of static ATR calculations, call `mc_engine.py` simulating 30 days ahead based on 6-month historical volatility.
+  - Calculate Conditional Value-at-Risk (CVaR) representing expected shortfall at the 5th percentile.
+  - Rule execution: If `CVaR > config.daily_loss_limit`, strictly downsize or reject the trade entirely, despite any positive ML signals.
+
+#### Phase 4: Backtesting Post-Analysis Extensions
+- [ ] `BE` Modify `backend/app/services/backtesting_service.py`:
+  - After a historical run, calculate strategy's empirical mean return and standard deviation.
+  - Wire these stats into the `mc_engine` to project the strategy PNL 1–5 years into the future.
+- [ ] `FE` Enhance `frontend/app/backtesting/page.tsx`:
+  - Add a "Simulate Future Outcomes" mechanism below the backtest equity curve.
+  - Render a Recharts fan chart plotting the historical equity curve merging seamlessly into future probability boundaries.
+
+#### Phase 5: Dedicated Interactive UI Playground
+- [ ] `FE` Create interactive dashboard in `frontend/app/portfolio/montecarlo/page.tsx`:
+  - Use `grid-cols-12` layout: Left sidebar for controls (`col-span-3`); main area for charting (`col-span-9`).
+  - Inputs: Capital allocation, horizon duration (years), monthly deposit/withdrawal (for retirement modeling).
+  - Model toggles: Let user switch between "Standard (GBM)" and "Fat Tail / Crash Risk (Jump Diffusion)".
+- [ ] `FE` Charting: Build a visual "Cone of Probability" using `AreaChart` extending `recharts`.
+- [ ] `FE` Data Polish: Display clear KPI blocks (e.g. "Probability of Exhausting Funds = 12%", "Median Portfolio Expected = $X").
+- [ ] `FE` Navigation: Add the new tool to `frontend/components/Nav.tsx` under the Analytics section.
+
+---
+
 ## Sprint Execution Order Summary
 
 | Sprint | Name | Priority | Backend | Frontend | DB | Status |
@@ -1254,13 +1312,14 @@ frontend/lib/api.ts                 # Compliance + seat management helpers
 | 46 | Security Hardening | 🔴 CRITICAL | Heavy | Light | 1 migration | ✅ Complete |
 | 47 | Paper Trading Bot | 🟠 HIGH | Heavy | Heavy | 3 tables | ✅ Complete |
 | 48 | Lifestyle Banking + Estate | 🟡 MEDIUM | None | Medium | None | ✅ Complete |
-| 49 | Activation Tracking + Streak + NPS | 🟠 HIGH | Medium | Medium | 1 migration | Planned |
+| 49 | Activation Tracking + Streak + NPS | 🟠 HIGH | Medium | Medium | 1 migration | ✅ Complete |
 | 50 | Referral Program + Social Proof | 🟡 MEDIUM | Medium | Medium | 1 migration | Planned |
 | 51 | TypeScript Strict + Lighthouse CI | 🟡 MEDIUM | None | Heavy | None | Planned |
 | 52 | Discussion Threads + Poll | 🟡 MEDIUM | Medium | Medium | 2 migrations | Planned |
 | 53 | Shareable Report Card | 🟡 MEDIUM | None | Light | None | Planned |
 | 54 | Bond Ladder Builder | 🟢 LOW-MED | Light | Medium | None | Planned |
 | 55 | B2B Billing + Compliance Export | 🟢 LOW | Medium | Medium | 1 migration | Planned |
+| 56 | Advanced Monte Carlo Simulation | 🟠 HIGH | Heavy | Heavy | None | Planned |
 
 ---
 

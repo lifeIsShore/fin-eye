@@ -78,7 +78,7 @@ export default function VerifyEmailPage() {
                         <>
                             <h1 className="text-xl font-bold text-emerald-300">Email verified!</h1>
                             <p className="text-sm text-slate-400">
-                                Your email has been confirmed. You now have full access to Fin-Eye.
+                                Your email has been confirmed. You now have full access to Yagmur Terminal.
                             </p>
                         </>
                     )}

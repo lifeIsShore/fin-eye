@@ -76,6 +76,7 @@ const SIDEBAR_SECTIONS: NavSection[] = [
             { href: "/portfolios", label: "Portfolio", icon: <Briefcase className="h-4 w-4" /> },
             { href: "/portfolio/allocate", label: "Allocation Suggest", icon: <PieChart className="h-4 w-4" />, badge: "NEW" },
             { href: "/portfolio/retirement", label: "Retirement Risk", icon: <TrendingDown className="h-4 w-4" />, badge: "NEW" },
+            { href: "/portfolio/montecarlo", label: "Monte Carlo SIM", icon: <FlaskConical className="h-4 w-4" />, badge: "NEW" },
             { href: "/portfolio/build", label: "AI Allocator", icon: <Zap className="h-4 w-4" />, badge: "AI" },
             { href: "/alerts", label: "Alerts", icon: <Bell className="h-4 w-4" /> },
             { href: "/bot/paper", label: "Trading Bot", icon: <Bot className="h-4 w-4" />, badge: "BETA" },
@@ -233,9 +234,9 @@ export function Sidebar() {
                 {!collapsed && (
                     <Link href="/" className="flex flex-col">
                         <span className="text-base font-bold text-slate-100 leading-tight hover:text-white transition-colors">
-                            Fin-Eye
+                            Yagmur Terminal
                         </span>
-                        <span className="text-[10px] text-slate-500 leading-tight">Market Intelligence</span>
+                        <span className="text-[10px] text-slate-500 leading-tight">Institutional Grade Intelligence</span>
                     </Link>
                 )}
                 <button
@@ -337,8 +338,8 @@ export function MobileNav() {
                 }`}>
                 <div className="flex items-center justify-between px-4 py-4 border-b border-slate-800">
                     <div>
-                        <span className="text-base font-bold text-slate-100">Fin-Eye</span>
-                        <p className="text-[10px] text-slate-500">Market Intelligence</p>
+                        <span className="text-base font-bold text-slate-100">Yagmur Terminal</span>
+                        <p className="text-[10px] text-slate-500">Institutional Grade Intelligence</p>
                     </div>
                     <button onClick={() => setOpen(false)}
                         className="rounded-lg p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors">

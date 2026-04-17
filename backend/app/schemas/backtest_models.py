@@ -54,6 +54,8 @@ class BacktestStats(BaseModel):
     profit_factor: float
     total_trades: int
     recovery_factor: float = 0.0  # total_return / abs(max_drawdown)
+    annualized_volatility_pct: float = 0.0 # Sprint 56: For Monte Carlo Extrapolation
+    annualized_mean_pct: float = 0.0       # Sprint 56: For Monte Carlo Extrapolation
 
 class EquityPoint(BaseModel):
     date: str

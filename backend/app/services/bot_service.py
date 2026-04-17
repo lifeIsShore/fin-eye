@@ -29,6 +29,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot import BotAuditLog, BotConfig, BotPosition
+from app.schemas.montecarlo_models import MCAssetParams
+from app.services.mc_engine import run_asset_simulation
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +246,44 @@ async def evaluate_symbol(
             reason = f"Kelly sizing returned 0 for {symbol} at GAS {gas_score:.1f}."
             await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,
                        gas_score=gas_score, price=current_price)
+            return BotDecision(action="SKIP", reason=reason)
+            
+        # Sprint 56: CVaR Check via Monte Carlo simulation
+        # Estimate mu = 0 and sigma based on ATR/Price (rough estimate, standard is ~30% annualized)
+        # Using a conservative fast estimate: Volatility approx (ATR / Price) * sqrt(252).
+        # We simulate 30 days ahead.
+        predicted_cvar = 0.0
+        if atr and current_price > 0:
+            volatility = min(0.6, (atr / current_price) * 15.87) # 15.87 is approx sqrt(252)
+            # Run simulation
+            mc_params = MCAssetParams(
+                symbol=symbol,
+                starting_value=size_usd,
+                mu=0.05, # Assumed long bias 5% drift
+                sigma=volatility,
+                years=1, # Hack: use 1 year mathematically but we just need days
+                paths=1000,
+                steps_per_year=252,
+                model_type="GBM"
+            )
+            try:
+                # 30 day step equivalent means extracting the percentile at index 30
+                mc_result = run_asset_simulation(mc_params)
+                if len(mc_result.trajectory) > 30:
+                    # 30-day value at 5th percentile
+                    p5_val = mc_result.trajectory[30].p5
+                    # Loss percentage
+                    predicted_cvar = (size_usd - p5_val) / config.portfolio_value
+            except Exception as exc:
+                logger.warning(f"MC Engine failed for {symbol}: {exc}")
+                
+        # Downsize or skip if CVaR breaches daily_loss_limit
+        if predicted_cvar > config.daily_loss_limit:
+            reason = (f"MC Simulator identified extreme CVaR edge-case (Predicted Var: "
+                      f"{predicted_cvar*100:.1f}% > Limit: {config.daily_loss_limit*100:.1f}%). "
+                      f"Rejecting trade despite positive signals.")
+            await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,
+                       gas_score=gas_score, price=current_price, regime=regime)
             return BotDecision(action="SKIP", reason=reason)
 
         size_units = round(size_usd / current_price, 6)

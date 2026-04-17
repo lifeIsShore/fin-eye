@@ -64,7 +64,7 @@ export default function UnsubscribePage() {
                             {"You've been unsubscribed"}
                         </h1>
                         <p className="mt-3 text-sm text-slate-400 leading-relaxed">
-                            {message || "You will no longer receive marketing emails from Fin-Eye."}
+                            {message || "You will no longer receive marketing emails from Yagmur Terminal."}
                         </p>
                         <p className="mt-4 text-xs text-slate-600">
                             {"You'll still receive important transactional emails related to your account security."}
@@ -111,7 +111,7 @@ export default function UnsubscribePage() {
                 )}
 
                 <p className="mt-8 text-xs text-slate-700">
-                    © {new Date().getFullYear()} Fin-Eye · Educational tools for market intelligence
+                    © {new Date().getFullYear()} Yagmur Terminal · Institutional Grade Intelligence
                 </p>
             </div>
         </div>

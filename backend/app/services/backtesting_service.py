@@ -453,6 +453,8 @@ class BacktestingEngine:
             "profit_factor":         float(profit_factor),
             "total_trades":          total_trades,
             "recovery_factor":       float(recovery_factor),
+            "annualized_volatility_pct": float(daily_vol * np.sqrt(252) * 100) if daily_vol > 0 else 0.0,
+            "annualized_mean_pct":       float(returns.mean() * 252 * 100) if daily_vol > 0 else 0.0,
         }
 
     def _empty_stats(self) -> Dict[str, Any]:
@@ -466,6 +468,8 @@ class BacktestingEngine:
             "profit_factor":         0.0,
             "total_trades":          0,
             "recovery_factor":       0.0,
+            "annualized_volatility_pct": 0.0,
+            "annualized_mean_pct":       0.0,
         }
 
     def run_on_slice(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:

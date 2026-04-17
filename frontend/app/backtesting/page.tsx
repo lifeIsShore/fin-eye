@@ -16,6 +16,8 @@ import {
   runWalkForward,
   WalkForwardResponse,
   WalkForwardFold,
+  runAssetMonteCarlo,
+  MCSimulationResult,
 } from "@/lib/api";
 import {
   LineChart,
@@ -1370,6 +1372,8 @@ export default function BacktestingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BacktestResponse | null>(null);
+  const [mcResult, setMcResult] = useState<MCSimulationResult | null>(null);
+  const [mcLoading, setMcLoading] = useState(false);
 
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -1425,6 +1429,7 @@ export default function BacktestingPage() {
     try {
       const data = await runBacktest(req);
       setResult(data);
+      setMcResult(null);
       if (!localStorage.getItem("fe_backtest_fired")) {
           trackEvent("first_backtest_run", {
               strategy,
@@ -1452,6 +1457,7 @@ export default function BacktestingPage() {
     setRsiPeriod(String(s.parameters.rsi_period ?? 14));
     setRsiThreshold(String(s.parameters.rsi_threshold ?? 40));
     setResult(null);
+    setMcResult(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -1510,6 +1516,27 @@ export default function BacktestingPage() {
   const triggered = result?.overfitting_warning ?? false;
   const displayedStrategies =
     libTab === "mine" ? myStrategies : publicStrategies;
+
+  const handleSimulateFuture = async () => {
+    if (!result || !s) return;
+    try {
+      setMcLoading(true);
+      const res = await runAssetMonteCarlo({
+        symbol: result.request.symbol,
+        starting_value: result.equity_curve[result.equity_curve.length - 1].equity,
+        mu: s.annualized_mean_pct / 100, // Pass fraction
+        sigma: s.annualized_volatility_pct / 100, // Pass fraction
+        years: 3,
+        paths: 2000,
+        model_type: "GBM"
+      });
+      setMcResult(res);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setMcLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -1840,6 +1867,85 @@ export default function BacktestingPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+              </div>
+
+              {/* Sprint 56: Monte Carlo Extrapolation */}
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-5 mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-200">
+                      Simulate Future Outcomes
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Uses Monte Carlo simulation (Geometric Brownian Motion) to project future equity based on the historical mean return ({s?.annualized_mean_pct?.toFixed(1) ?? '0'}%) and volatility ({s?.annualized_volatility_pct?.toFixed(1) ?? '0'}%).
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleSimulateFuture}
+                    disabled={mcLoading}
+                    className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors flex items-center justify-center min-w-[120px]"
+                  >
+                    {mcLoading ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    ) : (
+                      "Simulate 3 Years"
+                    )}
+                  </button>
+                </div>
+
+                {mcResult && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded border border-indigo-900/30 bg-indigo-950/20 p-3">
+                        <span className="text-xs text-slate-500 block">5th Percentile (Pest)</span>
+                        <span className="text-sm font-mono text-indigo-400 block">${mcResult.final_p5.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="rounded border border-indigo-900/30 bg-indigo-950/20 p-3">
+                        <span className="text-xs text-slate-500 block">Median (Expected)</span>
+                        <span className="text-sm font-mono text-indigo-300 block">${mcResult.final_median.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="rounded border border-indigo-900/30 bg-indigo-950/20 p-3">
+                        <span className="text-xs text-slate-500 block">95th Percentile (Best)</span>
+                        <span className="text-sm font-mono text-indigo-400 block">${mcResult.final_p95.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="h-[280px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={mcResult.trajectory} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorP95" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
+                            </linearGradient>
+                            <linearGradient id="colorP75" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
+                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0.1}/>
+                            </linearGradient>
+                            <linearGradient id="colorP5" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
+                              <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                          <XAxis dataKey="day" stroke="#475569" fontSize={11} tickFormatter={(v) => `+${v}d`} />
+                          <YAxis stroke="#475569" fontSize={11} domain={["auto", "auto"]} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={48} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px" }}
+                            itemStyle={{ fontSize: "12px" }}
+                            labelStyle={{ color: "#94a3b8", fontSize: "11px", marginBottom: "4px" }}
+                            formatter={(val: number) => [`$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, ""]}
+                          />
+                          <Area type="monotone" dataKey="p95" stroke="none" fillOpacity={1} fill="url(#colorP95)" />
+                          <Area type="monotone" dataKey="p75" stroke="none" fillOpacity={1} fill="url(#colorP75)" />
+                          <Area type="monotone" dataKey="p25" stroke="none" fillOpacity={1} fill="url(#colorP5)" />
+                          <Area type="monotone" dataKey="p5" stroke="none" fillOpacity={1} fill="url(#colorP5)" />
+                          <Line type="monotone" dataKey="p50" stroke="#818cf8" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Drawdown chart — UX-BACKTEST-03 */}

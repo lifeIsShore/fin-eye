@@ -1,6 +1,6 @@
 {
-  "name": "Fin-Eye",
-  "short_name": "Fin-Eye",
+  "name": "Yagmur Terminal",
+  "short_name": "Yagmur Terminal",
   "description": "Financial intelligence dashboard — GAS scores, ML signals, macro analysis",
   "start_url": "/",
   "display": "standalone",

@@ -79,7 +79,7 @@ export default function WelcomePage() {
                     <BarChart2 className="h-6 w-6 text-white" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-100">
-                    Welcome to Fin-Eye
+                    Welcome to Yagmur Terminal
                 </h1>
                 <p className="text-sm text-slate-400 max-w-xs text-center">
                     {user

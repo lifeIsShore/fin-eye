@@ -1,4 +1,4 @@
-# Fin-Eye Backend — Complete Technical Reference
+# Yagmur Terminal Backend — Complete Technical Reference
 
 > **Stack:** Python 3.10+ · FastAPI · SQLAlchemy 2.0 (async) · PostgreSQL · Redis · APScheduler
 > **ASGI server:** Uvicorn
@@ -23,9 +23,9 @@
 
 ---
 
-## 1. What Fin-Eye Does
+## 1. What Yagmur Terminal Does
 
-Fin-Eye is a stock analysis platform that combines **machine learning-based technical analysis**, **macro-economic scoring**, and **NLP-driven sentiment analysis** into a single composite score (GAS) for any given stock ticker. The goal is to answer one question for the user: *"Is the macro + technical + sentiment environment aligned for this stock right now?"*
+Yagmur Terminal is a stock analysis platform that combines **machine learning-based technical analysis**, **macro-economic scoring**, and **NLP-driven sentiment analysis** into a single composite score (GAS) for any given stock ticker. The goal is to answer one question for the user: *"Is the macro + technical + sentiment environment aligned for this stock right now?"*
 
 ---
 

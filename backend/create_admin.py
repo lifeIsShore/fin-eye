@@ -6,11 +6,11 @@ from app.core.security import hash_password
 
 async def run():
     async with AsyncSessionLocal() as db:
-        res = await db.execute(select(User).where(User.email == "admin@fin-eye.com"))
+        res = await db.execute(select(User).where(User.email == "admin@yagmurterminal.com"))
         user = res.scalars().first()
         if not user:
             user = User(
-                email="admin@fin-eye.com",
+                email="admin@yagmurterminal.com",
                 hashed_password=hash_password("admin"),
                 is_active=True,
                 is_admin=True,

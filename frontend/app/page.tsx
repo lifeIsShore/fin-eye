@@ -157,7 +157,7 @@ function CryptoFearGreedPanel({
 
 const DISCLAIMER =
   "This is educational analysis, not investment advice. " +
-  "Fin-Eye surfaces data-driven signals to inform your thinking — " +
+  "Yagmur Terminal surfaces data-driven signals to inform your thinking — " +
   "always conduct your own research before making any financial decisions.";
 
 const STALE_THRESHOLD_MS = 30 * 60 * 1000;

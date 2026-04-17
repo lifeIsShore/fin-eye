@@ -1,6 +1,6 @@
-# Fin-Eye — Intelligent Stock Analysis Platform
+# Yagmur Terminal — Institutional Grade Stock Intelligence
 
-Fin-Eye is a full-stack financial intelligence platform that combines **machine learning**, **macroeconomic indicators**, **NLP-based sentiment analysis**, and **technical analysis** into a single unified score — the **Global Alignment Score (GAS)** — for any traded stock symbol.
+Yagmur Terminal is a full-stack financial intelligence platform that combines **machine learning**, **macroeconomic indicators**, **NLP-based sentiment analysis**, and **technical analysis** into a single unified score — the **Global Alignment Score (GAS)** — for any traded stock symbol.
 
 ---
 
@@ -93,7 +93,7 @@ All component scores are normalised to 0–100 before weighting.
 
 ## ML Decision Engine
 
-This is the core of how Fin-Eye decides if a stock is likely to move **up or down** over the next 5 periods.
+This is the core of how Yagmur Terminal decides if a stock is likely to move **up or down** over the next 5 periods.
 
 ### Step 1 — Data Ingestion
 
@@ -559,4 +559,4 @@ The system fetches historical OHLCV data, runs the 3-model competition (XGBoost 
 
 ---
 
-*Last updated: March 2026*
+*Last updated: March 2026 — Yagmur Terminal*
