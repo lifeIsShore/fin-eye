@@ -98,7 +98,7 @@ export default function MonteCarloDashboard() {
           title="Monte Carlo Simulator"
           description="Project long-term portfolio outcomes using probabilistic path generation and correlation matrices."
           badge="QUANT"
-          badgeColor="indigo"
+          badgeColor="violet"
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
