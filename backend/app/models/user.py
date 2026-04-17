@@ -3,9 +3,9 @@ app/models/user.py
 User model — UUID primary key, fields aligned with auth_service and UserResponse schema.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 
-from sqlalchemy import Boolean, Column, DateTime, String
+from sqlalchemy import Boolean, Column, DateTime, Date, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -51,9 +51,14 @@ class User(Base):
     paused_until  = Column(DateTime(timezone=True), nullable=True)   # null = not paused
 
     # Engagement tracking (Sprint 33 + Sprint 44)
-    last_login          = Column(DateTime(timezone=True), nullable=True)   # updated on every login
-    weekly_digest       = Column(Boolean, default=False, nullable=False)   # Sprint 33 opt-in
-    churn_email_sent_at = Column(DateTime(timezone=True), nullable=True)   # Sprint 44 cooldown
+    last_login          = Column(DateTime(timezone=True), nullable=True)
+    weekly_digest       = Column(Boolean, default=False, nullable=False)
+    churn_email_sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Login streak (Sprint 49)
+    login_streak_days   = Column(Integer, nullable=False, default=0)
+    longest_streak_days = Column(Integer, nullable=False, default=0)
+    last_streak_date    = Column(Date, nullable=True)
 
     # Convenience bool — true when on pro tier or within active trial
     @property

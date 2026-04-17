@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { trackEvent } from "../../lib/posthog";
 import useSWR from "swr";
 import {
   fetchMacroLatest,
@@ -485,6 +486,7 @@ const HISTORY_CARDS = [
 ];
 
 export default function MacroPage() {
+  useEffect(() => { trackEvent("macro_page_visited"); }, []);
   const [view, setView] = useState<"basic" | "advanced">("basic");
 
   const { data: basicData, error: basicError, isLoading: basicLoading } =

@@ -19,6 +19,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Search, Loader2 } from "lucide-react";
 import { useSymbol, normalizeTicker, isValidTicker } from "@/lib/symbolContext";
 import { searchTickers } from "@/lib/tickers";
+import { trackEvent } from "@/lib/posthog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -129,6 +130,7 @@ export function GlobalTickerSearch() {
         if (!isValidTicker(normalized)) { setError(true); return; }
         setError(false);
         setSymbol(normalized);
+        trackEvent("ticker_searched", { symbol: normalized, query: input });
         setInput(normalized);
         setShowDrop(false);
         setResults([]);

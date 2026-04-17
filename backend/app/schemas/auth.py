@@ -144,9 +144,11 @@ class UserResponse(BaseModel):
     default_symbol: Optional[str] = None   # Sprint 23
     risk_profile: Optional[str] = None       # Sprint 24
     created_at: datetime
-    trial_ends_at: Optional[datetime] = None  # Sprint 38 — BUG-BE-07
-    paused_until: Optional[datetime] = None   # Sprint 38 — BUG-BE-07
-    is_pro: bool = False                       # FIND-04 — computed from tier/trial
+    trial_ends_at: Optional[datetime] = None
+    paused_until: Optional[datetime] = None
+    is_pro: bool = False
+    login_streak_days: int = 0
+    longest_streak_days: int = 0
 
     @model_validator(mode="after")
     def _compute_is_pro(self) -> "UserResponse":

@@ -14,6 +14,8 @@ export interface User {
     risk_profile?: string | null;     // Sprint 24
     trial_ends_at?: string | null;   // Sprint 38
     paused_until?: string | null;    // Sprint 38
+    login_streak_days?: number;
+    longest_streak_days?: number;
 }
 
 interface AuthContextType {
@@ -51,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 email: "dev@mock.local",
                 is_pro: true,
                 is_admin: true,
+                is_verified: true,
                 name: "Dev User",
                 trial_ends_at: null,
                 paused_until: null,

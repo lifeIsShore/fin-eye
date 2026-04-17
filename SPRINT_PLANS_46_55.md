@@ -538,9 +538,10 @@ frontend/app/lifestyle/page.tsx   # Remove disabled: true from Banking and Estat
 
 ---
 
-## Sprint 49 — Activation Funnel Tracking + Engagement Gamification
+## ✅ Sprint 49 — Activation Funnel Tracking + Engagement Gamification
 **Priority:** HIGH — without this data, user acquisition and onboarding cannot be improved
 **Sources:** todos-v3.md §15 (CORE-ANALYTICS-01) · todos.md §5 (streak, NPS)
+**Completed:** April 2026
 
 ### Goal
 Instrument the 5 key activation events in PostHog. Add a learning streak system and NPS survey.
@@ -549,7 +550,7 @@ These collectively close the biggest gap in product analytics — we currently h
 ### Deliverables
 
 #### Activation Funnel Events (PostHog)
-- [ ] `FE` Verify PostHog is initialised correctly in `layout.tsx` — if not, add:
+- [x] `FE` Verify PostHog is initialised correctly in `layout.tsx` — if not, add:
   ```typescript
   // frontend/lib/posthog.ts
   import posthog from "posthog-js";
@@ -564,7 +565,7 @@ These collectively close the biggest gap in product analytics — we currently h
   }
   ```
 
-- [ ] `FE` Instrument these 5 activation events — fire `posthog.capture()` at each:
+- [x] `FE` Instrument these 5 activation events — fire `posthog.capture()` at each:
 
   **Event 1: `ticker_searched`**
   - Where: `GlobalTickerSearch.tsx` — when user selects a result from dropdown
@@ -587,16 +588,16 @@ These collectively close the biggest gap in product analytics — we currently h
   - Properties: `{ symbol, watchlist_size_after }`
   - Note: also fire `posthog.identify(user.id, { email: user.email })` on login
 
-- [ ] `FE` Add `NEXT_PUBLIC_POSTHOG_KEY` to `.env.local` example
-- [ ] `FE` Create `frontend/lib/posthog.ts` with `trackEvent(name, props)` helper that no-ops when key unset
+- [x] `FE` Add `NEXT_PUBLIC_POSTHOG_KEY` to `.env.local` example
+- [x] `FE` Create `frontend/lib/posthog.ts` with `trackEvent(name, props)` helper that no-ops when key unset
 
 #### Learning Streak System
-- [ ] `BE` Add to `User` model:
+- [x] `BE` Add to `User` model:
   - `login_streak_days INTEGER NOT NULL DEFAULT 0` — consecutive days logged in
   - `longest_streak_days INTEGER NOT NULL DEFAULT 0` — all-time record
   - `last_streak_date DATE` — date of last login counted toward streak
-- [ ] `DB` Migration: `s49_001_streak_fields.py`
-- [ ] `BE` In auth service `login()` function: after successful login, update streak:
+- [x] `DB` Migration: `s49_001_streak_fields.py`
+- [x] `BE` In auth service `login()` function: after successful login, update streak:
   ```python
   today = date.today()
   if user.last_streak_date == today - timedelta(days=1):
@@ -609,19 +610,19 @@ These collectively close the biggest gap in product analytics — we currently h
   user.last_streak_date = today
   user.last_login = datetime.now(timezone.utc)
   ```
-- [ ] `BE` Expose `login_streak_days` + `longest_streak_days` in `GET /auth/me` response
-- [ ] `FE` In `frontend/components/Nav.tsx` (or `UserMenu`): show streak badge when streak ≥ 3:
+- [x] `BE` Expose `login_streak_days` + `longest_streak_days` in `GET /auth/me` response
+- [x] `FE` In `frontend/components/Nav.tsx` (or `UserMenu`): show streak badge when streak ≥ 3:
   ```
   🔥 7-day streak
   ```
   - Emerald for streaks ≥ 7 days, amber for 3–6, hidden for < 3
   - Tooltip: "You've logged in N days in a row. Keep it up!"
-- [ ] `FE` In `frontend/app/settings/page.tsx`: show streak stats in Profile section:
+- [x] `FE` In `frontend/app/settings/page.tsx`: show streak stats in Profile section:
   - "Current streak: 12 days 🔥"
   - "Longest streak: 23 days"
 
 #### NPS Survey (In-App)
-- [ ] `FE` Create `frontend/components/NpsSurvey.tsx`:
+- [x] `FE` Create `frontend/components/NpsSurvey.tsx`:
   - Trigger: fires on 7th session OR after 30 days, whichever comes first
   - Track session count in localStorage: increment on each page load, check on mount
   - Check `localStorage.getItem("nps_submitted")` — do not show if already answered
@@ -634,7 +635,7 @@ These collectively close the biggest gap in product analytics — we currently h
     ```
   - On submit: `posthog.capture("nps_submitted", { score, comment, days_since_signup })`
   - Set `localStorage.setItem("nps_submitted", "true")`
-- [ ] `FE` Mount `<NpsSurvey />` in `frontend/app/layout.tsx` (inside AuthProvider, outside ConsentGate)
+- [x] `FE` Mount `<NpsSurvey />` in `frontend/app/layout.tsx` (inside AuthProvider, outside ConsentGate)
 
 ### Migration
 ```bash

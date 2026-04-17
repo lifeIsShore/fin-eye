@@ -117,3 +117,27 @@ async def change_user_password(
     await db.refresh(user)
     logger.info("Password changed for user id=%s", user.id)
     return True
+
+
+def update_streak(user: User) -> None:
+    """
+    Sprint 49 — Update login streak in-place (no DB commit here; caller commits).
+    Rules:
+      - same calendar day: no change (already counted today)
+      - consecutive day: increment streak
+      - gap > 1 day: reset streak to 1
+    """
+    from datetime import date as _date, timezone, datetime  # noqa: PLC0415
+
+    today = datetime.now(timezone.utc).date()
+    last  = user.last_streak_date
+
+    if last is None or (today - last).days > 1:
+        user.login_streak_days = 1                          # first login or streak broken
+    elif (today - last).days == 1:
+        user.login_streak_days += 1                         # consecutive day
+    # else: last == today, already counted — no change
+
+    user.longest_streak_days = max(user.longest_streak_days or 0, user.login_streak_days)
+    user.last_streak_date    = today
+    user.last_login          = datetime.now(timezone.utc)

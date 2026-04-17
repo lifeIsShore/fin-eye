@@ -10,6 +10,7 @@ import { ToastProvider } from "../components/ToastProvider";
 import CommandPalette from "../components/CommandPalette";
 import EmailVerificationBanner from "../components/EmailVerificationBanner";
 import { PageTransition } from "../components/PageTransition";
+import { NpsSurvey } from "../components/NpsSurvey";
 
 export const metadata = {
     title: "Fin-Eye",
@@ -53,6 +54,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                             <ToastProvider>
                                 {/* Global ⌘K / Ctrl+K command palette */}
                                 <CommandPalette />
+                                {/* Sprint 49 — NPS survey (fires on 7th session or 30 days) */}
+                                <NpsSurvey />
                                 {/*
                                  * Layout:
                                  * ┌──────────┬───────────────────────────────────────────────┐
@@ -121,6 +124,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
                                 </div>
                             </ToastProvider>
+                            <NpsSurvey />
                         </SymbolProvider>
                     </ConsentGate>
                 </AuthProvider>

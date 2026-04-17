@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { trackEvent } from "@/lib/posthog";
 import {
   runBacktest,
   BacktestRequest,
@@ -1424,6 +1425,14 @@ export default function BacktestingPage() {
     try {
       const data = await runBacktest(req);
       setResult(data);
+      if (!localStorage.getItem("fe_backtest_fired")) {
+          trackEvent("first_backtest_run", {
+              strategy,
+              symbol: symbol.trim().toUpperCase(),
+              sharpe_ratio: data.stats.sharpe_ratio,
+          });
+          localStorage.setItem("fe_backtest_fired", "true");
+      }
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "Failed to run backtest",

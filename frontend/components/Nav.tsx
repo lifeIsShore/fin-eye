@@ -147,6 +147,18 @@ export function UserMenu() {
                             </div>
                         </div>
                     </div>
+                    {user.login_streak_days !== undefined && user.login_streak_days >= 3 && (
+                        <div className="border-b border-slate-800 px-4 py-2">
+                            <p
+                                className={`text-xs font-semibold ${
+                                    user.login_streak_days >= 7 ? "text-emerald-400" : "text-amber-400"
+                                }`}
+                                title={`You've logged in ${user.login_streak_days} days in a row. Keep it up!`}
+                            >
+                                🔥 {user.login_streak_days}-day streak
+                            </p>
+                        </div>
+                    )}
                     <div className="py-1.5">
                         <Link href="/settings" onClick={() => setOpen(false)}
                             className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors">

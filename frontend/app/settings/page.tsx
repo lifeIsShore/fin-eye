@@ -1024,6 +1024,21 @@ export default function SettingsPage() {
                             {profileLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : "Save Changes"}
                         </button>
                     </div>
+
+                    {/* --- STREAK STATS --- */}
+                    <div className="mt-6 border-t border-slate-800 pt-4">
+                        <h4 className="mb-2 text-xs font-medium text-slate-400">Activity Streaks</h4>
+                        <div className="flex gap-4">
+                            <div className="rounded-lg border border-slate-700/50 bg-slate-950/30 p-3 flex-1 flex flex-col items-center justify-center">
+                                <span className="text-2xl font-bold text-slate-200">{user?.login_streak_days ?? 0}</span>
+                                <span className="text-[10px] text-slate-500 uppercase tracking-wide">Current Streak</span>
+                            </div>
+                            <div className="rounded-lg border border-slate-700/50 bg-slate-950/30 p-3 flex-1 flex flex-col items-center justify-center">
+                                <span className="text-2xl font-bold text-amber-400">{user?.longest_streak_days ?? 0}</span>
+                                <span className="text-[10px] text-slate-500 uppercase tracking-wide">Longest Streak</span>
+                            </div>
+                        </div>
+                    </div>
                 </SectionCard>
 
                 {/* Security */}

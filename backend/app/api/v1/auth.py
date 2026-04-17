@@ -63,6 +63,7 @@ from app.services.auth_service import (
     create_user,
     get_user_by_id,
     update_user_name,
+    update_streak,
 )
 from app.services.auth_security import (
     check_login_rate_limit,
@@ -202,6 +203,12 @@ async def login(
 
     # ── No 2FA — issue full tokens ────────────────────────────────────────────
     refresh_token, jti = create_refresh_token(str(user.id))
+
+    # Sprint 49 — update login streak (non-fatal)
+    try:
+        update_streak(user)
+    except Exception:
+        pass
 
     try:
         from app.services.analytics_service import record_event  # noqa: PLC0415
@@ -467,6 +474,12 @@ async def verify_2fa_login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid TOTP code.")
 
     refresh_token, _jti = create_refresh_token(str(user.id))
+
+    # Sprint 49 — update login streak (non-fatal)
+    try:
+        update_streak(user)
+    except Exception:
+        pass
 
     try:
         from app.services.analytics_service import record_event  # noqa: PLC0415
