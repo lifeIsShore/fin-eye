@@ -33,3 +33,5 @@ from app.models.tenant import Tenant  # noqa: F401
 from app.models.compliance_audit_log import ComplianceAuditLog  # noqa: F401
 # Sprint 47 — Paper trading bot
 from app.models.bot import BotConfig, BotPosition, BotAuditLog  # noqa: F401
+# Sprint 50 — Referral program
+from app.models.referral import ReferralEvent  # noqa: F401

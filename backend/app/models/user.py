@@ -5,7 +5,7 @@ User model — UUID primary key, fields aligned with auth_service and UserRespon
 import uuid
 from datetime import datetime, date
 
-from sqlalchemy import Boolean, Column, DateTime, Date, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Date, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -59,6 +59,11 @@ class User(Base):
     login_streak_days   = Column(Integer, nullable=False, default=0)
     longest_streak_days = Column(Integer, nullable=False, default=0)
     last_streak_date    = Column(Date, nullable=True)
+
+    # Referral program (Sprint 50)
+    referral_code           = Column(String(12), unique=True, nullable=True, index=True)
+    referred_by             = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    referral_credits_months = Column(Integer, nullable=False, default=0)
 
     # Convenience bool — true when on pro tier or within active trial
     @property

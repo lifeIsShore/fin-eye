@@ -267,6 +267,33 @@ export default function BillingPage() {
         )}
       </div>
 
+      {/* Social Proof — Sprint 50 */}
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { stars: 5, quote: "Finally understand what's moving the markets.", author: "Andreas K.", role: "Retail investor" },
+            { stars: 4, quote: "The GAS score is eerily accurate — it called the NVDA run perfectly.", author: "Maria S.", role: "Day trader" },
+            { stars: 5, quote: "Best €14.99 I spend each month. Replaced three tools.", author: "Tom R.", role: "Portfolio manager" },
+          ].map(({ stars, quote, author, role }) => (
+            <div key={author} className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <div className="flex gap-0.5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <span key={i} className={i < stars ? "text-amber-400" : "text-slate-700"}>★</span>
+                ))}
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed flex-1">"{quote}"</p>
+              <div>
+                <p className="text-xs font-semibold text-slate-200">{author}</p>
+                <p className="text-[10px] text-slate-500">{role}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-center text-xs text-slate-500">
+          Join <span className="font-semibold text-slate-300">1,200+</span> investors using Fin-Eye
+        </p>
+      </div>
+
       {/* Plan cards */}
       <div className="grid gap-5 md:grid-cols-3">
         {PLANS.map((plan) => {

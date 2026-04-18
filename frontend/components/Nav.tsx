@@ -12,7 +12,7 @@ import {
     TrendingDown, Calendar, PieChart, Landmark, BarChart,
     Shield, FlaskConical as Backtest, Briefcase, Bell, Bot,
     ShoppingBag, BookOpen, MessageCircle, Eye, ChevronLeft,
-    ChevronRight, LayoutList, Database,
+    ChevronRight, LayoutList, Database, Gift,
 } from "lucide-react";
 
 // ── Sidebar nav structure ─────────────────────────────────────────────────────
@@ -30,6 +30,8 @@ interface NavItem {
     label: string;
     icon: React.ReactNode;
     badge?: NavBadge;
+    /** Sprint 50: hide this item once user is on a paid plan */
+    hideForPro?: boolean;
 }
 
 const BADGE_STYLES: Record<NavBadge, string> = {
@@ -90,6 +92,7 @@ const SIDEBAR_SECTIONS: NavSection[] = [
             { href: "/learn/glossary", label: "Glossary", icon: <BookOpen className="h-4 w-4" />, badge: "NEW" as NavBadge },
             { href: "/lifestyle", label: "Lifestyle Finance", icon: <Globe className="h-4 w-4" />, badge: "NEW" as NavBadge },
             { href: "/community", label: "Community", icon: <MessageCircle className="h-4 w-4" /> },
+            { href: "/referral", label: "Earn Free Pro", icon: <Gift className="h-4 w-4" />, badge: "NEW" as NavBadge, hideForPro: true },
         ],
     },
     {
@@ -208,6 +211,7 @@ export function UserMenu() {
 
 export function Sidebar() {
     const pathname = usePathname();
+    const { user } = useAuth();
     const [collapsed, setCollapsed] = useState(false);
 
     // Persist collapse state
@@ -261,7 +265,7 @@ export function Sidebar() {
                         {collapsed && <div className="border-t border-slate-800/60 mx-1 mb-1" />}
 
                         <ul className="space-y-0.5">
-                            {section.items.map((item) => {
+                            {section.items.filter((item) => !(item.hideForPro && user?.is_pro)).map((item) => {
                                 const active = pathname === item.href;
                                 return (
                                     <li key={item.href}>
@@ -315,6 +319,7 @@ export function Sidebar() {
 
 export function MobileNav() {
     const pathname = usePathname();
+    const { user } = useAuth();
     const [open, setOpen] = useState(false);
 
     useEffect(() => { setOpen(false); }, [pathname]);
@@ -354,7 +359,7 @@ export function MobileNav() {
                                 {section.title}
                             </p>
                             <ul className="space-y-0.5">
-                                {section.items.map((item) => {
+                                {section.items.filter((item) => !(item.hideForPro && user?.is_pro)).map((item) => {
                                     const active = pathname === item.href;
                                     return (
                                         <li key={item.href}>

@@ -3,6 +3,7 @@ app/services/auth_service.py
 Business logic for user registration and authentication.
 """
 import logging
+import secrets
 import uuid
 from typing import Optional
 
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
 from app.models.user import User
+from app.models.referral import ReferralEvent
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +32,30 @@ async def create_user(
     email: str,
     password: str,
     name: Optional[str] = None,
+    ref_code: Optional[str] = None,
 ) -> User:
     """
     Create a new user. Raises ValueError if email already registered.
     Sets a verification token (24h TTL) — caller should send the verification email.
+    Generates a unique referral code. If ref_code is provided and valid, links the referrer.
     """
-    import secrets as _secrets  # noqa: PLC0415
     from datetime import datetime, timezone, timedelta  # noqa: PLC0415
 
     existing = await get_user_by_email(db, email)
     if existing:
         raise ValueError("Email already registered.")
 
-    token = _secrets.token_urlsafe(64)
+    token = secrets.token_urlsafe(64)
     expiry = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    # Generate a unique referral code for this new user
+    referral_code: Optional[str] = None
+    for _ in range(5):  # retry loop to avoid collisions
+        candidate = secrets.token_urlsafe(6)[:8]  # 8 URL-safe chars
+        result = await db.execute(select(User).where(User.referral_code == candidate))
+        if result.scalar_one_or_none() is None:
+            referral_code = candidate
+            break
 
     user = User(
         email=email.lower(),
@@ -51,12 +63,29 @@ async def create_user(
         name=name,
         verification_token=token,
         verification_token_expires_at=expiry,
+        referral_code=referral_code,
         # is_verified stays False — user must click email link
     )
     db.add(user)
     await db.flush()   # get the id without committing
     await db.refresh(user)
-    logger.info("Created user id=%s email=%s", user.id, user.email)
+
+    # Link referrer if a valid ref_code was provided
+    if ref_code:
+        referrer_result = await db.execute(
+            select(User).where(User.referral_code == ref_code)
+        )
+        referrer = referrer_result.scalar_one_or_none()
+        if referrer and referrer.id != user.id:
+            user.referred_by = referrer.id
+            db.add(ReferralEvent(
+                referrer_id=referrer.id,
+                referred_id=user.id,
+                event="signup",
+            ))
+            await db.flush()
+
+    logger.info("Created user id=%s email=%s referral_code=%s", user.id, user.email, user.referral_code)
     return user
 
 

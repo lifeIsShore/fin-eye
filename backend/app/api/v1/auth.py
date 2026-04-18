@@ -106,6 +106,7 @@ async def register(
     request: Request,
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
+    ref: Optional[str] = None,  # Sprint 50: referral code from ?ref=CODE
 ) -> User:
     # SEC-03: rate limit registrations per IP
     try:
@@ -117,7 +118,13 @@ async def register(
         pass  # Redis unavailable — fail-open
 
     try:
-        user = await create_user(db, email=body.email, password=body.password, name=body.name)
+        user = await create_user(
+            db,
+            email=body.email,
+            password=body.password,
+            name=body.name,
+            ref_code=ref,  # Sprint 50: link referrer
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 

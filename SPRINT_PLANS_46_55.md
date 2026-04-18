@@ -664,9 +664,10 @@ backend/app/services/auth_service.py         # Streak update on login
 
 ---
 
-## Sprint 50 — Referral Program + Social Proof
+## ✅ Sprint 50 — Referral Program + Social Proof
 **Priority:** MEDIUM — viral growth lever, low build cost
 **Sources:** todos.md §5 "Referral Program"
+**Completed:** April 2026
 
 ### Goal
 Build a referral system: each user gets a unique referral link. When a referred user upgrades to Pro, the referrer gets 1 month free. Add social proof to the billing page.

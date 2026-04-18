@@ -3226,3 +3226,37 @@ export async function runPortfolioMonteCarlo(
   }
   return res.json();
 }
+
+// ─── Referral Program (Sprint 50) ────────────────────────────────────────────
+
+export interface ReferralStatsDto {
+  code: string;
+  link: string;
+  signups: number;
+  upgrades: number;
+  credits_earned: number;
+}
+
+export interface ReferralLeaderEntry {
+  rank: number;
+  display_name: string;
+  referrals: number;
+}
+
+export async function fetchReferralStats(): Promise<ReferralStatsDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/referral/my-code`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load referral stats");
+  return res.json() as Promise<ReferralStatsDto>;
+}
+
+export async function fetchReferralLeaderboard(): Promise<ReferralLeaderEntry[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/referral/leaderboard`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load referral leaderboard");
+  return res.json() as Promise<ReferralLeaderEntry[]>;
+}
