@@ -1249,59 +1249,130 @@ frontend/lib/api.ts                 # Compliance + seat management helpers
 
 ---
 
-## Sprint 56 — Advanced Monte Carlo Simulation System
-**Priority:** HIGH — transitions platform from static deterministic analysis to robust probabilistic forecasting.
-**Sources:** Architecture roadmap (ML modeling) and User specification (Portfolio/Retirement tooling).
+## Sprint 56 — Monte Carlo: Bot Integration, Backtest Projection & UI Polish
+**Priority:** HIGH — the MC engine is built but disconnected from the bot risk layer, the backtester, and the UI playground needs significant hardening.
+**Sources:** Codebase audit April 2026 · User specification for financial simulations.
+
+### What Already Exists (DO NOT REBUILD)
+> **Audit confirmed April 2026** — verified in codebase before writing this plan.
+- [x] `backend/app/services/mc_engine.py` — GBM + Merton Jump Diffusion, Cholesky correlated portfolio simulation, CVaR, percentile extraction. **Fully implemented and vectorised.**
+- [x] `backend/app/schemas/montecarlo_models.py` — `MCAssetParams`, `MCPortfolioParams`, `MCSimulationResult`, `MCPortfolioResult`, `MCPercentileResult`. **Complete.**
+- [x] `backend/app/api/v1/endpoints/montecarlo.py` — `POST /asset` (OOM-guarded, 50k path cap) + `POST /portfolio` (50 asset cap). **Registered in `main.py` at `/api/v1/montecarlo`.**
+- [x] `frontend/lib/api.ts` — full MC TypeScript types + `runAssetMonteCarlo()` + `runPortfolioMonteCarlo()`. **Complete.**
+- [x] `frontend/app/portfolio/montecarlo/page.tsx` — basic portfolio simulator with AreaChart probability cone. **Works, needs polish.**
+- [x] `frontend/components/Nav.tsx` — MC Simulator already linked under Tools section.
+- [x] `frontend/app/backtesting/page.tsx` — MC forward projection panel already implemented ("Simulate 3 Years" button + fan chart).
 
 ### Goal
-Implement a robust Monte Carlo simulation engine powered by vectorized NumPy arrays for rapid, massive-scale parallel path generation. This engine will act as a central mathematical service consumed across the stack: by the bot for dynamic VaR risk sizing, by the backtester for extrapolating historical metrics into probability cones, and by a new interactive `/portfolio/montecarlo` frontend.
+Close the three remaining gaps: (1) wire MC CVaR risk data into the paper trading bot's BUY decision gate, (2) add a vol-estimate endpoint so the MC playground can auto-fill sigma from real OHLCV history, and (3) polish the `/portfolio/montecarlo` UI with preset templates, single-asset mode, correlation matrix input, scenario comparison, and retirement mode.
 
-### Architecture & Design Rules
-1. **Performance**: Must use matrix math (NumPy `cumprod`, `linalg.cholesky`) instead of Python `for` loops across paths. Goal: 10,000 paths mapped over 5 years must execute in <250ms.
-2. **Payload Size**: Never return the raw simulation path arrays to the frontend (massive bandwidth bloat). Backend must calculate specific percentiles (e.g. 5th, 25th, Median, 75th, 95th) per time-step and only return those aggregated slices.
-3. **Distribution Models**: Support Geometric Brownian Motion (GBM) for standard equities, and Merton Jump-Diffusion to accurately model crypto/meme-stock "fat tail" crash risk.
+---
 
-### Deliverables
+### Phase 1 — Bot Service: MC-CVaR Risk Gate
+**Files:** `backend/app/services/bot_service.py`, `backend/app/services/mc_engine.py`
 
-#### Phase 1: Core Calculation Engine (Backend Math Core)
-- [ ] `BE` Create schemas in `backend/app/schemas/montecarlo_models.py`:
-  - `MCAssetParams`: Symbol, starting value, drift (`mu`), volatility (`sigma`), model type.
-  - `MCPortfolioParams`: List of assets, covariance matrix, regular cash inflows/outflows.
-  - `MCPercentileResult`: Time-step representations for P5, P25, P50, P75, P95.
-- [ ] `BE` Create central service `backend/app/services/mc_engine.py`:
-  - `run_gbm_paths(S0, mu, sigma, T, steps, paths)` using fast Cholesky decomposition.
-  - `run_merton_jump_diffusion(...)` incorporating Poisson crash variables for fat tails.
-  - `run_portfolio_simulation(...)` handling correlated assets and multi-dimensional matrices.
+Currently `evaluate_symbol()` uses static `2×ATR` stop-loss for position sizing. Add a forward-looking MC gate that blocks new BUY positions when 30-day CVaR exceeds the user's configured `daily_loss_limit`.
 
-#### Phase 2: API Layer & Endpoints
-- [ ] `BE` Create API Router in `backend/app/api/v1/endpoints/montecarlo.py`:
-  - Endpoint `POST /api/v1/montecarlo/asset` returning `MCSimulationResult`.
-  - Endpoint `POST /api/v1/montecarlo/portfolio` handling matrix array processing.
-- [ ] `BE` Secure endpoints: rate-limit to 5 requests per minute; cap max paths (e.g. 50,000 max) to prevent memory OOM attacks.
-- [ ] `BE` Register router dynamically in `backend/app/main.py`.
+- [ ] `BE` Add `compute_log_returns(prices: list[float]) -> np.ndarray` helper to `mc_engine.py` — computes `np.diff(np.log(prices))`.
+- [ ] `BE` In `bot_service.py` `evaluate_symbol()`, after a BUY signal passes grade + GAS checks:
+  - Fetch last 126 trading days of close prices from `ohlcv_data` table for the symbol.
+  - If fewer than 30 data points: log `SKIP` with reason `"Insufficient OHLCV for MC gate"` and fall back to ATR sizing.
+  - Compute `sigma_annual = std(log_returns) * sqrt(252)` and `mu_annual = mean(log_returns) * 252`.
+  - Call `run_asset_simulation(MCAssetParams(symbol=symbol, starting_value=proposed_usd, mu=mu_annual, sigma=sigma_annual, years=30/365, paths=5000, steps_per_year=252, model_type="GBM"))`.
+  - If `mc_result.cvar_95 > config.daily_loss_limit`: log audit entry with `action="SKIP"`, reason includes the CVaR value, and return early — no BUY.
+  - The existing ATR-based stop-loss is **kept** as a real-time stop during holding. The MC gate applies only at BUY decision time.
+- [ ] `BE` Add `mc_cvar_pct FLOAT` column to `bot_audit_log` migration (or store in the existing `reason` TEXT field — acceptable).
+- **Test:** Set `daily_loss_limit=0.01`, run `evaluate_symbol()` on a high-vol symbol → expect SKIP with CVaR reason. Low-vol symbol at same limit → BUY proceeds.
 
-#### Phase 3: Bot ML Integration (Dynamic Risk via CVaR)
-- [ ] `BE` Hook into `backend/app/services/bot_service.py` -> `evaluate_symbol()`:
-  - Instead of static ATR calculations, call `mc_engine.py` simulating 30 days ahead based on 6-month historical volatility.
-  - Calculate Conditional Value-at-Risk (CVaR) representing expected shortfall at the 5th percentile.
-  - Rule execution: If `CVaR > config.daily_loss_limit`, strictly downsize or reject the trade entirely, despite any positive ML signals.
+### Phase 2 — New Vol-Estimate Endpoint
+**File:** `backend/app/api/v1/endpoints/montecarlo.py`
 
-#### Phase 4: Backtesting Post-Analysis Extensions
-- [ ] `BE` Modify `backend/app/services/backtesting_service.py`:
-  - After a historical run, calculate strategy's empirical mean return and standard deviation.
-  - Wire these stats into the `mc_engine` to project the strategy PNL 1–5 years into the future.
-- [ ] `FE` Enhance `frontend/app/backtesting/page.tsx`:
-  - Add a "Simulate Future Outcomes" mechanism below the backtest equity curve.
-  - Render a Recharts fan chart plotting the historical equity curve merging seamlessly into future probability boundaries.
+The MC playground UI needs to be able to auto-fill sigma/mu from real data. Add a lightweight read-only endpoint.
 
-#### Phase 5: Dedicated Interactive UI Playground
-- [ ] `FE` Create interactive dashboard in `frontend/app/portfolio/montecarlo/page.tsx`:
-  - Use `grid-cols-12` layout: Left sidebar for controls (`col-span-3`); main area for charting (`col-span-9`).
-  - Inputs: Capital allocation, horizon duration (years), monthly deposit/withdrawal (for retirement modeling).
-  - Model toggles: Let user switch between "Standard (GBM)" and "Fat Tail / Crash Risk (Jump Diffusion)".
-- [ ] `FE` Charting: Build a visual "Cone of Probability" using `AreaChart` extending `recharts`.
-- [ ] `FE` Data Polish: Display clear KPI blocks (e.g. "Probability of Exhausting Funds = 12%", "Median Portfolio Expected = $X").
-- [ ] `FE` Navigation: Add the new tool to `frontend/components/Nav.tsx` under the Analytics section.
+- [ ] `BE` Add `GET /api/v1/montecarlo/vol-estimate?symbol=AAPL&days=252`:
+  ```python
+  @router.get("/vol-estimate")
+  def get_vol_estimate(symbol: str, days: int = 252, db: Session = Depends(get_db)):
+      ohlcv = get_recent_ohlcv_sync(db, symbol.upper(), days=days)
+      if len(ohlcv) < 30:
+          raise HTTPException(404, f"Insufficient OHLCV for {symbol}")
+      log_returns = np.diff(np.log([r.close for r in ohlcv]))
+      return {
+          "symbol": symbol.upper(),
+          "annualized_vol_pct": round(float(log_returns.std() * np.sqrt(252)), 4),
+          "annualized_return_pct": round(float(log_returns.mean() * 252), 4),
+          "data_days": len(ohlcv),
+      }
+  ```
+  - Rate-limit: 20 requests/minute (read-only, lightweight).
+- [ ] `FE` Add `fetchVolEstimate(symbol: string, days?: number): Promise<{ symbol: string; annualized_vol_pct: number; annualized_return_pct: number; data_days: number }>` to `lib/api.ts`.
+
+### Phase 3 — MC Playground UI Polish
+**File:** `frontend/app/portfolio/montecarlo/page.tsx`
+
+The existing page works but is sparse. This phase makes it a professional quant tool.
+
+- [ ] `FE` **Asset preset templates** — add "Load Preset" pill strip above asset list:
+  - Balanced 60/40: Stocks (mu=0.10, sigma=0.18, 60%) + Bonds (mu=0.04, sigma=0.08, 40%)
+  - All-Equity: US Stocks (mu=0.10, sigma=0.18, 70%) + International (mu=0.07, sigma=0.16, 30%)
+  - Retirement Income: Bonds 50% + Dividend Equities 30% + Cash (mu=0.05, sigma=0.01) 20%
+  - Presets populate all asset fields instantly on click.
+
+- [ ] `FE` **Single-asset mode toggle** — `[Single Asset]  [Portfolio]` pill at top:
+  - Single asset: calls `runAssetMonteCarlo()`, exposes model selector (GBM vs Jump Diffusion), shows jump parameter sliders when JD selected, adds CVaR-95 KPI block.
+  - Portfolio: existing `runPortfolioMonteCarlo()` flow.
+
+- [ ] `FE` **Historical vol auto-fill** — next to each asset's sigma field, small "🔍 Fetch" button:
+  - Calls `fetchVolEstimate(symbol, 252)` → populates sigma and mu inputs automatically.
+  - Disabled when symbol field is empty.
+
+- [ ] `FE` **Correlation matrix input** — collapsible section shown when ≥2 assets in Portfolio mode:
+  - N×N grid of number inputs, pre-filled `0.0`, diagonal locked to `1.0` (greyed out).
+  - "Reset" button sets all off-diagonal to 0.
+  - Passes `correlation_matrix` to `runPortfolioMonteCarlo()`.
+
+- [ ] `FE` **Retirement mode** — when `monthly_contribution < 0` (withdrawal):
+  - Label changes to "Monthly withdrawal".
+  - Colour-coded `success_rate` KPI: ≥90% emerald, 70–90% amber, <70% rose.
+  - Plain English description: "Your portfolio has a **{success_rate}%** chance of lasting {years} years at this withdrawal rate."
+
+- [ ] `FE` **Scenario comparison** — "Add Scenario" button accumulates up to 3 runs and overlays their P50 median lines on the same chart with distinct colours and a legend.
+
+- [ ] `FE` **Educational tooltips** — add `title` attributes to all parameter inputs:
+  - `mu` → "Expected annual return (e.g. 0.10 = 10% per year). Historical average for US equities ~7–10%."
+  - `sigma` → "Annual volatility (e.g. 0.18 = 18% standard deviation). Higher = more uncertainty."
+  - `jump_intensity` → "Expected crashes per year. US equities experience ~2–3 major drops annually."
+
+- [ ] `FE` **Disclaimer banner** — always visible at bottom of page:
+  ```
+  ⚠ Monte Carlo projections use historical parameters to generate hypothetical future scenarios.
+  They do not account for taxes, fees, or black swan events. For educational planning only — not investment advice.
+  ```
+
+### No New DB Migration Required
+All computation is stateless (in-memory per request). All data reads from the existing `ohlcv_data` table.
+
+### Files Modified
+```
+backend/app/services/mc_engine.py            # compute_log_returns() helper
+backend/app/services/bot_service.py          # MC-CVaR gate in evaluate_symbol()
+backend/app/api/v1/endpoints/montecarlo.py   # GET /vol-estimate endpoint
+frontend/app/portfolio/montecarlo/page.tsx   # Presets, single-asset, correlation, scenario compare
+frontend/lib/api.ts                          # fetchVolEstimate()
+```
+
+### Verification Checklist
+```
+[ ] Bot: evaluate_symbol() on high-vol symbol with low daily_loss_limit → SKIP with CVaR reason in audit log
+[ ] Bot: evaluate_symbol() on low-vol symbol with normal limit → BUY proceeds normally
+[ ] GET /api/v1/montecarlo/vol-estimate?symbol=AAPL → returns sigma/mu/data_days
+[ ] MC Playground: load "Balanced 60/40" preset → asset fields populate instantly
+[ ] MC Playground: enter "AAPL" + click Fetch → sigma/mu auto-fill from OHLCV
+[ ] MC Playground: switch to Single Asset → Jump Diffusion → extra sliders visible
+[ ] MC Playground: negative monthly contribution → "withdrawal" label + success_rate KPI
+[ ] MC Playground: Add Scenario → two runs overlaid on same chart
+[ ] Backtesting: run strategy → "Simulate 3 Years" button → fan chart renders correctly
+```
 
 ---
 

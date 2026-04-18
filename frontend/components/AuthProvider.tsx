@@ -59,6 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 paused_until: null,
                 default_symbol: null,
                 risk_profile: "Moderate",
+                login_streak_days: 12,
+                longest_streak_days: 23,
             });
             setLoading(false);
             return;
