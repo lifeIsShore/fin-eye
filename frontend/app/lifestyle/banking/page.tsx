@@ -124,7 +124,7 @@ const SECTIONS: Section[] = [
                         <p>Sending EUR → EU/EEA bank? <span className="text-emerald-400 font-medium">→ Use SEPA</span></p>
                         <p>Sending EUR → non-EU (e.g. UAE)? <span className="text-sky-400 font-medium">→ Use Wise (SWIFT at better rate)</span></p>
                         <p>Sending USD/GBP internationally? <span className="text-sky-400 font-medium">→ Use Wise or IBKR</span></p>
-                        <p>Large amount (>€20k) any currency? <span className="text-violet-400 font-medium">→ Use IBKR for lowest cost</span></p>
+                        <p>Large amount ({'>'}€20k) any currency? <span className="text-violet-400 font-medium">→ Use IBKR for lowest cost</span></p>
                     </div>
                 </div>
             </div>
@@ -187,8 +187,8 @@ const SECTIONS: Section[] = [
                     <p className="font-semibold text-slate-200 mb-1">Typical documents required</p>
                     <div className="space-y-1 text-sm">
                         <Check>Valid passport (not expiring within 6 months)</Check>
-                        <Check>Proof of address (utility bill or bank statement, <3 months old)</Check>
-                        <Check>Source of funds declaration (for amounts >€10k)</Check>
+                        <Check>Proof of address (utility bill or bank statement, {'<'}3 months old)</Check>
+                        <Check>Source of funds declaration (for amounts {'>'}€10k)</Check>
                         <Check>Tax identification number (TIN) from your home country</Check>
                     </div>
                 </div>

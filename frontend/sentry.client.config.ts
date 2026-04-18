@@ -35,7 +35,7 @@ if (SENTRY_DSN) {
             /^Failed to fetch/,
         ],
 
-        beforeSend(event) {
+        beforeSend(event: any) {
             // Strip auth tokens from breadcrumbs
             if (event.request?.headers) {
                 delete event.request.headers["Authorization"];

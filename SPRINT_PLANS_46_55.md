@@ -756,9 +756,10 @@ frontend/components/Nav.tsx         # Referral link for free users
 
 ---
 
-## Sprint 51 — TypeScript Strict Mode + Lighthouse CI
+## ✅ Sprint 51 — TypeScript Strict Mode + Lighthouse CI
 **Priority:** MEDIUM — technical debt that prevents bugs reaching production
 **Sources:** todos.md §4 · todos-v3.md §12
+**Completed:** April 2026
 
 ### Goal
 Enable TypeScript strict mode and fix all resulting type errors. Set up automated Lighthouse CI

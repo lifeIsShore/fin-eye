@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect } from "react";
 import {
     MessageSquare,

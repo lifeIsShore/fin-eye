@@ -16,6 +16,7 @@ export interface User {
     paused_until?: string | null;    // Sprint 38
     login_streak_days?: number;
     longest_streak_days?: number;
+    created_at?: string;
 }
 
 interface AuthContextType {

@@ -18,7 +18,7 @@ if (SENTRY_DSN) {
         // Alert when error rate exceeds 1% — configured in Sentry dashboard
         // (set alert threshold there, not here)
 
-        beforeSend(event) {
+        beforeSend(event: any) {
             // Strip sensitive fields from server-side events
             if (event.request?.headers) {
                 delete event.request.headers["Authorization"];

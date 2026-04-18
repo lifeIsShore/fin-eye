@@ -6,7 +6,17 @@
 import Link from "next/link";
 import { Globe, Building2, CreditCard, ScrollText, ChevronRight } from "lucide-react";
 
-const PILLARS = [
+interface Pillar {
+    href: string;
+    icon: React.ReactNode;
+    title: string;
+    desc: string;
+    tags: string[];
+    badge: string;
+    disabled?: boolean;
+}
+
+const PILLARS: Pillar[] = [
     {
         href: "/lifestyle/tax-residency",
         icon: <Globe className="h-6 w-6 text-sky-400" />,
