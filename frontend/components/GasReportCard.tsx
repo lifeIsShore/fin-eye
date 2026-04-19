@@ -9,7 +9,7 @@ import type { TechnicalSignalDto } from "@/lib/api";
 interface Props {
   symbol: string;
   gasScore: number;
-  grade: string | undefined;
+  grade: string | undefined | null;
   regime: string | null;
   techScore: number;
   sentScore: number;
