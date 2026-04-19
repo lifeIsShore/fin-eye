@@ -82,6 +82,7 @@ async def start_trial(
     current_user.trial_ends_at = trial_end
 
     try:
+        await _credit_referrer(db, current_user)
         await db.commit()
     except Exception as exc:
         await db.rollback()
@@ -128,6 +129,52 @@ async def pause_subscription(
         paused_until=resume_at,
         message=f"Subscription paused for 30 days. It will resume automatically on {resume_at.strftime('%B %d, %Y')}.",
     )
+
+
+# ── Referral credit helper (Sprint 50) ──────────────────────────────────────
+
+async def _credit_referrer(db: AsyncSession, user: User) -> None:
+    """
+    If this user was referred, credit the referrer 1 free month when they upgrade.
+    Idempotent — checks for existing 'upgrade' event first.
+    """
+    from sqlalchemy import select  # noqa: PLC0415
+    from app.models.referral import ReferralEvent  # noqa: PLC0415
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    if not user.referred_by:
+        return
+
+    # Check if upgrade event already credited
+    existing = await db.execute(
+        select(ReferralEvent).where(
+            ReferralEvent.referred_id == user.id,
+            ReferralEvent.event == "upgrade",
+        )
+    )
+    if existing.scalar_one_or_none():
+        return  # already credited
+
+    # Insert upgrade event
+    now = datetime.now(timezone.utc)
+    db.add(ReferralEvent(
+        referrer_id=user.referred_by,
+        referred_id=user.id,
+        event="upgrade",
+        credited_at=now,
+    ))
+
+    # Increment referrer's credit months
+    referrer_result = await db.execute(
+        select(User).where(User.id == user.referred_by)
+    )
+    referrer = referrer_result.scalar_one_or_none()
+    if referrer:
+        referrer.referral_credits_months = (referrer.referral_credits_months or 0) + 1
+        logger.info(
+            "Referral credit: referrer=%s gets +1 month (referred=%s)",
+            referrer.id, user.id,
+        )
 
 
 @router.get(

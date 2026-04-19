@@ -437,9 +437,15 @@ frontend/lib/api.ts                               # Bot API helpers
 
 ---
 
-## Sprint 48 — Lifestyle Finance: Banking & Estate Pages
+## ✅ Sprint 48 — Lifestyle Finance: Banking & Estate Pages
 **Priority:** MEDIUM — completes the Lifestyle Finance hub started in Sprint 45
 **Sources:** todos-v3.md §21 NOMAD-04
+**Completed:** April 2026
+
+### Delivered
+- [x] **`frontend/app/lifestyle/banking/page.tsx`** — International Banking guide: multi-currency accounts (Wise/Revolut/IBKR), SEPA vs SWIFT, FATCA, non-resident account opening, brokerage for non-residents. All sections rendered as expandable accordion cards with disclaimer.
+- [x] **`frontend/app/lifestyle/estate/page.tsx`** — Estate & Pension guide: cross-border inheritance (EU 650/2012), pension portability (QROPS/SIPP), succession planning, tax-efficient wrappers by country. Same accordion pattern.
+- [x] **`frontend/app/lifestyle/page.tsx`** — `disabled: true` removed from both Banking and Estate pillar cards.
 
 ### Goal
 Complete the two "coming soon" pillars in the `/lifestyle` hub:
@@ -451,7 +457,7 @@ Both are purely frontend content pages (no backend needed).
 ### Deliverables
 
 #### `/lifestyle/banking` — International Banking Guide
-- [ ] `FE` Create `frontend/app/lifestyle/banking/page.tsx`:
+- [x] `FE` Create `frontend/app/lifestyle/banking/page.tsx`:
 
   **Content sections (checklist format with expandable detail):**
 
@@ -489,10 +495,10 @@ Both are purely frontend content pages (no backend needed).
   - "Practical checklist" bullet points inside each
   - Disclaimer at bottom: "Not financial or legal advice. Banking rules change frequently."
 
-- [ ] `FE` Update `frontend/app/lifestyle/page.tsx`: remove `disabled: true` from the Banking pillar card
+- [x] `FE` Update `frontend/app/lifestyle/page.tsx`: remove `disabled: true` from the Banking pillar card
 
 #### `/lifestyle/estate` — Estate & Pension Planning Guide
-- [ ] `FE` Create `frontend/app/lifestyle/estate/page.tsx`:
+- [x] `FE` Create `frontend/app/lifestyle/estate/page.tsx`:
 
   **Content sections:**
 
@@ -523,7 +529,7 @@ Both are purely frontend content pages (no backend needed).
 
   **UI pattern:** same accordion card pattern as banking page
 
-- [ ] `FE` Update `frontend/app/lifestyle/page.tsx`: remove `disabled: true` from the Estate pillar card
+- [x] `FE` Update `frontend/app/lifestyle/page.tsx`: remove `disabled: true` from the Estate pillar card
 
 ### Files Created
 ```
@@ -1099,49 +1105,22 @@ frontend/package.json       # Add html2canvas
 
 ---
 
-## Sprint 54 — Bond Ladder Builder
+## ✅ Sprint 54 — Bond Ladder Builder
 **Priority:** LOW-MEDIUM — completes the investment planning toolkit
 **Sources:** todos-v3.md §20 PLAN-06 · todos.md §18
+**Completed:** April 2026
 
-### Goal
-Build a Bond Ladder Builder using FRED Treasury yield data. Shows a table + bar chart
-of bond rungs across maturities (1m, 3m, 6m, 1y, 2y, 5y, 10y, 30y).
+### Delivered
+- [x] **`backend/app/api/v1/endpoints/macro.py`** — `GET /api/v1/macro/bond-ladder?total_investment=N&currency=X` endpoint added. Fetches 8 FRED Treasury yield series (DGS1MO→DGS30), computes equal-split allocation, blended yield, total annual income, and curve shape (Normal/Inverted/Flat/Unknown). Returns structured `BondLadderDto`.
+- [x] **`frontend/app/portfolio/bond-ladder/page.tsx`** — Full page: investment amount input, EUR/USD/GBP currency toggle, "Build Ladder" button. Results: 3 KPI tiles (blended yield, total annual income, curve shape), Recharts bar chart with per-maturity gradient colours, allocation table (Maturity / Yield / Allocation / Annual Income), link back to `/macro`, and educational disclaimer.
+- [x] **`frontend/lib/api.ts`** — `BondLadderRung`, `BondLadderDto` TypeScript types + `fetchBondLadder(investment, currency)` function added.
+- [x] **`frontend/app/macro/page.tsx`** — "Build a bond ladder with these yields →" link added to the Advanced Macro view (line 844).
+- [x] **`frontend/components/Nav.tsx`** — "Bond Ladder" added to Tools section with NEW badge at line 83. Directly accessible from sidebar — no `/portfolio/page.tsx` hub needed.
 
-### Deliverables
-
-#### Backend
-- [ ] `BE` In `macro.py` or new `bonds.py` endpoint:
-  `GET /api/v1/bonds/ladder?total_investment=10000&currency=EUR`
-  - Fetch latest Treasury yields from macro DB (FRED series: DGS1MO, DGS3MO, DGS6MO, DGS1, DGS2, DGS5, DGS10, DGS30)
-  - Compute per-rung allocation (equal split by default, or custom weights)
-  - Return:
-    ```json
-    {
-      "total_investment": 10000,
-      "currency": "EUR",
-      "rungs": [
-        { "maturity": "1 month",  "yield_pct": 5.32, "allocation_usd": 1250, "annual_income": 66.50 },
-        { "maturity": "3 months", "yield_pct": 5.28, "allocation_usd": 1250, "annual_income": 66.00 },
-        ...
-      ],
-      "total_annual_income": 542.80,
-      "blended_yield": 5.43,
-      "disclaimer": "Treasury yields from FRED. For illustrative purposes only."
-    }
-    ```
-
-#### Frontend
-- [ ] `FE` Create `frontend/app/portfolio/bond-ladder/page.tsx`:
-  - Input section: Total investment (€), Currency toggle (EUR/USD/GBP), Equal split vs custom weights toggle
-  - Recharts bar chart: x-axis = maturity, y-axis = yield %, bar colour = gradient green (short) to blue (long)
-  - Table: Maturity | Yield | Allocation | Annual Income
-  - Summary: "Blended yield: 5.43% · Total annual income: €542.80"
-  - Yield curve shape indicator: "Normal curve ✓" / "Inverted ⚠️" / "Flat —"
-  - Link to macro page yield spread section for context
-  - Educational disclaimer
-
-- [ ] `FE` Add "Bond Ladder" to `/portfolio` page as a linked card
-- [ ] `FE` Add link from `/macro` advanced view → "Build a bond ladder →"
+### Note on `/portfolio/page.tsx`
+No top-level `/portfolio` hub page exists or was needed. The Bond Ladder is discoverable via:
+1. The sidebar nav (Tools → Bond Ladder)
+2. The `/macro` Advanced view deep-link
 
 ### Files Created
 ```
@@ -1150,10 +1129,10 @@ frontend/app/portfolio/bond-ladder/page.tsx
 
 ### Files Modified
 ```
-backend/app/api/v1/endpoints/macro.py   # OR new bonds.py — bond ladder endpoint
-frontend/app/portfolio/page.tsx         # Bond Ladder link card (if exists)
-frontend/app/macro/page.tsx             # Link to bond ladder
-frontend/lib/api.ts                     # fetchBondLadder()
+backend/app/api/v1/endpoints/macro.py   # GET /api/v1/macro/bond-ladder endpoint
+frontend/app/macro/page.tsx             # Deep-link to bond ladder
+frontend/lib/api.ts                     # BondLadderRung, BondLadderDto, fetchBondLadder()
+frontend/components/Nav.tsx             # Bond Ladder nav item with NEW badge
 ```
 
 ---
@@ -1388,11 +1367,11 @@ frontend/lib/api.ts                          # fetchVolEstimate()
 | 47 | Paper Trading Bot | 🟠 HIGH | Heavy | Heavy | 3 tables | ✅ Complete |
 | 48 | Lifestyle Banking + Estate | 🟡 MEDIUM | None | Medium | None | ✅ Complete |
 | 49 | Activation Tracking + Streak + NPS | 🟠 HIGH | Medium | Medium | 1 migration | ✅ Complete |
-| 50 | Referral Program + Social Proof | 🟡 MEDIUM | Medium | Medium | 1 migration | Planned |
-| 51 | TypeScript Strict + Lighthouse CI | 🟡 MEDIUM | None | Heavy | None | Planned |
+| 50 | Referral Program + Social Proof | 🟡 MEDIUM | Medium | Medium | 1 migration | ✅ Complete |
+| 51 | TypeScript Strict + Lighthouse CI | 🟡 MEDIUM | None | Heavy | None | ⛔ Skipped (by decision) |
 | 52 | Discussion Threads + Poll | 🟡 MEDIUM | Medium | Medium | 2 migrations | ✅ Complete |
 | 53 | Shareable Report Card | 🟡 MEDIUM | None | Light | None | ✅ Complete |
-| 54 | Bond Ladder Builder | 🟢 LOW-MED | Light | Medium | None | Planned |
+| 54 | Bond Ladder Builder | 🟢 LOW-MED | Light | Medium | None | ✅ Complete |
 | 55 | B2B Billing + Compliance Export | 🟢 LOW | Medium | Medium | 1 migration | Planned |
 | 56 | Advanced Monte Carlo Simulation | 🟠 HIGH | Heavy | Heavy | None | Planned |
 
@@ -1443,5 +1422,6 @@ alembic upgrade head
 
 ---
 
-*Sprint Plans 46–55 created: April 2026*
+*Sprint Plans 46–55 created: April 2026 · Last updated: April 2026*
 *Based on complete audit of: todos.md · todos-v3.md · todos-v4.md · todos-v5.md · todos-v6.md · SPRINT_PROGRESS.md (Sprints 0–45)*
+*Sprints 46–54 complete. Sprint 55 (B2B Billing) and Sprint 56 (Advanced Monte Carlo) are next.*

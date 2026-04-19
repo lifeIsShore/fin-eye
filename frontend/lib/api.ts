@@ -3227,6 +3227,41 @@ export async function runPortfolioMonteCarlo(
   return res.json();
 }
 
+// ─── Bond Ladder Builder (Sprint 54) ──────────────────────────────────────────────────────
+
+export interface BondRung {
+  maturity: string;
+  yield_pct: number;
+  allocation: number;
+  annual_income: number;
+}
+
+export interface BondLadderDto {
+  total_investment: number;
+  currency: string;
+  rungs: BondRung[];
+  total_annual_income: number;
+  blended_yield: number;
+  curve_shape: "Normal" | "Inverted" | "Flat" | "Unknown";
+  disclaimer: string;
+}
+
+export async function fetchBondLadder(
+  totalInvestment = 10000,
+  currency = "EUR",
+): Promise<BondLadderDto> {
+  const params = new URLSearchParams({
+    total_investment: String(totalInvestment),
+    currency,
+  });
+  const res = await fetch(`${API_BASE_URL}/api/v1/macro/bond-ladder?${params}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load bond ladder data");
+  return res.json();
+}
+
 // ─── Referral Program (Sprint 50) ────────────────────────────────────────────
 
 export interface ReferralStatsDto {
@@ -3325,6 +3360,75 @@ export async function reactToComment(
     body: JSON.stringify({ reaction }),
   });
   if (!res.ok) throw new Error("Failed to react");
+  return res.json();
+}
+
+// ─── Bond Ladder Builder (Sprint 54) ───────────────────────────────────────────────────
+
+export interface BondLadderRung {
+  maturity: string;
+  yield_pct: number;
+  allocation: number;
+  annual_income: number;
+}
+
+export interface BondLadderDto {
+  total_investment: number;
+  currency: string;
+  rungs: BondLadderRung[];
+  total_annual_income: number;
+  blended_yield: number;
+  curve_shape: string;
+  disclaimer: string;
+}
+
+export async function fetchBondLadder(
+  totalInvestment: number,
+  currency: string = "EUR",
+): Promise<BondLadderDto> {
+  const params = new URLSearchParams({
+    total_investment: String(totalInvestment),
+    currency,
+  });
+  const res = await fetch(`${API_BASE_URL}/api/v1/macro/bond-ladder?${params}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load bond ladder data");
+  return res.json();
+}
+
+// ─── Referral Program (Sprint 50) ──────────────────────────────────────────────────────
+
+export interface ReferralStatsDto {
+  code: string;
+  link: string;
+  signups: number;
+  upgrades: number;
+  credits_earned: number;
+}
+
+export interface ReferralLeaderEntry {
+  rank: number;
+  display_name: string;
+  referrals: number;
+}
+
+export async function fetchReferralStats(): Promise<ReferralStatsDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/referral/my-code`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load referral stats");
+  return res.json();
+}
+
+export async function fetchReferralLeaderboard(): Promise<ReferralLeaderEntry[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/referral/leaderboard`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load leaderboard");
   return res.json();
 }
 

@@ -727,7 +727,9 @@ export default function MacroPage() {
                     </span>
                   </span>
                 )}
-                {advData.yield_curve.spread_30y_2y !== null && (
+    </div>
+  );
+}          {advData.yield_curve.spread_30y_2y !== null && (
                   <span>
                     30Y–2Y spread:{" "}
                     <span className="font-mono text-slate-300">
@@ -830,6 +832,22 @@ export default function MacroPage() {
           not professional economic forecasts.
         </p>
       </div>
+
+      {/* Sprint 54 — Bond Ladder link */}
+      {view === "advanced" && (
+        <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-5 py-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-200">Build a bond ladder with these yields</p>
+            <p className="text-xs text-slate-500 mt-0.5">See how Treasury yields translate to income across maturities.</p>
+          </div>
+          <a
+            href="/portfolio/bond-ladder"
+            className="flex-shrink-0 flex items-center gap-1.5 rounded-lg border border-sky-700/50 bg-sky-900/20 px-3 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-900/40 transition-colors"
+          >
+            Bond Ladder →
+          </a>
+        </div>
+      )}
     </div>
   );
 }

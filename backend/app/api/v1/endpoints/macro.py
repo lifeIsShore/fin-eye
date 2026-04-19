@@ -355,3 +355,86 @@ async def get_crypto_fear_greed(
             detail="Crypto Fear & Greed index is temporarily unavailable.",
         )
     return {**result, "source": "live"}
+
+
+# ── Bond Ladder Builder (Sprint 54) ────────────────────────────────────────────
+
+# Treasury yield series names as stored in the macro DB
+_BOND_SERIES: list[tuple[str, str]] = [
+    ("treasury_1m",  "1 month"),
+    ("treasury_3m",  "3 months"),
+    ("treasury_6m",  "6 months"),
+    ("treasury_1y",  "1 year"),
+    ("treasury_2y",  "2 years"),
+    ("treasury_5y",  "5 years"),
+    ("treasury_10y", "10 years"),
+    ("treasury_30y", "30 years"),
+]
+
+
+@router.get("/bond-ladder", summary="Bond Ladder Builder — Sprint 54")
+async def bond_ladder(
+    total_investment: float = Query(default=10000.0, gt=0, description="Total amount to invest"),
+    currency: str = Query(default="EUR", pattern="^[A-Z]{3}$"),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Returns a bond ladder allocation across 8 Treasury maturities.
+    Reads latest yields from the macro DB (FRED data).
+    Equal split across available maturities by default.
+    """
+    series_names = [s for s, _ in _BOND_SERIES]
+    rows = await get_latest_batch_async(db, series_names)
+    # rows is a dict: {name: IndicatorLatest | None}
+
+    rungs = []
+    available_labels = []
+    for name, label in _BOND_SERIES:
+        row = rows.get(name)
+        if row and row.value is not None:
+            available_labels.append((label, float(row.value)))
+
+    if not available_labels:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Treasury yield data unavailable. Try again after next FRED refresh.",
+        )
+
+    n = len(available_labels)
+    per_rung = round(total_investment / n, 2)
+
+    total_income = 0.0
+    for label, yield_pct in available_labels:
+        annual_income = round(per_rung * (yield_pct / 100), 2)
+        total_income += annual_income
+        rungs.append({
+            "maturity":     label,
+            "yield_pct":    round(yield_pct, 4),
+            "allocation":   per_rung,
+            "annual_income": annual_income,
+        })
+
+    blended = round(sum(r["yield_pct"] for r in rungs) / n, 4) if n else 0.0
+
+    # Yield curve shape
+    if len(available_labels) >= 2:
+        short_yield = available_labels[0][1]
+        long_yield  = available_labels[-1][1]
+        if long_yield > short_yield + 0.25:
+            curve_shape = "Normal"
+        elif long_yield < short_yield - 0.25:
+            curve_shape = "Inverted"
+        else:
+            curve_shape = "Flat"
+    else:
+        curve_shape = "Unknown"
+
+    return {
+        "total_investment":   total_investment,
+        "currency":           currency,
+        "rungs":              rungs,
+        "total_annual_income": round(total_income, 2),
+        "blended_yield":      blended,
+        "curve_shape":        curve_shape,
+        "disclaimer":         "Treasury yields from FRED. For illustrative purposes only. Not financial advice.",
+    }
