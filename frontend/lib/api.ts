@@ -3363,75 +3363,6 @@ export async function reactToComment(
   return res.json();
 }
 
-// ─── Bond Ladder Builder (Sprint 54) ───────────────────────────────────────────────────
-
-export interface BondLadderRung {
-  maturity: string;
-  yield_pct: number;
-  allocation: number;
-  annual_income: number;
-}
-
-export interface BondLadderDto {
-  total_investment: number;
-  currency: string;
-  rungs: BondLadderRung[];
-  total_annual_income: number;
-  blended_yield: number;
-  curve_shape: string;
-  disclaimer: string;
-}
-
-export async function fetchBondLadder(
-  totalInvestment: number,
-  currency: string = "EUR",
-): Promise<BondLadderDto> {
-  const params = new URLSearchParams({
-    total_investment: String(totalInvestment),
-    currency,
-  });
-  const res = await fetch(`${API_BASE_URL}/api/v1/macro/bond-ladder?${params}`, {
-    headers: authHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error("Failed to load bond ladder data");
-  return res.json();
-}
-
-// ─── Referral Program (Sprint 50) ──────────────────────────────────────────────────────
-
-export interface ReferralStatsDto {
-  code: string;
-  link: string;
-  signups: number;
-  upgrades: number;
-  credits_earned: number;
-}
-
-export interface ReferralLeaderEntry {
-  rank: number;
-  display_name: string;
-  referrals: number;
-}
-
-export async function fetchReferralStats(): Promise<ReferralStatsDto> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/referral/my-code`, {
-    headers: authHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error("Failed to load referral stats");
-  return res.json();
-}
-
-export async function fetchReferralLeaderboard(): Promise<ReferralLeaderEntry[]> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/referral/leaderboard`, {
-    headers: authHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error("Failed to load leaderboard");
-  return res.json();
-}
-
 // ─── Weekly Poll (Sprint 52) ────────────────────────────────────────────────────────────
 
 export interface PollResultsDto {
@@ -3470,5 +3401,76 @@ export async function castPollVote(
     body: JSON.stringify({ vote }),
   });
   if (!res.ok) throw new Error("Failed to cast vote");
+  return res.json();
+}
+
+// ─── B2B Tenant Seats & Billing (Sprint 55) ───────────────────────────────────
+
+export interface SeatResponse {
+  id: string;
+  tenant_id: string;
+  invited_email: string;
+  role: string;
+  accepted: boolean;
+  invited_at: string;
+  accepted_at: string | null;
+}
+
+export interface TenantBillingResponse {
+  tier: string;
+  seat_limit: number;
+  seats_used: number;
+  seats_available: number;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  billing_cycle_end: string | null;
+  stripe_portal_url: string | null;
+}
+
+export async function inviteSeat(slug: string, email: string, role = "member"): Promise<SeatResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/tenants/${slug}/seats/invite`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ email, role }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to invite seat");
+  }
+  return res.json();
+}
+
+export async function fetchSeats(slug: string): Promise<SeatResponse[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/tenants/${slug}/seats`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch seats");
+  return res.json();
+}
+
+export async function removeSeat(slug: string, seatId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/tenants/${slug}/seats/${seatId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to remove seat");
+}
+
+export async function acceptInvite(token: string): Promise<SeatResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/tenants/accept-invite?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to accept invite");
+  return res.json();
+}
+
+export async function fetchTenantBilling(slug: string): Promise<TenantBillingResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/tenants/${slug}/billing`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch billing info");
   return res.json();
 }

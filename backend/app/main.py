@@ -43,7 +43,7 @@ from app.api.v1.endpoints import (
     showcase, ops, analytics, experiments, email, api_keys, risk, admin_gas, options, sectors,
     insiders, earnings, shorts, adv_sentiment, fed_policy, indicators,
     admin_bulk, symbols, allocation, billing, social_signals, tenants, bot, montecarlo,
-    referral, comments, polls,
+    referral, comments, polls, compliance,
 )
 from app.api.v1.endpoints.admin_ml import router as admin_ml_router  # Sprint 6
 from app.api.public.v1 import router as public_v1_router
@@ -224,9 +224,10 @@ app.include_router(comments.router,      prefix="/api/v1",                 tags=
 app.include_router(polls.router,         prefix="/api/v1",                 tags=["Polls"])     # Sprint 52
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
-app.include_router(admin_bulk.router_admin, prefix="/api/v1/admin",       tags=["Admin — Pipeline"])
-app.include_router(admin_bulk.router,       prefix="/api/v1/admin/bulk",  tags=["Admin — Bulk Pipeline"])
-app.include_router(admin_ml_router,         prefix="/api/v1/admin/ml",    tags=["Admin — ML Pipeline"])
+app.include_router(admin_bulk.router_admin, prefix="/api/v1/admin",              tags=["Admin — Pipeline"])
+app.include_router(admin_bulk.router,       prefix="/api/v1/admin/bulk",          tags=["Admin — Bulk Pipeline"])
+app.include_router(admin_ml_router,         prefix="/api/v1/admin/ml",            tags=["Admin — ML Pipeline"])
+app.include_router(compliance.router,       prefix="/api/v1/admin/compliance",    tags=["Admin — Compliance"])  # Sprint 55
 
 # ── Public external API ───────────────────────────────────────────────────────
 app.include_router(public_v1_router.router, prefix="/public/v1", tags=["Public API"])

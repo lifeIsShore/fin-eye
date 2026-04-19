@@ -38,3 +38,5 @@ from app.models.referral import ReferralEvent  # noqa: F401
 # Sprint 52 — Discussion threads + polls
 from app.models.ticker_comment import TickerComment, TickerCommentReaction  # noqa: F401
 from app.models.weekly_poll import WeeklyPoll, PollVote  # noqa: F401
+# Sprint 55 — Tenant seat management
+from app.models.tenant_seat import TenantSeat  # noqa: F401

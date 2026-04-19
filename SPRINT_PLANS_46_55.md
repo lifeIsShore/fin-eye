@@ -1148,7 +1148,7 @@ Add `GET /admin/compliance/export` endpoint returning paginated CSV of audit log
 ### Deliverables
 
 #### B2B Billing Tiers
-- [ ] `DB` Migration `s55_001_tenant_billing.py`:
+- [x] `DB` Migration `s55_001_tenant_billing.py`:
   ```sql
   ALTER TABLE tenants ADD COLUMN tier VARCHAR(20) NOT NULL DEFAULT 'starter';
     -- 'starter' (≤10 seats), 'growth' (≤50 seats), 'enterprise' (unlimited)
@@ -1168,7 +1168,7 @@ Add `GET /admin/compliance/export` endpoint returning paginated CSV of audit log
   );
   ```
 
-- [ ] `BE` In `tenants.py` endpoints:
+- [x] `BE` In `tenants.py` endpoints:
 
   `POST /api/v1/tenants/{slug}/invite`
   - Body: `{ "email": "advisor@firm.com", "role": "member" }`
@@ -1184,13 +1184,13 @@ Add `GET /admin/compliance/export` endpoint returning paginated CSV of audit log
   `GET /api/v1/tenants/{slug}/billing`
   - Returns tier, seat_count, billing_cycle_end, Stripe portal URL
 
-- [ ] `BE` Stripe webhook handler for tenant billing:
+- [x] `BE` Stripe webhook handler for tenant billing:
   - `customer.subscription.created` → set `stripe_subscription_id`, `billing_cycle_end`, `tier`
   - `customer.subscription.deleted` → downgrade to `starter`, 0 seats
   - `invoice.paid` → extend `billing_cycle_end`
 
 #### Compliance Audit Log Export
-- [ ] `BE` In new `backend/app/api/v1/endpoints/compliance.py`:
+- [x] `BE` In new `backend/app/api/v1/endpoints/compliance.py`:
 
   `GET /api/v1/admin/compliance/export?tenant_id=xxx&from=2026-01-01&to=2026-04-01`
   - Admin or tenant owner only
@@ -1201,7 +1201,7 @@ Add `GET /admin/compliance/export` endpoint returning paginated CSV of audit log
   `GET /api/v1/admin/compliance/summary?tenant_id=xxx`
   - Returns: total calls, unique users, most-called endpoints, calls by day (last 30 days)
 
-- [ ] `FE` Create `frontend/app/admin/compliance/page.tsx`:
+- [x] `FE` Create `frontend/app/admin/compliance/page.tsx`:
   - Date range picker (default: last 30 days)
   - Tenant selector (admin only — shows all tenants)
   - [Download CSV] button → calls `/admin/compliance/export?format=csv`
@@ -1424,4 +1424,4 @@ alembic upgrade head
 
 *Sprint Plans 46–55 created: April 2026 · Last updated: April 2026*
 *Based on complete audit of: todos.md · todos-v3.md · todos-v4.md · todos-v5.md · todos-v6.md · SPRINT_PROGRESS.md (Sprints 0–45)*
-*Sprints 46–54 complete. Sprint 55 (B2B Billing) and Sprint 56 (Advanced Monte Carlo) are next.*
+*Sprints 46–55 complete. Sprint 56 (Advanced Monte Carlo) is next.*

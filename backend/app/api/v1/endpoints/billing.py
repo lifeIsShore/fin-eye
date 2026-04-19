@@ -188,7 +188,45 @@ async def list_invoices(
     Placeholder endpoint — will proxy Stripe invoice list when payments go live.
     Returns empty list so the frontend can render the "no invoices yet" state.
     """
-    # TODO: Replace with Stripe invoice fetch:
     # import stripe
     # invoices = stripe.Invoice.list(customer=current_user.stripe_customer_id)
     return []
+
+
+# ── Sprint 55: Stripe Webhook Stub ────────────────────────────────────────────
+
+class WebhookPayload(BaseModel):
+    # Minimal schema for webhook stub payload testing
+    type: str
+    data: dict[str, Any]
+
+@router.post(
+    "/webhook/stripe",
+    summary="Stripe webhook handler (Sprint 55 stub)",
+)
+async def stripe_webhook(
+    payload: WebhookPayload,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Handle Stripe webhook events for B2B tenant billing.
+    Currently a stub until Stripe SDK is wired in.
+    """
+    event_type = payload.type
+    
+    # Needs to be wired with real Stripe SDK and webhook secret validation
+    # signature = request.headers.get("stripe-signature")
+    
+    if event_type == "customer.subscription.created":
+        logger.info("Webhook: Subscription created %s", payload.data)
+        # Update tenant: set stripe_subscription_id, billing_cycle_end, tier
+    elif event_type == "customer.subscription.deleted":
+        logger.info("Webhook: Subscription deleted %s", payload.data)
+        # Downgrade tenant to 'starter', 0 seats
+    elif event_type == "invoice.paid":
+        logger.info("Webhook: Invoice paid %s", payload.data)
+        # Extend billing_cycle_end
+    else:
+        logger.info("Unhandled Stripe webhook event: %s", event_type)
+
+    return {"status": "received"}
