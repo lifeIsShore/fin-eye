@@ -629,3 +629,32 @@ backend/.dockerignore
 - [x] **API Types** — Added `fetchSocialSignals` and `SocialSignalsDto` (with Reddit, StockTwits, and Insider dtos) to `frontend/lib/api.ts`.
 - [x] **`SocialSignalsPanel` Component** — Created `frontend/components/SocialSignalsPanel.tsx` widget. Displays aggregated 0-100 score + detailed broken-down stats for Reddit, StockTwits, and Insider trades. Features a clean collapsible UI.
 - [x] **Dashboard Integration** — Wired `SocialSignalsPanel` into the main dashboard view (`frontend/app/page.tsx`), placed strategically below the `WhatChangedToday` component for quick visibility.
+
+---
+
+## ✅ Sprint 52 — Discussion Threads + Bull vs Bear Poll
+
+**Completed:** April 2026
+
+### Backend
+- [x] `s52_001_discussions.py` — Alembic migration: `ticker_comments` + `ticker_comment_reactions` tables
+- [x] `s52_002_polls.py` — Alembic migration: `weekly_polls` + `poll_votes` tables
+- [x] `app/models/ticker_comment.py` — ORM: `TickerComment`, `TickerCommentReaction`
+- [x] `app/models/weekly_poll.py` — ORM: `WeeklyPoll`, `PollVote`
+- [x] `app/models/__init__.py` — registered both model sets
+- [x] `app/api/v1/endpoints/comments.py` — GET paginated list, POST comment (rate-limited 10/hr), DELETE (soft), POST react (toggle up/down)
+- [x] `app/api/v1/endpoints/polls.py` — GET current poll + vote counts + user vote, POST vote (upsert)
+- [x] `app/api/v1/deps.py` — added `get_optional_user()` for public-read endpoints
+- [x] `app/main.py` — registered `comments.router` + `polls.router`
+- [x] `app/services/scheduler.py` — `job_create_weekly_poll()` + scheduled Mon 00:01 UTC
+
+### Frontend
+- [x] `frontend/lib/api.ts` — `CommentDto`, `CommentListDto`, `PollDto`, `PollResultsDto` + all fetch/post/react functions
+- [x] `frontend/components/TickerComments.tsx` — collapsible thread panel: list, compose, react, delete, load-more, auth guard
+- [x] `frontend/components/WeeklyPoll.tsx` — Mon–Fri poll pill: vote buttons + SVG donut chart after voting
+- [x] `frontend/app/page.tsx` — `TickerComments` wired below `SocialSignalsPanel` (xl sidebar + mobile); `WeeklyPoll` wired above `EarningsCalendarStrip` (both responsive zones)
+
+### Run
+```bash
+cd backend && alembic upgrade head
+```

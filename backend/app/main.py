@@ -43,7 +43,7 @@ from app.api.v1.endpoints import (
     showcase, ops, analytics, experiments, email, api_keys, risk, admin_gas, options, sectors,
     insiders, earnings, shorts, adv_sentiment, fed_policy, indicators,
     admin_bulk, symbols, allocation, billing, social_signals, tenants, bot, montecarlo,
-    referral,
+    referral, comments, polls,
 )
 from app.api.v1.endpoints.admin_ml import router as admin_ml_router  # Sprint 6
 from app.api.public.v1 import router as public_v1_router
@@ -220,6 +220,8 @@ app.include_router(tenants.router,       prefix="/api/v1/tenants",        tags=[
 app.include_router(bot.router,           prefix="/api/v1/bot",            tags=["Paper Trading Bot"])
 app.include_router(montecarlo.router,    prefix="/api/v1/montecarlo",     tags=["Monte Carlo Simulation"])
 app.include_router(referral.router,      prefix="/api/v1",                 tags=["Referral"])
+app.include_router(comments.router,      prefix="/api/v1",                 tags=["Comments"])  # Sprint 52
+app.include_router(polls.router,         prefix="/api/v1",                 tags=["Polls"])     # Sprint 52
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
 app.include_router(admin_bulk.router_admin, prefix="/api/v1/admin",       tags=["Admin — Pipeline"])

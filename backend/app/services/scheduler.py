@@ -51,7 +51,7 @@ def _make_scheduler() -> AsyncIOScheduler:
                 tablename="apscheduler_jobs",
             )
         }
-        logger.info("APScheduler: using SQLAlchemy jobstore (table=apscheduler_jobs)")
+    logger.info("APScheduler: using SQLAlchemy jobstore (table=apscheduler_jobs)")
     else:
         jobstores = {}
         logger.warning("APScheduler: DATABASE_URL not set — falling back to in-memory jobstore")
@@ -870,6 +870,42 @@ async def job_churn_check() -> None:
         )
 
 
+# ── Sprint 52: Weekly Poll Creator ──────────────────────────────────────────────
+
+async def job_create_weekly_poll() -> None:
+    """Creates the current week's SPY Bull vs Bear poll if it doesn't exist."""
+    from app.models.weekly_poll import WeeklyPoll  # noqa: PLC0415
+    from sqlalchemy import select  # noqa: PLC0415
+    now = datetime.now(timezone.utc)
+    iso_cal = now.isocalendar()
+    week_num, year = iso_cal.week, iso_cal.year
+    # opens_at = this Monday 00:01 UTC, closes_at = Sunday 23:59 UTC
+    monday = now - timedelta(days=now.weekday())
+    opens_at = monday.replace(hour=0, minute=1, second=0, microsecond=0)
+    closes_at = opens_at + timedelta(days=6, hours=23, minutes=58)
+    question = "Are you Bullish, Bearish, or Neutral on SPY this week?"
+    try:
+        async with AsyncSessionLocal() as session:
+            existing = await session.execute(
+                select(WeeklyPoll).where(
+                    WeeklyPoll.week_number == week_num,
+                    WeeklyPoll.year == year,
+                    WeeklyPoll.symbol == "SPY",
+                )
+            )
+            if existing.scalar_one_or_none() is None:
+                session.add(WeeklyPoll(
+                    week_number=week_num, year=year, symbol="SPY",
+                    question=question, opens_at=opens_at, closes_at=closes_at,
+                ))
+                await session.commit()
+                logger.info("Sprint52: created weekly poll week=%d year=%d", week_num, year)
+            else:
+                logger.info("Sprint52: poll already exists for week=%d year=%d", week_num, year)
+    except Exception as exc:
+        logger.error("job_create_weekly_poll failed: %s", exc)
+
+
 # ── Scheduler Setup ────────────────────────────────────────────────────────────
 
 def setup_scheduler() -> AsyncIOScheduler:
@@ -1030,6 +1066,12 @@ def setup_scheduler() -> AsyncIOScheduler:
         trigger=CronTrigger(day_of_week="mon-fri", hour="13-21", minute="2,17,32,47"),
         id="bot_evaluate", name="Paper Trading Bot Evaluate",
         replace_existing=True, misfire_grace_time=120)
+
+    # Sprint 52 — Create weekly SPY poll every Monday at 00:01 UTC
+    scheduler.add_job(job_create_weekly_poll,
+        trigger=CronTrigger(day_of_week="mon", hour=0, minute=1),
+        id="create_weekly_poll", name="Create Weekly SPY Poll",
+        replace_existing=True, misfire_grace_time=3600)
 
     logger.info(
         "Scheduler configured with %d jobs: %s",

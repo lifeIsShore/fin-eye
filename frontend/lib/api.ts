@@ -3260,3 +3260,111 @@ export async function fetchReferralLeaderboard(): Promise<ReferralLeaderEntry[]>
   if (!res.ok) throw new Error("Failed to load referral leaderboard");
   return res.json() as Promise<ReferralLeaderEntry[]>;
 }
+
+// ─── Discussion Comments (Sprint 52) ───────────────────────────────────────────────────
+
+export interface CommentDto {
+  id: string;
+  symbol: string;
+  username: string;
+  body: string;
+  created_at: string;
+  upvotes: number;
+  downvotes: number;
+  user_reaction: "up" | "down" | null;
+}
+
+export interface CommentListDto {
+  comments: CommentDto[];
+  has_more: boolean;
+}
+
+export async function fetchComments(
+  symbol: string,
+  limit = 20,
+  beforeId?: string,
+): Promise<CommentListDto> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (beforeId) params.set("before_id", beforeId);
+  const res = await fetch(`${API_BASE_URL}/api/v1/comments/${symbol}?${params}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load comments");
+  return res.json();
+}
+
+export async function postComment(symbol: string, body: string): Promise<CommentDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/comments/${symbol}`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to post comment");
+  }
+  return res.json();
+}
+
+export async function deleteComment(commentId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/comments/${commentId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to delete comment");
+}
+
+export async function reactToComment(
+  commentId: string,
+  reaction: "up" | "down",
+): Promise<{ upvotes: number; downvotes: number }> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/comments/${commentId}/react`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ reaction }),
+  });
+  if (!res.ok) throw new Error("Failed to react");
+  return res.json();
+}
+
+// ─── Weekly Poll (Sprint 52) ────────────────────────────────────────────────────────────
+
+export interface PollResultsDto {
+  bullish: number;
+  bearish: number;
+  neutral: number;
+  total: number;
+}
+
+export interface PollDto {
+  poll_id: string;
+  question: string;
+  opens_at: string;
+  closes_at: string;
+  results: PollResultsDto;
+  user_vote: "bullish" | "bearish" | "neutral" | null;
+}
+
+export async function fetchCurrentPoll(): Promise<PollDto | null> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/polls/current`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Failed to load poll");
+  return res.json();
+}
+
+export async function castPollVote(
+  pollId: string,
+  vote: "bullish" | "bearish" | "neutral",
+): Promise<PollDto> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/polls/${pollId}/vote`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ vote }),
+  });
+  if (!res.ok) throw new Error("Failed to cast vote");
+  return res.json();
+}

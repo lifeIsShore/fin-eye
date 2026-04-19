@@ -1,0 +1,30 @@
+{
+    "connections": {
+        "database": {
+            "status": "connected",
+            "latency_ms": 451.51329040527344
+        },
+        "redis": {
+            "status": "failed",
+            "error": "invalid username-password pair or user is disabled.",
+            "latency_ms": 15.761375427246094
+        },
+        "ml_ollama_local": {
+            "status": "failed",
+            "error": "Connection Refused / Failed",
+            "latency_ms": 6356.083869934082
+        }
+    },
+    "integrations": {
+        "Authentication": "MOCKED / DISABLED",
+        "OpenAI": "MOCKED / PLACEHOLDER (Missing Key)",
+        "Anthropic": "MOCKED / PLACEHOLDER (Missing Key)",
+        "Reddit": "MOCKED / PLACEHOLDER (Missing Key)",
+        "Stripe": "MOCKED / PLACEHOLDER (Missing Key)",
+        "Pinecone (Vector DB)": "LIVE (Dynamic)",
+        "Twitter/X": "MOCKED / PLACEHOLDER (Missing Key)",
+        "Finnhub": "LIVE (Dynamic)",
+        "AlphaVantage": "LIVE (Dynamic)",
+        "Polygon": "LIVE (Dynamic)"
+    }
+}

@@ -872,9 +872,10 @@ All other TypeScript files         # Fix remaining errors
 
 ---
 
-## Sprint 52 — Discussion Threads + Bull vs Bear Poll
+## ✅ Sprint 52 — Discussion Threads + Bull vs Bear Poll
 **Priority:** MEDIUM — community engagement, daily habit loop
 **Sources:** todos.md §12 · todos-v3.md §23
+**Completed:** April 2026
 
 ### Goal
 Add per-ticker discussion threads (brief comments on analysis pages) and a weekly
@@ -883,7 +884,7 @@ Bull vs Bear poll on SPY to create a Monday habit loop.
 ### Deliverables
 
 #### Discussion Threads
-- [ ] `DB` Migration `s52_001_discussions.py`:
+- [x] `DB` Migration `s52_001_discussions.py`:
   ```sql
   CREATE TABLE ticker_comments (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -903,7 +904,7 @@ Bull vs Bear poll on SPY to create a Monday habit loop.
   );
   ```
 
-- [ ] `BE` Create `backend/app/api/v1/endpoints/comments.py`:
+- [x] `BE` Create `backend/app/api/v1/endpoints/comments.py`:
 
   `GET /api/v1/comments/{symbol}?limit=20&before_id=xxx`
   - Paginated, newest first
@@ -924,9 +925,9 @@ Bull vs Bear poll on SPY to create a Monday habit loop.
   - Body: `{ "reaction": "up" | "down" }`
   - Upserts `ticker_comment_reactions` — toggle if same reaction
 
-- [ ] `BE` Register `comments.router` in `main.py` at `/api/v1/comments`
+- [x] `BE` Register `comments.router` in `main.py` at `/api/v1/comments`
 
-- [ ] `FE` Create `frontend/components/TickerComments.tsx`:
+- [x] `FE` Create `frontend/components/TickerComments.tsx`:
   - Collapsible panel (collapsed by default with "N comments" label)
   - Comment list: anonymised username, relative time, body, 👍/👎 reaction buttons with counts
   - "Load more" button (pagination)
@@ -934,10 +935,10 @@ Bull vs Bear poll on SPY to create a Monday habit loop.
   - Character counter (500 max)
   - "Comments are moderated. Be respectful." disclaimer
 
-- [ ] `FE` Wire `TickerComments` into `frontend/app/page.tsx` dashboard — place below SocialSignalsPanel
+- [x] `FE` Wire `TickerComments` into `frontend/app/page.tsx` dashboard — place below SocialSignalsPanel
 
 #### Bull vs Bear Weekly Poll
-- [ ] `DB` Migration `s52_002_polls.py`:
+- [x] `DB` Migration `s52_002_polls.py`:
   ```sql
   CREATE TABLE weekly_polls (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -959,12 +960,12 @@ Bull vs Bear poll on SPY to create a Monday habit loop.
   );
   ```
 
-- [ ] `BE` In `scheduler.py`: add `job_create_weekly_poll` — runs Monday 00:01 UTC
+- [x] `BE` In `scheduler.py`: add `job_create_weekly_poll` — runs Monday 00:01 UTC
   - Creates a `weekly_polls` row for the current week + SPY
   - Question: "Are you Bullish, Bearish, or Neutral on SPY this week?"
   - `closes_at` = following Sunday 23:59 UTC
 
-- [ ] `BE` Endpoints in new `backend/app/api/v1/endpoints/polls.py`:
+- [x] `BE` Endpoints in new `backend/app/api/v1/endpoints/polls.py`:
 
   `GET /api/v1/polls/current` — returns current week's poll + vote counts + user's vote
   ```json
@@ -978,13 +979,13 @@ Bull vs Bear poll on SPY to create a Monday habit loop.
   - One vote per user per poll (upsert)
   - Returns updated vote counts
 
-- [ ] `FE` Create `frontend/components/WeeklyPoll.tsx`:
+- [x] `FE` Create `frontend/components/WeeklyPoll.tsx`:
   - Monday-activated pill component on dashboard (show only Mon–Fri, or if user hasn't voted)
   - Before vote: "🗳️ This week's poll: Are you bullish on SPY?" + 3 vote buttons (emerald/rose/amber)
   - After vote: donut chart showing % bullish/bearish/neutral + "559 investors voted"
   - Coloured breakdown: "Bullish 61% · Bearish 23% · Neutral 16%"
 
-- [ ] `FE` Wire `WeeklyPoll` into dashboard `page.tsx` — place in sidebar above EarningsCalendarStrip
+- [x] `FE` Wire `WeeklyPoll` into dashboard `page.tsx` — place in sidebar above EarningsCalendarStrip
 
 ### Migration
 ```bash
@@ -1388,7 +1389,7 @@ frontend/lib/api.ts                          # fetchVolEstimate()
 | 49 | Activation Tracking + Streak + NPS | 🟠 HIGH | Medium | Medium | 1 migration | ✅ Complete |
 | 50 | Referral Program + Social Proof | 🟡 MEDIUM | Medium | Medium | 1 migration | Planned |
 | 51 | TypeScript Strict + Lighthouse CI | 🟡 MEDIUM | None | Heavy | None | Planned |
-| 52 | Discussion Threads + Poll | 🟡 MEDIUM | Medium | Medium | 2 migrations | Planned |
+| 52 | Discussion Threads + Poll | 🟡 MEDIUM | Medium | Medium | 2 migrations | ✅ Complete |
 | 53 | Shareable Report Card | 🟡 MEDIUM | None | Light | None | Planned |
 | 54 | Bond Ladder Builder | 🟢 LOW-MED | Light | Medium | None | Planned |
 | 55 | B2B Billing + Compliance Export | 🟢 LOW | Medium | Medium | 1 migration | Planned |

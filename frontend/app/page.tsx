@@ -33,6 +33,8 @@ import ScoreExplainPanel, {
 } from "../components/ScoreExplainPanel";
 import WhatChangedToday from "../components/WhatChangedToday";
 import SocialSignalsPanel from "../components/SocialSignalsPanel";
+import TickerComments from "../components/TickerComments";  // Sprint 52
+import WeeklyPoll from "../components/WeeklyPoll";              // Sprint 52
 import FreshnessIndicator from "../components/FreshnessIndicator";
 import DataSourceStatus from "../components/DataSourceStatus";
 import CrossAssetRow from "../components/CrossAssetRow";
@@ -1250,14 +1252,18 @@ export default function DashboardPage() {
             activeSymbol={activeSymbol}
           />
           {watchlistSymbols.length > 0 && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 px-1">
-                Upcoming Earnings
-              </p>
-              <EarningsCalendarStrip symbols={watchlistSymbols} />
-            </div>
+            <>
+              <WeeklyPoll />{/* Sprint 52 */}
+              <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 px-1">
+                  Upcoming Earnings
+                </p>
+                <EarningsCalendarStrip symbols={watchlistSymbols} />
+              </div>
+            </>
           )}
           <SocialSignalsPanel symbol={activeSymbol} />
+          <TickerComments symbol={activeSymbol} />{/* Sprint 52 */}
         </aside>
 
         <div className="min-w-0 flex-1 space-y-6">
@@ -1379,14 +1385,18 @@ export default function DashboardPage() {
               />
             )}
             {watchlistSymbols.length > 0 && (
-              <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 px-1">
-                  Upcoming Earnings
-                </p>
-                <EarningsCalendarStrip symbols={watchlistSymbols} />
-              </div>
+              <>
+                <WeeklyPoll />{/* Sprint 52 */}
+                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 px-1">
+                    Upcoming Earnings
+                  </p>
+                  <EarningsCalendarStrip symbols={watchlistSymbols} />
+                </div>
+              </>
             )}
             <SocialSignalsPanel symbol={activeSymbol} />
+            <TickerComments symbol={activeSymbol} />{/* Sprint 52 */}
           </div>
 
           {isLoading ? (

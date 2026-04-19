@@ -119,6 +119,26 @@ async def get_current_active_verified_user(
     return current_user
 
 
+async def get_optional_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """Returns the current user if authenticated, else None (public access)."""
+    if not settings.require_auth:
+        return await _get_or_create_dev_user(db)
+    if credentials is None:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+        if payload is None or payload.get("type") != "access":
+            return None
+        user_id = uuid.UUID(payload["sub"])
+        user = await get_user_by_id(db, user_id)
+        return user if (user and user.is_active) else None
+    except Exception:
+        return None
+
+
 async def require_admin(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:

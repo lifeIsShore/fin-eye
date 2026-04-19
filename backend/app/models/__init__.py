@@ -35,3 +35,6 @@ from app.models.compliance_audit_log import ComplianceAuditLog  # noqa: F401
 from app.models.bot import BotConfig, BotPosition, BotAuditLog  # noqa: F401
 # Sprint 50 — Referral program
 from app.models.referral import ReferralEvent  # noqa: F401
+# Sprint 52 — Discussion threads + polls
+from app.models.ticker_comment import TickerComment, TickerCommentReaction  # noqa: F401
+from app.models.weekly_poll import WeeklyPoll, PollVote  # noqa: F401
