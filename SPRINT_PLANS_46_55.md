@@ -1012,9 +1012,10 @@ frontend/lib/api.ts        # fetchComments(), postComment(), voteOnPoll() etc.
 
 ---
 
-## Sprint 53 — Shareable GAS Report Card (PNG/PDF Export)
+## ✅ Sprint 53 — Shareable GAS Report Card (PNG/PDF Export)
 **Priority:** MEDIUM — viral distribution mechanism
 **Sources:** todos.md §7 "Shareable GAS Report Card"
+**Completed:** April 2026
 
 ### Goal
 Add a "Share Analysis" button on the dashboard that generates a branded PNG card
@@ -1023,13 +1024,13 @@ showing GAS score, grade, regime, key signals, and disclaimer. Shareable to Twit
 ### Deliverables
 
 #### Backend — PDF/Image Generation
-- [ ] `BE` Add to `requirements.txt`: `playwright>=1.40.0` or `weasyprint>=61.0` (for HTML→PDF)
+- [x] `BE` Add to `requirements.txt`: `playwright>=1.40.0` or `weasyprint>=61.0` (for HTML→PDF)
   - Recommendation: use `playwright` for pixel-perfect PNG rendering of an HTML template
   - Alternative: build entirely client-side with `html2canvas` npm package (no backend needed)
   - Decision: **client-side with `html2canvas`** (simpler, no server resources, no playwright install)
 
 #### Frontend — Report Card Component
-- [ ] `FE` Create `frontend/components/GasReportCard.tsx`:
+- [x] `FE` Create `frontend/components/GasReportCard.tsx`:
   - Hidden off-screen div rendered with fixed 800×450px dimensions (Twitter card ratio)
   - Content:
     ```
@@ -1052,12 +1053,12 @@ showing GAS score, grade, regime, key signals, and disclaimer. Shareable to Twit
   - Fin-Eye brand colours: `bg-slate-950`, emerald/sky/amber accents
   - Logo text "fin-eye" in top-left (no external image dependency)
 
-- [ ] `FE` Add `html2canvas` to `frontend/package.json`:
+- [x] `FE` Add `html2canvas` to `frontend/package.json`:
   ```bash
   npm install html2canvas
   ```
 
-- [ ] `FE` In `frontend/app/page.tsx` dashboard, add "Share Analysis" button in the dashboard header area:
+- [x] `FE` In `frontend/app/page.tsx` dashboard, add "Share Analysis" button in the dashboard header area:
   ```typescript
   const handleShare = async () => {
       const canvas = await html2canvas(document.getElementById("gas-report-card")!);
@@ -1080,7 +1081,7 @@ showing GAS score, grade, regime, key signals, and disclaimer. Shareable to Twit
   };
   ```
 
-- [ ] `FE` "Share" button in dashboard header: `<Share2 className="h-4 w-4" /> Share Analysis`
+- [x] `FE` "Share" button in dashboard header: `<Share2 className="h-4 w-4" /> Share Analysis`
   - Shows a small dropdown: [📥 Download PNG] [🐦 Share on X] [💼 Share on LinkedIn] [📱 Share via Device]
   - Twitter/X share: `https://twitter.com/intent/tweet?text=...&url=https://fin-eye.app`
   - LinkedIn share: `https://www.linkedin.com/sharing/share-offsite/?url=...`
@@ -1390,7 +1391,7 @@ frontend/lib/api.ts                          # fetchVolEstimate()
 | 50 | Referral Program + Social Proof | 🟡 MEDIUM | Medium | Medium | 1 migration | Planned |
 | 51 | TypeScript Strict + Lighthouse CI | 🟡 MEDIUM | None | Heavy | None | Planned |
 | 52 | Discussion Threads + Poll | 🟡 MEDIUM | Medium | Medium | 2 migrations | ✅ Complete |
-| 53 | Shareable Report Card | 🟡 MEDIUM | None | Light | None | Planned |
+| 53 | Shareable Report Card | 🟡 MEDIUM | None | Light | None | ✅ Complete |
 | 54 | Bond Ladder Builder | 🟢 LOW-MED | Light | Medium | None | Planned |
 | 55 | B2B Billing + Compliance Export | 🟢 LOW | Medium | Medium | 1 migration | Planned |
 | 56 | Advanced Monte Carlo Simulation | 🟠 HIGH | Heavy | Heavy | None | Planned |

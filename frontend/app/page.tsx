@@ -35,6 +35,7 @@ import WhatChangedToday from "../components/WhatChangedToday";
 import SocialSignalsPanel from "../components/SocialSignalsPanel";
 import TickerComments from "../components/TickerComments";  // Sprint 52
 import WeeklyPoll from "../components/WeeklyPoll";              // Sprint 52
+import GasReportCard from "../components/GasReportCard";        // Sprint 53
 import FreshnessIndicator from "../components/FreshnessIndicator";
 import DataSourceStatus from "../components/DataSourceStatus";
 import CrossAssetRow from "../components/CrossAssetRow";
@@ -971,6 +972,37 @@ export default function DashboardPage() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("fin-eye-tech-explain-open") === "true";
   });
+
+  // Sprint 53 — Share Analysis state
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
+
+  const handleShare = async (method: "download" | "twitter" | "linkedin" | "device") => {
+    setSharing(true);
+    setShareOpen(false);
+    try {
+      const h2c = (await import("html2canvas")).default;
+      const card = document.getElementById("gas-report-card");
+      if (!card) return;
+      const canvas = await h2c(card, { backgroundColor: "#020617", scale: 2 });
+      const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/png"));
+      const filename = `fin-eye-${activeSymbol}-${new Date().toISOString().slice(0, 10)}.png`;
+      const text = `${activeSymbol} GAS Score: ${gasScore.toFixed(0)}/100 (Grade ${gasSnapshot?.signal_grade ?? "?"}) on Fin-Eye`;
+      const url = "https://fin-eye.app";
+      if (method === "download") {
+        const a = document.createElement("a");
+        a.download = filename;
+        a.href = URL.createObjectURL(blob);
+        a.click();
+      } else if (method === "twitter") {
+        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank");
+      } else if (method === "linkedin") {
+        window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, "_blank");
+      } else if (method === "device" && navigator.share) {
+        await navigator.share({ title: `${activeSymbol} Analysis`, text, files: [new File([blob], filename, { type: "image/png" })] });
+      }
+    } catch { /* silent */ } finally { setSharing(false); }
+  };
   const toggleTechExplain = useCallback(() => {
     setTechExplainOpen((v) => {
       const next = !v;
@@ -1287,6 +1319,20 @@ export default function DashboardPage() {
                 clickable
                 symbol={activeSymbol}
               />
+              {/* Sprint 53 — Share Analysis */}
+              <div className="relative ml-auto">
+                <button onClick={() => setShareOpen(o => !o)} disabled={sharing}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-600 transition-all disabled:opacity-40">
+                  📤 {sharing ? "Generating…" : "Share Analysis"}
+                </button>
+                {shareOpen && (
+                  <div className="absolute right-0 top-8 z-50 w-44 rounded-xl border border-slate-700 bg-slate-900 shadow-xl py-1">
+                    {[["download","📥 Download PNG"],["twitter","🐦 Share on X"],["linkedin","💼 LinkedIn"],["device","📱 Share via Device"]].map(([m,l]) => (
+                      <button key={m} onClick={() => handleShare(m as any)} className="w-full text-left px-4 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">{l}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {/* Sprint 41 — Asset class badge */}
               {(() => {
                 const sym = activeSymbol.toUpperCase();
@@ -1941,6 +1987,10 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+      {/* Sprint 53 — Hidden report card for html2canvas capture */}
+      <GasReportCard symbol={activeSymbol} gasScore={gasScore} grade={gasSnapshot?.signal_grade}
+        regime={regimeFromSnapshot ?? null} techScore={techScore} sentScore={sentScore0100}
+        macroScore={macroScore} signals={signals} currentPrice={currentPrice} />
     </div>
   );
 }
