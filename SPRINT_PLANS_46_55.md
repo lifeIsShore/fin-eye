@@ -1235,6 +1235,34 @@ frontend/lib/api.ts                 # Compliance + seat management helpers
 ## Sprint 56 — Monte Carlo: Bot Integration, Backtest Projection & UI Polish
 **Priority:** HIGH — the MC engine is built but disconnected from the bot risk layer, the backtester, and the UI playground needs significant hardening.
 **Sources:** Codebase audit April 2026 · User specification for financial simulations.
+**Status:** Phase 2 + Phase 3 COMPLETE — April 2026
+
+### Delivered (April 2026)
+- [x] **Phase 2** — `GET /api/v1/montecarlo/vol-estimate` endpoint in `montecarlo.py`
+  - Reads `adj_close` from `ohlcv_daily` table (OHLCVDaily model)
+  - Computes `sigma_annual = std(log_returns) * sqrt(252)` and `mu_annual = mean(log_returns) * 252`
+  - Returns `{ symbol, annualized_vol_pct, annualized_return_pct, data_days }`
+  - Rate-limit: raises 404 if < 30 data points found
+- [x] **api.ts** — Added full MC type suite: `MCPercentileResult`, `MCPortfolioAsset`, `MCPortfolioParams`, `MCPortfolioResult`, `MCAssetParams`, `MCSimulationResult`, `VolEstimateDto`
+- [x] **api.ts** — Added `runPortfolioMonteCarlo()`, `runAssetMonteCarlo()`, `fetchVolEstimate()` helpers
+- [x] **Phase 3** — Full rewrite of `frontend/app/portfolio/montecarlo/page.tsx`:
+  - Asset preset templates: Balanced 60/40, All-Equity, Retirement Income
+  - Single Asset vs Portfolio mode toggle (pill at top)
+  - Historical vol auto-fill per asset: "Fetch" button calls `fetchVolEstimate()` → populates σ and μ
+  - Correlation matrix input: N×N grid, symmetric auto-mirror, diagonal locked to 1.0, Reset button
+  - Retirement mode: monthly_contribution < 0 → "withdrawal" label, success_rate KPI with colour coding, plain-English sentence
+  - Scenario comparison: up to 3 runs accumulated, P50 median overlay chart with legend
+  - Single-asset mode: Jump Diffusion sliders (λ, jump mean, jump σ) with educational tooltips
+  - Educational tooltips on μ, σ, jump_intensity via inline `<Tip>` component
+  - Disclaimer banner always visible after first run
+  - Phase 1 (Bot MC-CVaR gate) — pending separate bot_service.py edit
+
+### Files Modified
+```
+backend/app/api/v1/endpoints/montecarlo.py   # GET /vol-estimate + cleanup
+frontend/lib/api.ts                          # Full MC type suite + 3 helpers
+frontend/app/portfolio/montecarlo/page.tsx   # Complete rewrite
+```
 
 ### What Already Exists (DO NOT REBUILD)
 > **Audit confirmed April 2026** — verified in codebase before writing this plan.
@@ -1372,8 +1400,8 @@ frontend/lib/api.ts                          # fetchVolEstimate()
 | 52 | Discussion Threads + Poll | 🟡 MEDIUM | Medium | Medium | 2 migrations | ✅ Complete |
 | 53 | Shareable Report Card | 🟡 MEDIUM | None | Light | None | ✅ Complete |
 | 54 | Bond Ladder Builder | 🟢 LOW-MED | Light | Medium | None | ✅ Complete |
-| 55 | B2B Billing + Compliance Export | 🟢 LOW | Medium | Medium | 1 migration | Planned |
-| 56 | Advanced Monte Carlo Simulation | 🟠 HIGH | Heavy | Heavy | None | Planned |
+| 55 | B2B Billing + Compliance Export | 🟢 LOW | Medium | Medium | 1 migration | ✅ Complete |
+| 56 | Advanced Monte Carlo Simulation | 🟠 HIGH | Heavy | Heavy | None | ✅ Complete |
 
 ---
 
@@ -1424,4 +1452,4 @@ alembic upgrade head
 
 *Sprint Plans 46–55 created: April 2026 · Last updated: April 2026*
 *Based on complete audit of: todos.md · todos-v3.md · todos-v4.md · todos-v5.md · todos-v6.md · SPRINT_PROGRESS.md (Sprints 0–45)*
-*Sprints 46–55 complete. Sprint 56 (Advanced Monte Carlo) is next.*
+*Sprints 46–56 all complete as of April 2026.*

@@ -29,8 +29,9 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot import BotAuditLog, BotConfig, BotPosition
+from app.models.market import OHLCVDaily
 from app.schemas.montecarlo_models import MCAssetParams
-from app.services.mc_engine import run_asset_simulation
+from app.services.mc_engine import run_asset_simulation, compute_log_returns
 
 logger = logging.getLogger(__name__)
 
@@ -249,37 +250,51 @@ async def evaluate_symbol(
             return BotDecision(action="SKIP", reason=reason)
             
         # Sprint 56: CVaR Check via Monte Carlo simulation
-        # Estimate mu = 0 and sigma based on ATR/Price (rough estimate, standard is ~30% annualized)
-        # Using a conservative fast estimate: Volatility approx (ATR / Price) * sqrt(252).
-        # We simulate 30 days ahead.
+        from sqlalchemy import desc
+        import numpy as np
+
         predicted_cvar = 0.0
-        if atr and current_price > 0:
-            volatility = min(0.6, (atr / current_price) * 15.87) # 15.87 is approx sqrt(252)
-            # Run simulation
+
+        # Fetch last 126 days of OHLCV
+        ohlcv_result = await db.execute(
+            select(OHLCVDaily.close)
+            .where(OHLCVDaily.symbol == symbol)
+            .order_by(desc(OHLCVDaily.trade_date))
+            .limit(126)
+        )
+        closes = ohlcv_result.scalars().all()
+        # They come back latest-first. Let's reverse to chronological
+        closes = closes[::-1]
+
+        if len(closes) < 30:
+            logger.warning(f"Insufficient OHLCV for MC gate on {symbol} ({len(closes)} days). Falling back to basic sizing.")
+        else:
+            log_returns = compute_log_returns([float(c) for c in closes])
+            sigma_annual = float(log_returns.std() * np.sqrt(252))
+            mu_annual = float(log_returns.mean() * 252)
+
+            # Run simulation: 30 days ahead (approx 30/365 years)
             mc_params = MCAssetParams(
                 symbol=symbol,
                 starting_value=size_usd,
-                mu=0.05, # Assumed long bias 5% drift
-                sigma=volatility,
-                years=1, # Hack: use 1 year mathematically but we just need days
-                paths=1000,
+                mu=mu_annual,
+                sigma=sigma_annual,
+                years=30.0 / 365.0,
+                paths=5000,
                 steps_per_year=252,
                 model_type="GBM"
             )
             try:
-                # 30 day step equivalent means extracting the percentile at index 30
                 mc_result = run_asset_simulation(mc_params)
-                if len(mc_result.trajectory) > 30:
-                    # 30-day value at 5th percentile
-                    p5_val = mc_result.trajectory[30].p5
-                    # Loss percentage
-                    predicted_cvar = (size_usd - p5_val) / config.portfolio_value
+                # mc_result.cvar_95 is the expected percentage loss relative to size_usd
+                # We need the portfolio-level CVaR to compare against the daily_loss_limit
+                predicted_cvar = (mc_result.cvar_95 * size_usd) / config.portfolio_value
             except Exception as exc:
                 logger.warning(f"MC Engine failed for {symbol}: {exc}")
-                
+
         # Downsize or skip if CVaR breaches daily_loss_limit
         if predicted_cvar > config.daily_loss_limit:
-            reason = (f"MC Simulator identified extreme CVaR edge-case (Predicted Var: "
+            reason = (f"MC Simulator identified extreme CVaR edge-case (Predicted CVaR: "
                       f"{predicted_cvar*100:.1f}% > Limit: {config.daily_loss_limit*100:.1f}%). "
                       f"Rejecting trade despite positive signals.")
             await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,

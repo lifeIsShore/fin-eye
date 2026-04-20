@@ -3227,6 +3227,119 @@ export async function runPortfolioMonteCarlo(
   return res.json();
 }
 
+// ─── Monte Carlo Simulation (Sprint 47 / Sprint 56) ───────────────────────────────
+
+export interface MCPercentileResult {
+  step: number;
+  day: number;
+  p5: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p95: number;
+  mean: number;
+}
+
+export interface MCPortfolioAsset {
+  symbol: string;
+  starting_value: number;
+  mu: number;
+  sigma: number;
+  model_type?: "GBM" | "JUMP_DIFFUSION";
+  jump_intensity?: number;
+  jump_mean?: number;
+  jump_std?: number;
+}
+
+export interface MCPortfolioParams {
+  assets: MCPortfolioAsset[];
+  correlation_matrix?: number[][] | null;
+  starting_capital: number;
+  monthly_contribution: number;
+  years: number;
+  paths?: number;
+  steps_per_year?: number;
+}
+
+export interface MCPortfolioResult {
+  final_median: number;
+  final_p5: number;
+  final_p95: number;
+  success_rate: number;
+  trajectory: MCPercentileResult[];
+}
+
+export interface MCAssetParams {
+  symbol: string;
+  starting_value: number;
+  mu: number;
+  sigma: number;
+  years: number;
+  paths?: number;
+  steps_per_year?: number;
+  model_type?: "GBM" | "JUMP_DIFFUSION";
+  jump_intensity?: number;
+  jump_mean?: number;
+  jump_std?: number;
+}
+
+export interface MCSimulationResult {
+  symbol: string;
+  final_median: number;
+  final_p5: number;
+  final_p95: number;
+  max_drawdown_p95: number;
+  cvar_95: number;
+  paths_generated: number;
+  trajectory: MCPercentileResult[];
+}
+
+export interface VolEstimateDto {
+  symbol: string;
+  annualized_vol_pct: number;
+  annualized_return_pct: number;
+  data_days: number;
+}
+
+export async function runPortfolioMonteCarlo(params: MCPortfolioParams): Promise<MCPortfolioResult> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/montecarlo/portfolio`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ paths: 5000, steps_per_year: 12, ...params }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string };
+    throw new Error(err.detail || "Monte Carlo simulation failed");
+  }
+  return res.json();
+}
+
+export async function runAssetMonteCarlo(params: MCAssetParams): Promise<MCSimulationResult> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/montecarlo/asset`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ paths: 5000, steps_per_year: 252, ...params }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string };
+    throw new Error(err.detail || "Asset simulation failed");
+  }
+  return res.json();
+}
+
+export async function fetchVolEstimate(symbol: string, days = 252): Promise<VolEstimateDto> {
+  const params = new URLSearchParams({ symbol, days: String(days) });
+  const res = await fetch(`${API_BASE_URL}/api/v1/montecarlo/vol-estimate?${params}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string };
+    throw new Error(err.detail || `No vol data for ${symbol}`);
+  }
+  return res.json();
+}
+
 // ─── Bond Ladder Builder (Sprint 54) ──────────────────────────────────────────────────────
 
 export interface BondRung {

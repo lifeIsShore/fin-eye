@@ -2,6 +2,13 @@ import numpy as np
 from typing import Tuple, List
 from app.schemas.montecarlo_models import MCAssetParams, MCSimulationResult, MCPercentileResult, MCPortfolioParams, MCPortfolioResult
 
+def compute_log_returns(prices: List[float]) -> np.ndarray:
+    """Compute daily logarithmic returns from an array of prices."""
+    if len(prices) < 2:
+        return np.array([])
+    prices_array = np.array(prices)
+    return np.diff(np.log(prices_array))
+
 def run_gbm_paths(S0: float, mu: float, sigma: float, T: float, steps: int, paths: int) -> np.ndarray:
     """
     Generate paths using Geometric Brownian Motion.
