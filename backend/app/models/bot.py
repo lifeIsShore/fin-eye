@@ -33,6 +33,7 @@ class BotConfig(Base):
     min_grade        = Column(String(3), default="B", nullable=False)         # minimum grade to trade
     max_position_pct = Column(Float, default=0.20, nullable=False)            # max % per symbol
     max_total_pct    = Column(Float, default=0.80, nullable=False)            # max % total deployed
+    max_sector_pct   = Column(Float, default=0.40, nullable=False)            # max % in one sector
     daily_loss_limit = Column(Float, default=0.03, nullable=False)            # pause if daily PnL < -3%
     portfolio_value  = Column(Float, default=10000.0, nullable=False)         # starting paper value
     halt_flag        = Column(Boolean, default=False, nullable=False)         # kill switch

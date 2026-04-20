@@ -422,13 +422,13 @@ export interface BacktestRequest {
 
 /** Sprint 25 — individual trade extracted from the backtest position series */
 export interface TradeRecord {
-  entry_date:   string;
-  exit_date:    string;
-  entry_price:  number;
-  exit_price:   number;
-  return_pct:   number;
+  entry_date: string;
+  exit_date: string;
+  entry_price: number;
+  exit_price: number;
+  return_pct: number;
   holding_days: number;
-  side:         string;
+  side: string;
 }
 
 export interface BacktestStats {
@@ -2607,20 +2607,20 @@ export async function evaluateSavedIndicator(
 // ── Grade History ────────────────────────────────────────────────────────────
 
 export interface GradeHistoryPoint {
-  symbol?:          string;
-  grade:            string;
-  prev_grade:       string | null;
-  grade_score:      number | null;
-  gas_score:        number;
+  symbol?: string;
+  grade: string;
+  prev_grade: string | null;
+  grade_score: number | null;
+  gas_score: number;
   component_scores: Record<string, number> | null;
-  tradeable:        string | boolean | null;
-  recorded_at:      string;
+  tradeable: string | boolean | null;
+  recorded_at: string;
 }
 
 export interface GradeHistoryResponse {
-  symbol:  string;
+  symbol: string;
   history: GradeHistoryPoint[];
-  total:   number;
+  total: number;
 }
 
 /**
@@ -2642,33 +2642,33 @@ export async function fetchGradeHistory(
 // ── AI Allocation (Sprint 27) ──────────────────────────────────────────────────
 
 export interface AllocationRequest {
-  symbols:       string[];
+  symbols: string[];
   total_capital: number;
-  min_grade:     string;   // "A+" | "A" | "B" | "C"
+  min_grade: string;   // "A+" | "A" | "B" | "C"
 }
 
 export interface PositionSuggestion {
-  symbol:           string;
-  grade:            string;
-  grade_score:      number | null;
-  gas_score:        number;
-  tradeable:        boolean;
-  weight_pct:       number;
-  position_usd:     number;
-  included:         boolean;
+  symbol: string;
+  grade: string;
+  grade_score: number | null;
+  gas_score: number;
+  tradeable: boolean;
+  weight_pct: number;
+  position_usd: number;
+  included: boolean;
   exclusion_reason: string | null;
 }
 
 export interface AllocationResponse {
-  total_capital:       number;
-  min_grade:           string;
-  positions:           PositionSuggestion[];
+  total_capital: number;
+  min_grade: string;
+  positions: PositionSuggestion[];
   total_allocated_pct: number;
-  cash_pct:            number;
-  cash_usd:            number;
-  included_count:      number;
-  excluded_count:      number;
-  disclaimer:          string;
+  cash_pct: number;
+  cash_usd: number;
+  included_count: number;
+  excluded_count: number;
+  disclaimer: string;
 }
 
 export async function fetchAllocationSuggestion(
@@ -2739,11 +2739,11 @@ export async function fetchSymbolSearch(
 // ── OHLCV price chart data (Sprint 27) ────────────────────────────────────────
 
 export interface OhlcvPoint {
-  date:   string;
-  open:   number;
-  high:   number;
-  low:    number;
-  close:  number;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
   volume: number;
 }
 
@@ -3121,10 +3121,10 @@ async function _botAction(path: string, body?: object): Promise<void> {
   if (!res.ok) throw new Error(`Bot action failed: ${res.status}`);
 }
 
-export const enableBot  = () => _botAction("enable");
+export const enableBot = () => _botAction("enable");
 export const disableBot = () => _botAction("disable");
-export const resumeBot  = () => _botAction("resume");
-export const haltBot    = (closeAll = false) => _botAction("halt", { close_all: closeAll });
+export const resumeBot = () => _botAction("resume");
+export const haltBot = (closeAll = false) => _botAction("halt", { close_all: closeAll });
 
 // ── Sprint 56: Monte Carlo ───────────────────────────────────────────────
 

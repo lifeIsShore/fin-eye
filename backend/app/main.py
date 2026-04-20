@@ -17,20 +17,6 @@ from app.middleware.metrics_middleware import MetricsMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware  # SEC-06
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler  # BUG-005
 
-# Sprint 44 — Sentry error monitoring (no-op when SENTRY_DSN is unset)
-try:
-    import sentry_sdk  # type: ignore
-    _sentry_dsn = __import__("os").environ.get("SENTRY_DSN", "")
-    if _sentry_dsn:
-        sentry_sdk.init(
-            dsn=_sentry_dsn,
-            traces_sample_rate=0.05,
-            environment=__import__("os").environ.get("APP_ENV", "production"),
-        )
-        logger.info("Sentry initialised (DSN configured)")
-except ImportError:
-    pass  # sentry-sdk not installed — monitoring disabled
-
 import app.models  # noqa: F401 — side-effect: registers all ORM models with Base
 
 from app.api.v1.health import router as health_router
@@ -51,6 +37,21 @@ from app.api.public.v1 import router as public_v1_router
 settings = get_settings()
 logging.basicConfig(level=logging.INFO)
 logger   = logging.getLogger(__name__)
+
+# Sprint 44 — Sentry error monitoring (no-op when SENTRY_DSN is unset)
+try:
+    import sentry_sdk  # type: ignore
+    import os as _os
+    _sentry_dsn = _os.environ.get("SENTRY_DSN", "")
+    if _sentry_dsn:
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            traces_sample_rate=0.05,
+            environment=_os.environ.get("APP_ENV", "production"),
+        )
+        logger.info("Sentry initialised (DSN configured)")
+except ImportError:
+    pass  # sentry-sdk not installed — monitoring disabled
 
 
 @asynccontextmanager
@@ -215,7 +216,7 @@ app.include_router(fed_policy.router,     prefix="/api/v1/fed-policy",     tags=
 app.include_router(indicators.router,     prefix="/api/v1/indicators",     tags=["Custom Indicators"])
 app.include_router(allocation.router,     prefix="/api/v1/allocation",     tags=["AI Allocation"])
 app.include_router(billing.router,        prefix="/api/v1/billing",        tags=["Billing & Monetisation"])
-app.include_router(social_signals.router, prefix="/api/v1/sentiment",      tags=["Social Signals"])
+app.include_router(social_signals.router, prefix="/api/v1/social-signals",  tags=["Social Signals"])
 app.include_router(tenants.router,       prefix="/api/v1/tenants",        tags=["B2B Tenants"])
 app.include_router(bot.router,           prefix="/api/v1/bot",            tags=["Paper Trading Bot"])
 app.include_router(montecarlo.router,    prefix="/api/v1/montecarlo",     tags=["Monte Carlo Simulation"])

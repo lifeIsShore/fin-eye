@@ -205,7 +205,7 @@ async def halt_bot(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Kill switch — sets halt_flag immediately. Optionally closes all open positions at market."""
-    from datetime import timezone as tz  # noqa: PLC0415
+    from datetime import datetime as _dt, timezone as tz  # noqa: PLC0415
     config = await _get_or_create_config(db, current_user.id)
     config.halt_flag = True
 
@@ -221,7 +221,7 @@ async def halt_bot(
             price = await _fetch_current_price(pos.symbol) or pos.entry_price
             pnl = round((price - pos.entry_price) * pos.size_units, 2)
             pos.is_open = False
-            pos.closed_at = datetime.now(tz.utc)
+            pos.closed_at = _dt.now(tz.utc)
             pos.close_price = price
             pos.close_reason = "manual"
             pos.pnl_usd = pnl

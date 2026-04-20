@@ -1453,3 +1453,65 @@ alembic upgrade head
 *Sprint Plans 46–55 created: April 2026 · Last updated: April 2026*
 *Based on complete audit of: todos.md · todos-v3.md · todos-v4.md · todos-v5.md · todos-v6.md · SPRINT_PROGRESS.md (Sprints 0–45)*
 *Sprints 46–56 all complete as of April 2026.*
+
+---
+
+## Reconciliation Fixes — April 2026
+
+Full codebase audit performed. All items below patched in one session.
+
+### Fixed
+- [x] **scheduler.py — Syntax error** in `_make_scheduler()`: `logger.info(...)` was outside the `if` block before the `else`, causing a `SyntaxError` on import. Fixed indentation.
+- [x] **scheduler.py — Duplicate `job_bot_evaluate`**: Function was defined twice (stub + full impl) and registered twice in `setup_scheduler()`. Removed the stub definition; removed the second `add_job` call. Only one registration remains at `minute="2,17,32,47"`.
+- [x] **main.py — Sentry `NameError`**: `logger.info("Sentry initialised...")` was called before `logger = logging.getLogger(__name__)`. Moved Sentry block to after logger initialisation. Also replaced `__import__("os")` with clean `import os as _os`.
+- [x] **main.py — `social_signals` prefix collision**: Router was mounted at `/api/v1/sentiment` (same prefix as `sentiment.router`), causing route shadowing. Changed to `/api/v1/social-signals`.
+- [x] **WatchlistWidget.tsx — TS type error**: `tsc_errors_v2.txt` showed `"A_above"` (wrong case). Current code already has correct lowercase `a_above`/`b_above` — confirmed fixed in a prior session.
+
+### Pending Manual Actions
+- [ ] **BUG-013**: Run `fix_bug013.bat` from project root, then rotate ALL secrets (JWT_SECRET, FINNHUB_API_KEY, STRIPE_SECRET_KEY, REDIS_PASSWORD, etc.)
+- [ ] **Delete temp files**: `SPRINT_PROGRESS_append.md`, `SPRINT_PROGRESS_header.md`, `todos-v6-patch.md`, `changed_files.txt`, `commit_files.txt`, `files_changed.txt`, `files_changed_v2.txt`, `last_commit.txt`, `tmp_latest_commit.txt` — all safe to delete.
+- [ ] **Delete backend log artifacts**: `alembic_err.txt`, `alembic_out.txt`, `uvicorn.log`, `build.log` etc. in `backend/` — development noise, add to `.gitignore`.
+- [ ] **Sprint 57**: Add basic test coverage for Bot, MC, Comments, Polls endpoints.
+
+---
+
+## Sprint 57 — Test Coverage for Sprints 47/52/56
+**Completed:** April 2026
+
+### Delivered
+- [x] **`tests/api/test_bot_api.py`** — 14 tests covering GET/PATCH config, enable/disable/halt/resume, audit-log (with symbol filter), positions (empty state), and performance (mocked).
+- [x] **`tests/api/test_comments_api.py`** — 13 tests covering list (empty + unknown symbol), post (success, too short/long, banned word, lowercase symbol normalisation, appears in list), delete (own, forbidden by other user, nonexistent), and react (upvote, toggle-off, invalid type).
+- [x] **`tests/api/test_polls_api.py`** — 8 tests covering no-poll 404, structure, bullish vote, vote-change upsert (no duplicate), invalid option 422, nonexistent poll 404, closed poll 400, and user_vote reflected in GET /current.
+- [x] **`tests/api/test_montecarlo_api.py`** — 9 tests covering asset (success, >50k paths, >3650 steps), portfolio (success, >50 assets), vol-estimate (insufficient data 404, success with seeded OHLCV rows, lowercase symbol normalisation).
+
+### Files Created
+```
+backend/tests/api/test_bot_api.py
+backend/tests/api/test_comments_api.py
+backend/tests/api/test_polls_api.py
+backend/tests/api/test_montecarlo_api.py
+```
+
+---
+
+## Sprint 58 — Bug Fixes, Performance & README
+**Completed:** April 2026
+
+### Bugs Fixed
+- [x] **`bot.py` — `NameError: datetime`** in `halt_bot()`: `datetime.now()` was called but only `timezone` was imported. Fixed by importing `datetime as _dt` alongside `timezone as tz`.
+- [x] **`bot_service.py` — sync `run_asset_simulation` blocking event loop**: MC simulation (CPU-bound, ~200ms) was called directly in async context, blocking the entire event loop during every BUY evaluation. Wrapped in `loop.run_in_executor(None, run_asset_simulation, mc_params)`.
+- [x] **`bot_service.py` — imports inside hot loop**: `from sqlalchemy import desc` and `import numpy as np` were inside the `evaluate_symbol()` function body (called every 15 min per user × symbol). Moved to module-level imports. Also `asyncio` added to imports.
+- [x] **`bot.py` model — missing `max_sector_pct` column**: Sprint plan SQL defined `max_sector_pct FLOAT DEFAULT 0.40` but it was absent from the SQLAlchemy ORM model. Added column with `default=0.40`.
+
+### Bugs Identified (for manual fix / next sprint)
+- [ ] **`bot_configs` Alembic migration** — needs a new revision adding `max_sector_pct` column to the existing table: `alembic revision -m "add_bot_config_max_sector_pct"` then `alembic upgrade head`.
+- [ ] **`BotConfigUpdate` schema** — should expose `max_sector_pct` as a PATCH-able field (range 0.10–0.60) so users can set it from the UI.
+- [ ] **Audit log symbol filter bug** — `GET /bot/audit-log?symbol=NVDA` currently filters strictly by symbol but ENABLE/DISABLE/HALT/RESUME actions have `symbol=NULL`. The filter should either be symbol-only OR allow a `include_system=true` query param to also return null-symbol actions.
+
+### Performance Improvements Identified
+- [ ] **`get_positions` N+1 price fetch** — `GET /bot/positions` calls `_fetch_current_price(symbol)` serially for every open position. Should be batched with `asyncio.gather(*[_fetch_current_price(p.symbol) for p in open_positions])`.
+- [ ] **`gas_precompute` batch is serial** — symbols are processed one-by-one in a `for` loop. Could run 4–6 symbols concurrently with `asyncio.gather` (with semaphore to cap DB connections).
+- [ ] **`bot_audit_log` will grow unboundedly** — a SKIP is logged every 15 min per user × symbol even when nothing happens. At 10 symbols × 96 runs/day = 960 rows/user/day. Add a TTL cleanup job or only log non-SKIP/non-HOLD actions with a configurable `verbose_logging` flag on BotConfig.
+
+### README
+- [x] **Full README rewrite** — old README was titled "Yagmur Terminal" (old project name), described only the original MVP features, and was missing all 56+ sprints of new capabilities. New README covers: GAS, Signal Grade system, ML engine (XGBoost + LightGBM + Optuna), all data sources, Paper Trading Bot, MC simulation, Backtesting, Community features, full stack table, security model, running locally, and all required env keys.

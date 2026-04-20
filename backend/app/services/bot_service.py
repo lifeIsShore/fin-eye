@@ -20,12 +20,14 @@ All decisions logged to bot_audit_log (even SKIP/HOLD).
 from __future__ import annotations
 
 import logging
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select, func
+import numpy as np
+from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot import BotAuditLog, BotConfig, BotPosition
@@ -249,48 +251,34 @@ async def evaluate_symbol(
                        gas_score=gas_score, price=current_price)
             return BotDecision(action="SKIP", reason=reason)
             
-        # Sprint 56: CVaR Check via Monte Carlo simulation
-        from sqlalchemy import desc
-        import numpy as np
-
+        # Sprint 56: CVaR gate via Monte Carlo (run in executor — CPU-bound)
         predicted_cvar = 0.0
 
-        # Fetch last 126 days of OHLCV
         ohlcv_result = await db.execute(
             select(OHLCVDaily.close)
             .where(OHLCVDaily.symbol == symbol)
             .order_by(desc(OHLCVDaily.trade_date))
             .limit(126)
         )
-        closes = ohlcv_result.scalars().all()
-        # They come back latest-first. Let's reverse to chronological
-        closes = closes[::-1]
+        closes = list(reversed(ohlcv_result.scalars().all()))
 
         if len(closes) < 30:
-            logger.warning(f"Insufficient OHLCV for MC gate on {symbol} ({len(closes)} days). Falling back to basic sizing.")
+            logger.warning("Insufficient OHLCV for MC gate on %s (%d days). Skipping CVaR check.", symbol, len(closes))
         else:
             log_returns = compute_log_returns([float(c) for c in closes])
             sigma_annual = float(log_returns.std() * np.sqrt(252))
             mu_annual = float(log_returns.mean() * 252)
-
-            # Run simulation: 30 days ahead (approx 30/365 years)
             mc_params = MCAssetParams(
-                symbol=symbol,
-                starting_value=size_usd,
-                mu=mu_annual,
-                sigma=sigma_annual,
-                years=30.0 / 365.0,
-                paths=5000,
-                steps_per_year=252,
-                model_type="GBM"
+                symbol=symbol, starting_value=size_usd,
+                mu=mu_annual, sigma=sigma_annual,
+                years=30.0 / 365.0, paths=5000, steps_per_year=252, model_type="GBM"
             )
             try:
-                mc_result = run_asset_simulation(mc_params)
-                # mc_result.cvar_95 is the expected percentage loss relative to size_usd
-                # We need the portfolio-level CVaR to compare against the daily_loss_limit
+                loop = asyncio.get_running_loop()
+                mc_result = await loop.run_in_executor(None, run_asset_simulation, mc_params)
                 predicted_cvar = (mc_result.cvar_95 * size_usd) / config.portfolio_value
             except Exception as exc:
-                logger.warning(f"MC Engine failed for {symbol}: {exc}")
+                logger.warning("MC Engine failed for %s: %s", symbol, exc)
 
         # Downsize or skip if CVaR breaches daily_loss_limit
         if predicted_cvar > config.daily_loss_limit:

@@ -51,7 +51,7 @@ def _make_scheduler() -> AsyncIOScheduler:
                 tablename="apscheduler_jobs",
             )
         }
-    logger.info("APScheduler: using SQLAlchemy jobstore (table=apscheduler_jobs)")
+        logger.info("APScheduler: using SQLAlchemy jobstore (table=apscheduler_jobs)")
     else:
         jobstores = {}
         logger.warning("APScheduler: DATABASE_URL not set — falling back to in-memory jobstore")
@@ -686,9 +686,8 @@ async def job_run_optuna_tuning() -> None:
 
 async def job_bot_evaluate() -> None:
     """
-    Sprint 47 — Paper trading bot: evaluate every bot-enabled user's watchlist
-    every 15 minutes during market hours (Mon–Fri 13:00–21:00 UTC).
-    Runs 2 min after GAS precompute to ensure fresh GAS snapshots.
+    Sprint 47 — Paper trading bot: evaluate every bot-enabled user's watchlist.
+    Registered once in setup_scheduler() at minute=2,17,32,47 during market hours.
     """
     from sqlalchemy import select as sa_select  # noqa: PLC0415
     from app.models.user import User            # noqa: PLC0415
@@ -1060,12 +1059,6 @@ def setup_scheduler() -> AsyncIOScheduler:
         trigger=CronTrigger(hour=9, minute=0),
         id="churn_check", name="Pro User Churn Early Warning",
         replace_existing=True, misfire_grace_time=3600)
-
-    # Sprint 47 — Paper trading bot: every 15 min during market hours, 2 min after GAS precompute
-    scheduler.add_job(job_bot_evaluate,
-        trigger=CronTrigger(day_of_week="mon-fri", hour="13-21", minute="2,17,32,47"),
-        id="bot_evaluate", name="Paper Trading Bot Evaluate",
-        replace_existing=True, misfire_grace_time=120)
 
     # Sprint 52 — Create weekly SPY poll every Monday at 00:01 UTC
     scheduler.add_job(job_create_weekly_poll,
