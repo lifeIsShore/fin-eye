@@ -13,7 +13,7 @@ import { PageTransition } from "../components/PageTransition";
 import { NpsSurvey } from "../components/NpsSurvey";
 
 export const metadata = {
-    title: "Yagmur Terminal",
+    title: "Fin-Eye",
     description: "Understand the forces behind price movements",
 };
 
@@ -29,8 +29,13 @@ const REGISTER_SW_SCRIPT = `
 // Sprint 43 — Restore compact/currency prefs on page load
 const RESTORE_PREFS_SCRIPT = `
   try {
-    if (localStorage.getItem('yagmur-terminal-compact') === 'true') {
-      document.documentElement.classList.add('yagmur-terminal-compact');
+    if (localStorage.getItem('fin-eye-compact') === 'true') {
+      document.documentElement.classList.add('fin-eye-compact');
+    }
+    // Legacy key migration
+    if (!localStorage.getItem('fin-eye-compact') && localStorage.getItem('yagmur-terminal-compact') === 'true') {
+      localStorage.setItem('fin-eye-compact', 'true');
+      document.documentElement.classList.add('fin-eye-compact');
     }
   } catch (e) {}
 `;
@@ -77,9 +82,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
                                             {/* Mobile logo (hidden on desktop — logo lives in sidebar) */}
                                             <div className="lg:hidden flex-shrink-0">
-                                                <Link href="/">
-                                                    <span className="text-base font-bold text-slate-100">Yagmur Terminal</span>
-                                                </Link>
+                                            <Link href="/">
+                                            <span className="text-base font-bold text-slate-100">Fin-Eye</span>
+                                            </Link>
                                             </div>
 
                                             {/* Global ticker search — centre of top bar */}

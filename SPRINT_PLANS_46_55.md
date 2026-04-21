@@ -1515,3 +1515,46 @@ backend/tests/api/test_montecarlo_api.py
 
 ### README
 - [x] **Full README rewrite** — old README was titled "Yagmur Terminal" (old project name), described only the original MVP features, and was missing all 56+ sprints of new capabilities. New README covers: GAS, Signal Grade system, ML engine (XGBoost + LightGBM + Optuna), all data sources, Paper Trading Bot, MC simulation, Backtesting, Community features, full stack table, security model, running locally, and all required env keys.
+
+---
+
+## Performance Audit & Bug Fix Session — April 2026
+**Session date:** April 21, 2026
+**Scope:** Full codebase audit — performance, missing components, and bugs.
+
+### 🔴 Critical Bugs Fixed
+
+| # | File | Bug | Fix |
+|---|------|-----|-----|
+| BUG-S58-01 | `scheduler.py` | `job_bot_evaluate` defined **twice** — second definition (lines ~683–795) shadowed first, importing non-existent `get_or_create_config` causing `NameError` every bot cycle | Removed duplicate definition; only original correct implementation kept |
+| BUG-S58-02 | `bot_service.py` | `run_bot_cycle` referenced in scheduler `job_bot_evaluate` but did not exist in module — every bot evaluation would `ImportError` | Added `run_bot_cycle(db)` as proper thin wrapper over `evaluate_symbol` |
+| BUG-S58-03 | `layout.tsx` | App title/metadata/mobile header still showed "Yagmur Terminal" (old project name) | Changed all 3 occurrences to "Fin-Eye"; added legacy `localStorage` key migration |
+
+### 🟠 Performance Improvements Applied
+
+| # | File | Issue | Fix |
+|---|------|-------|-----|
+| PERF-01 | `bot.py` `/positions` endpoint | N+1 serial price fetches — one `_fetch_current_price()` HTTP call per open position (~5–10s for 10 positions) | Replaced with `asyncio.gather()` batch — all prices fetched concurrently |
+| PERF-02 | `gas_precompute.py` `run_gas_precompute_batch()` | Symbols processed serially in a `for` loop | Replaced with `asyncio.gather()` + `Semaphore(4)` — up to 4× faster for default symbol lists |
+| PERF-03 | `scheduler.py` | `job_open_insider_signals` and `job_churn_check` both fired at 09:00 UTC simultaneously — resource contention | Staggered `open_insider_signals` to 09:30 UTC |
+
+### 🟡 Pending Manual Actions
+
+- [x] **`bot_configs` migration** — `max_sector_pct` already present in both ORM model and `s47_001_bot_tables.py` migration. No new migration needed — confirmed by file audit.
+- [x] **`BotConfigUpdate` schema** — `max_sector_pct` exposed as PATCH-able field (range 0.10–0.60) in `bot.py`. `BotConfigResponse` also updated to include it.
+- [x] **`bot_audit_log` verbosity** — `verbose_logging: bool = False` added to `BotConfig` ORM model. All SKIP/HOLD log calls gated behind `config.verbose_logging`. New migration `s59_001_bot_verbose_logging.py` created. `BotConfigUpdate` + `BotConfigResponse` both expose `verbose_logging`.
+- [x] **Audit log `?symbol=` filter** — `include_system: bool = True` query param added to `GET /bot/audit-log`. When `symbol` is set and `include_system=True`, returns symbol matches OR null-symbol system actions (HALT/RESUME/ENABLE/DISABLE) via `OR` clause.
+
+### Files Modified (Session 2 — April 21, 2026)
+```
+backend/app/models/bot.py                              # +verbose_logging column
+backend/app/services/bot_service.py                   # SKIP/HOLD logs gated by verbose_logging (4 sites)
+backend/app/api/v1/endpoints/bot.py                   # +max_sector_pct, +verbose_logging in schemas; include_system param in audit-log
+backend/alembic/versions/s59_001_bot_verbose_logging.py  # NEW migration
+```
+
+### Manual Step Required
+```bash
+cd backend
+alembic upgrade head   # applies s59_001_bot_verbose_logging
+```

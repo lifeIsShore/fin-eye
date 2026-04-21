@@ -228,8 +228,9 @@ async def evaluate_symbol(
     # 6. HOLD: already have position, grade is acceptable
     if position:
         reason = f"Holding {symbol}. Grade: {grade}, GAS: {gas_score:.1f}."
-        await _log(db, user_id, "HOLD", reason, symbol=symbol, grade=grade,
-                   gas_score=gas_score, price=current_price, position_id=position.id, regime=regime)
+        if config.verbose_logging:
+            await _log(db, user_id, "HOLD", reason, symbol=symbol, grade=grade,
+                       gas_score=gas_score, price=current_price, position_id=position.id, regime=regime)
         return BotDecision(action="HOLD", reason=reason, position_id=position.id)
 
     # 7. BUY: no position, grade passes minimum, GAS strong enough
@@ -240,15 +241,17 @@ async def evaluate_symbol(
         if deployed_pct >= config.max_total_pct:
             reason = (f"Max total deployment reached ({deployed_pct*100:.0f}% vs "
                       f"{config.max_total_pct*100:.0f}% limit). Skipping {symbol}.")
-            await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,
-                       gas_score=gas_score, price=current_price, regime=regime)
+            if config.verbose_logging:
+                await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,
+                           gas_score=gas_score, price=current_price, regime=regime)
             return BotDecision(action="SKIP", reason=reason)
 
         size_usd = _kelly_size(gas_score, config.portfolio_value, config.max_position_pct)
         if size_usd <= 0 or current_price <= 0:
             reason = f"Kelly sizing returned 0 for {symbol} at GAS {gas_score:.1f}."
-            await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,
-                       gas_score=gas_score, price=current_price)
+            if config.verbose_logging:
+                await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,
+                           gas_score=gas_score, price=current_price)
             return BotDecision(action="SKIP", reason=reason)
             
         # Sprint 56: CVaR gate via Monte Carlo (run in executor — CPU-bound)
@@ -310,8 +313,9 @@ async def evaluate_symbol(
     # 8. SKIP: grade doesn't pass minimum
     reason = (f"Grade {grade} does not meet minimum {config.min_grade}. "
               f"GAS: {gas_score:.1f}. No action.")
-    await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,
-               gas_score=gas_score, price=current_price, regime=regime)
+    if config.verbose_logging:
+        await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,
+                   gas_score=gas_score, price=current_price, regime=regime)
     return BotDecision(action="SKIP", reason=reason)
 
 
@@ -367,3 +371,70 @@ async def get_bot_performance(db: AsyncSession, user_id: UUID, config: BotConfig
         "best_trade_usd": round(best.pnl_usd or 0, 2) if best else None,
         "worst_trade_usd": round(worst.pnl_usd or 0, 2) if worst else None,
     }
+
+
+# ── Scheduler entry point ─────────────────────────────────────────────────────
+
+async def run_bot_cycle(db: AsyncSession) -> dict:
+    """
+    Called by job_bot_evaluate in scheduler.py every 15 minutes.
+    Iterates all bot-enabled users and their watchlist symbols,
+    running evaluate_symbol() for each pair.
+    Returns a stats dict for metrics recording.
+    """
+    from sqlalchemy import select as sa_select  # noqa: PLC0415
+    from app.models.watchlist import WatchlistItem  # noqa: PLC0415
+    from app.models.gas_snapshot import GasSnapshot  # noqa: PLC0415
+
+    stats = {"users": 0, "evaluations": 0, "buys": 0, "sells": 0, "halts": 0, "errors": 0}
+
+    cfg_result = await db.execute(
+        sa_select(BotConfig).where(
+            BotConfig.is_enabled == True,  # noqa: E712
+            BotConfig.halt_flag == False,  # noqa: E712
+        )
+    )
+    configs = cfg_result.scalars().all()
+    stats["users"] = len(configs)
+    if not configs:
+        return stats
+
+    for cfg in configs:
+        wl_result = await db.execute(
+            sa_select(WatchlistItem.symbol).where(WatchlistItem.user_id == cfg.user_id)
+        )
+        symbols = [r[0] for r in wl_result.fetchall()]
+
+        for symbol in symbols:
+            try:
+                snap_result = await db.execute(
+                    sa_select(GasSnapshot)
+                    .where(GasSnapshot.symbol == symbol)
+                    .order_by(GasSnapshot.computed_at.desc())
+                    .limit(1)
+                )
+                snap = snap_result.scalar_one_or_none()
+                if not snap:
+                    continue
+
+                gas = snap.gas_score or 50.0
+                grade = snap.signal_grade or "C"
+
+                # Best-effort price from snapshot or skip
+                price = getattr(snap, "last_price", 0.0) or 0.0
+
+                decision = await evaluate_symbol(
+                    db, cfg.user_id, symbol, cfg,
+                    grade=grade, gas_score=gas,
+                    current_price=price, regime=snap.regime,
+                )
+                stats["evaluations"] += 1
+                if decision.action == "BUY":  stats["buys"]  += 1
+                if decision.action == "SELL": stats["sells"] += 1
+                if decision.action == "HALT": stats["halts"] += 1
+            except Exception as exc:
+                logger.debug("run_bot_cycle error %s/%s: %s", cfg.user_id, symbol, exc)
+                stats["errors"] += 1
+
+    await db.commit()
+    return stats

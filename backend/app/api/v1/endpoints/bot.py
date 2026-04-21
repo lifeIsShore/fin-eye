@@ -45,9 +45,11 @@ class BotConfigResponse(BaseModel):
     min_grade: str
     max_position_pct: float
     max_total_pct: float
+    max_sector_pct: float
     daily_loss_limit: float
     portfolio_value: float
     halt_flag: bool
+    verbose_logging: bool
 
     class Config:
         from_attributes = True
@@ -58,8 +60,10 @@ class BotConfigUpdate(BaseModel):
     min_grade: Optional[str] = None
     max_position_pct: Optional[float] = Field(None, ge=0.05, le=0.25)
     max_total_pct: Optional[float] = Field(None, ge=0.20, le=1.0)
+    max_sector_pct: Optional[float] = Field(None, ge=0.10, le=0.60)
     daily_loss_limit: Optional[float] = Field(None, ge=0.01, le=0.20)
     portfolio_value: Optional[float] = Field(None, gt=0)
+    verbose_logging: Optional[bool] = None
 
 
 class BotPositionResponse(BaseModel):
@@ -135,8 +139,10 @@ async def get_config(
     return BotConfigResponse(
         is_enabled=config.is_enabled, mode=config.mode, strategy=config.strategy,
         min_grade=config.min_grade, max_position_pct=config.max_position_pct,
-        max_total_pct=config.max_total_pct, daily_loss_limit=config.daily_loss_limit,
+        max_total_pct=config.max_total_pct, max_sector_pct=config.max_sector_pct,
+        daily_loss_limit=config.daily_loss_limit,
         portfolio_value=config.portfolio_value, halt_flag=config.halt_flag,
+        verbose_logging=config.verbose_logging,
     )
 
 
@@ -155,10 +161,14 @@ async def update_config(
         config.max_position_pct = body.max_position_pct
     if body.max_total_pct is not None:
         config.max_total_pct = body.max_total_pct
+    if body.max_sector_pct is not None:
+        config.max_sector_pct = body.max_sector_pct
     if body.daily_loss_limit is not None:
         config.daily_loss_limit = body.daily_loss_limit
     if body.portfolio_value is not None:
         config.portfolio_value = body.portfolio_value
+    if body.verbose_logging is not None:
+        config.verbose_logging = body.verbose_logging
     await db.commit()
     return await get_config(current_user, db)
 
@@ -260,13 +270,19 @@ async def get_positions(
     q = q.order_by(BotPosition.opened_at.desc()).limit(limit)
     positions = (await db.execute(q)).scalars().all()
 
+    # Batch-fetch current prices for all open positions concurrently (perf fix)
+    import asyncio as _asyncio  # noqa: PLC0415
+    open_symbols = list({pos.symbol for pos in positions if pos.is_open})
+    price_tasks = await _asyncio.gather(*[_fetch_current_price(s) for s in open_symbols], return_exceptions=True)
+    price_map = {sym: (p if not isinstance(p, Exception) else None) for sym, p in zip(open_symbols, price_tasks)}
+
     result = []
     for pos in positions:
         current_price = None
         unreal_pnl = None
         unreal_pct = None
         if pos.is_open:
-            current_price = await _fetch_current_price(pos.symbol)
+            current_price = price_map.get(pos.symbol)
             if current_price:
                 unreal_pnl = round((current_price - pos.entry_price) * pos.size_units, 2)
                 unreal_pct = round((current_price / pos.entry_price - 1) * 100, 2)
@@ -290,10 +306,17 @@ async def get_audit_log(
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=100, ge=1, le=500),
     symbol: Optional[str] = Query(default=None),
+    include_system: bool = Query(default=True, description="Include system actions (HALT/RESUME/ENABLE/DISABLE) which have no symbol"),
 ) -> List[BotAuditLogEntry]:
     q = select(BotAuditLog).where(BotAuditLog.user_id == current_user.id)
     if symbol:
-        q = q.where(BotAuditLog.symbol == symbol.upper())
+        sym = symbol.upper()
+        if include_system:
+            # symbol matches OR symbol is NULL (system action)
+            from sqlalchemy import or_  # noqa: PLC0415
+            q = q.where(or_(BotAuditLog.symbol == sym, BotAuditLog.symbol.is_(None)))
+        else:
+            q = q.where(BotAuditLog.symbol == sym)
     q = q.order_by(BotAuditLog.logged_at.desc()).limit(limit)
     logs = (await db.execute(q)).scalars().all()
     return [

@@ -459,22 +459,28 @@ async def run_gas_precompute_batch(
     results:  dict[str, dict] = {}
     failures: list[str]       = []
 
-    for symbol in target_symbols:
-        try:
-            snap = await compute_gas_for_symbol(symbol, db, macro_score=macro_score)
-            results[symbol] = snap
-            logger.info(
-                "  ✓ %s  GAS=%.1f  grade=%s  weather=%s  regime=%s  tradeable=%s",
-                symbol,
-                snap["gas_score"],
-                snap.get("signal_grade", "?"),
-                snap["weather_label"],
-                snap["regime"],
-                snap.get("signal_tradeable", "?"),
-            )
-        except Exception as exc:
-            logger.error("  ✗ %s  FAILED: %s", symbol, exc)
-            failures.append(symbol)
+    # PERF: run symbols concurrently (max 4 at a time to avoid overwhelming DB)
+    _sem = asyncio.Semaphore(4)
+
+    async def _compute_one(symbol: str) -> None:
+        async with _sem:
+            try:
+                snap = await compute_gas_for_symbol(symbol, db, macro_score=macro_score)
+                results[symbol] = snap
+                logger.info(
+                    "  ✓ %s  GAS=%.1f  grade=%s  weather=%s  regime=%s  tradeable=%s",
+                    symbol,
+                    snap["gas_score"],
+                    snap.get("signal_grade", "?"),
+                    snap["weather_label"],
+                    snap["regime"],
+                    snap.get("signal_tradeable", "?"),
+                )
+            except Exception as exc:
+                logger.error("  ✗ %s  FAILED: %s", symbol, exc)
+                failures.append(symbol)
+
+    await asyncio.gather(*[_compute_one(s) for s in target_symbols])
 
     await db.commit()
 

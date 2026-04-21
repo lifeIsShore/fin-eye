@@ -684,108 +684,6 @@ async def job_run_optuna_tuning() -> None:
 
 # Sprint 44 — Churn early warning job implementation
 
-async def job_bot_evaluate() -> None:
-    """
-    Sprint 47 — Paper trading bot: evaluate every bot-enabled user's watchlist.
-    Registered once in setup_scheduler() at minute=2,17,32,47 during market hours.
-    """
-    from sqlalchemy import select as sa_select  # noqa: PLC0415
-    from app.models.user import User            # noqa: PLC0415
-    from app.models.watchlist import WatchlistItem  # noqa: PLC0415
-    from app.models.bot import BotConfig        # noqa: PLC0415
-    from app.models.gas_snapshot import GasSnapshot  # noqa: PLC0415
-    from app.services.bot_service import evaluate_symbol, get_or_create_config  # noqa: PLC0415
-    from app.services.technical_service import generate_timeframe_signal  # noqa: PLC0415
-    import asyncio as _asyncio  # noqa: PLC0415
-
-    started = datetime.now(timezone.utc).isoformat()
-    t0 = time.perf_counter()
-    evaluated = buys = sells = errors = 0
-
-    try:
-        async with AsyncSessionLocal() as db:
-            # Find all users with bot enabled
-            cfg_result = await db.execute(
-                sa_select(BotConfig).where(
-                    BotConfig.is_enabled == True,  # noqa: E712
-                    BotConfig.halt_flag == False,  # noqa: E712
-                )
-            )
-            configs = cfg_result.scalars().all()
-
-            if not configs:
-                return
-
-            logger.info("Bot evaluate: %d active bot(s)", len(configs))
-
-            for cfg in configs:
-                # Get this user's watchlist
-                wl_result = await db.execute(
-                    sa_select(WatchlistItem.symbol)
-                    .where(WatchlistItem.user_id == cfg.user_id)
-                )
-                symbols = [r[0] for r in wl_result.fetchall()]
-
-                for symbol in symbols:
-                    try:
-                        # Fetch latest GAS snapshot
-                        snap_result = await db.execute(
-                            sa_select(GasSnapshot)
-                            .where(GasSnapshot.symbol == symbol)
-                            .order_by(GasSnapshot.computed_at.desc())
-                            .limit(1)
-                        )
-                        snap = snap_result.scalar_one_or_none()
-                        if not snap:
-                            continue
-
-                        gas   = snap.gas_score or 50.0
-                        grade = snap.signal_grade or "C"
-
-                        # Get current price (best effort)
-                        price = 0.0
-                        confidence = 0.5
-                        try:
-                            loop = _asyncio.get_running_loop()
-                            sig = await loop.run_in_executor(
-                                None, generate_timeframe_signal, symbol, "1d"
-                            )
-                            price      = sig.get("_current_price", 0.0)
-                            confidence = sig.get("_confidence_raw", 0.5)
-                        except Exception:
-                            pass
-
-                        result = await evaluate_symbol(
-                            db, cfg.user_id, symbol, cfg,
-                            gas_score=gas, grade=grade,
-                            current_price=price, confidence=confidence,
-                            regime=snap.regime,
-                        )
-                        evaluated += 1
-                        if result["action"] == "BUY":  buys  += 1
-                        if result["action"] == "SELL": sells += 1
-
-                    except Exception as exc:
-                        logger.debug("Bot eval error %s/%s: %s", cfg.user_id, symbol, exc)
-                        errors += 1
-
-            await db.commit()
-
-        detail = f"configs={len(configs)} evaluated={evaluated} buys={buys} sells={sells} errors={errors}"
-        if buys + sells > 0:
-            logger.info("Bot evaluate complete: %s", detail)
-        get_metrics().record_pipeline_run(
-            "bot_evaluate", started, datetime.now(timezone.utc).isoformat(),
-            (time.perf_counter() - t0) * 1000, True, detail,
-        )
-    except Exception as exc:
-        logger.error("job_bot_evaluate failed: %s", exc)
-        get_metrics().record_pipeline_run(
-            "bot_evaluate", started, datetime.now(timezone.utc).isoformat(),
-            (time.perf_counter() - t0) * 1000, False, str(exc),
-        )
-
-
 async def job_churn_check() -> None:
     """
     Sprint 44 — Pro user churn early warning.
@@ -1022,9 +920,9 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="finanzen_net_fetch", name="Finanzen.net News Fetch",
         replace_existing=True, misfire_grace_time=600)
 
-    # Sprint 42 — OpenInsider signals: daily at 09:00 UTC
+    # Sprint 42 — OpenInsider signals: daily at 09:30 UTC (offset from churn_check at 09:00)
     scheduler.add_job(job_open_insider_signals,
-        trigger=CronTrigger(hour=9, minute=0),
+        trigger=CronTrigger(hour=9, minute=30),
         id="open_insider_signals", name="OpenInsider Daily Fetch",
         replace_existing=True, misfire_grace_time=3600)
 

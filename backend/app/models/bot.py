@@ -35,6 +35,7 @@ class BotConfig(Base):
     max_total_pct    = Column(Float, default=0.80, nullable=False)            # max % total deployed
     max_sector_pct   = Column(Float, default=0.40, nullable=False)            # max % in one sector
     daily_loss_limit = Column(Float, default=0.03, nullable=False)            # pause if daily PnL < -3%
+    verbose_logging  = Column(Boolean, default=False, nullable=False)         # log SKIP/HOLD actions (noisy)
     portfolio_value  = Column(Float, default=10000.0, nullable=False)         # starting paper value
     halt_flag        = Column(Boolean, default=False, nullable=False)         # kill switch
 
