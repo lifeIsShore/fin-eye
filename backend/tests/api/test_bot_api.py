@@ -173,8 +173,9 @@ async def test_performance_returns_structure(client: AsyncClient):
         new_callable=AsyncMock,
         return_value={
             "total_pnl_usd": 0.0, "total_pnl_pct": 0.0, "win_rate_pct": 0.0,
-            "total_trades": 0, "open_positions": 0,
-            "best_trade_pct": None, "worst_trade_pct": None,
+            "total_trades": 0, "wins": 0, "losses": 0,
+            "open_positions": 0, "deployed_usd": 0.0, "deployed_pct": 0.0,
+            "avg_hold_hours": None, "best_trade_usd": None, "worst_trade_usd": None,
         },
     ):
         response = await client.get("/api/v1/bot/performance")
@@ -182,3 +183,4 @@ async def test_performance_returns_structure(client: AsyncClient):
     data = response.json()
     assert "total_pnl_usd" in data
     assert "win_rate_pct" in data
+    assert "best_trade_usd" in data

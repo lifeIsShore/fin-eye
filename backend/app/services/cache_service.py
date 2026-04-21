@@ -19,7 +19,7 @@ class CacheService:
                 return json.loads(val)
             return None
         except Exception as e:
-            logger.error(f"Cache GET error for {key}: {e}")
+            logger.error("Cache GET error for %s: %s", key, e)
             return None
 
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
@@ -30,7 +30,7 @@ class CacheService:
             await self.redis.set(key, serialized_val, ex=ttl_to_use)
             return True
         except Exception as e:
-            logger.error(f"Cache SET error for {key}: {e}")
+            logger.error("Cache SET error for %s: %s", key, e)
             return False
 
     async def set_macro(self, data: Dict[str, Any]) -> bool:
@@ -42,7 +42,7 @@ class CacheService:
         try:
             return await self.redis.ping()
         except Exception as e:
-            logger.error(f"Cache PING error: {e}")
+            logger.error("Cache PING error: %s", e)
             return False
 
     async def delete(self, key: str) -> bool:
@@ -51,7 +51,7 @@ class CacheService:
             await self.redis.delete(key)
             return True
         except Exception as e:
-            logger.error(f"Cache DELETE error for {key}: {e}")
+            logger.error("Cache DELETE error for %s: %s", key, e)
             return False
 
     async def get_or_set(self, key: str, fetch_func: Callable, ttl: Optional[int] = None, **kwargs) -> Any:
@@ -61,16 +61,15 @@ class CacheService:
         """
         cached_data = await self.get(key)
         if cached_data is not None:
-            logger.debug(f"Cache hit for key: {key}")
+            logger.debug("Cache hit for key: %s", key)
             return cached_data
 
-        logger.debug(f"Cache miss for key: {key}, fetching data...")
+        logger.debug("Cache miss for key: %s — fetching data...", key)
         try:
             data = await fetch_func(**kwargs)
-            # Only cache if we got data back (not None or empty depending on use case, but generally not None)
             if data is not None:
                 await self.set(key, data, ttl)
             return data
         except Exception as e:
-            logger.error(f"Error fetching data for cache key {key}: {e}")
+            logger.error("Error fetching data for cache key %s: %s", key, e)
             raise

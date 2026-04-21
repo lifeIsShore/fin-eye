@@ -3,6 +3,15 @@ const DEFAULT_BASE_URL = "http://localhost:8000";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_BASE_URL;
 
+// ── Auth helpers ─────────────────────────────────────────────────────────────
+function authHeaders(): HeadersInit {
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 export interface SentimentAggregatePoint {
   date: string;
   sentiment_score: number;
@@ -3060,15 +3069,15 @@ export interface BotAuditLogEntry {
 
 export interface BotPerformanceDto {
   total_trades: number;
+  wins: number;
+  losses: number;
   open_positions: number;
   total_pnl_usd: number;
   total_pnl_pct: number;
-  win_rate?: number | null;
+  win_rate_pct: number;
   avg_hold_hours?: number | null;
   best_trade_usd?: number | null;
-  best_trade_pct?: number | null;
   worst_trade_usd?: number | null;
-  worst_trade_pct?: number | null;
   deployed_usd: number;
   deployed_pct: number;
 }

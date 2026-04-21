@@ -37,6 +37,9 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Prevents concurrent full-batch runs from stacking up
+_batch_running = False
+
 
 # ─── Schemas (inline) ────────────────────────────────────────────────────────
 
@@ -55,13 +58,25 @@ async def trigger_full_precompute(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
+    global _batch_running
+    if _batch_running:
+        return {
+            "status": "already_running",
+            "message": "A batch precompute is already in progress. Wait for it to finish.",
+            "symbols": DEFAULT_SYMBOLS,
+        }
+
     async def _run() -> None:
+        global _batch_running
+        _batch_running = True
         try:
             from app.db.database import AsyncSessionLocal  # noqa: PLC0415
             async with AsyncSessionLocal() as session:
                 await run_gas_precompute_batch(session)
         except Exception as exc:
             logger.error("Background GAS precompute failed: %s", exc)
+        finally:
+            _batch_running = False
 
     background_tasks.add_task(_run)
     return {

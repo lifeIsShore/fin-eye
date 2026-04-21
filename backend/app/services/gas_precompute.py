@@ -327,11 +327,23 @@ async def compute_gas_for_symbol(
 ) -> dict:
     symbol = symbol.upper()
 
-    # Run technical inference and sentiment concurrently
-    (technical_score, technical_signals), sentiment_score = await asyncio.gather(
-        _compute_technical_score(symbol),
-        _compute_sentiment_score(symbol, db),
-    )
+    # Run technical inference, sentiment, and sector concurrently
+    # Sector: reuse existing value if already stored — yfinance .info is slow and sector rarely changes
+    existing_snap = await get_latest(db, symbol)
+    existing_sector: Optional[str] = existing_snap.sector if existing_snap else None
+
+    if existing_sector:
+        (technical_score, technical_signals), sentiment_score = await asyncio.gather(
+            _compute_technical_score(symbol),
+            _compute_sentiment_score(symbol, db),
+        )
+        sector = existing_sector
+    else:
+        (technical_score, technical_signals), sentiment_score, sector = await asyncio.gather(
+            _compute_technical_score(symbol),
+            _compute_sentiment_score(symbol, db),
+            _get_sector(symbol),
+        )
 
     if macro_score is None:
         macro_score = await _compute_macro_score(db)
@@ -392,6 +404,7 @@ async def compute_gas_for_symbol(
         signal_tradeable     = grade_result["tradeable"],
         signal_grade_desc    = grade_result["description"],
         signal_grade_reasons = grade_result["reasons"],
+        sector               = sector,
     )
 
     snap_dict = snap.to_dict()
@@ -453,36 +466,41 @@ async def run_gas_precompute_batch(
 
     logger.info("GAS precompute batch started — %d symbols: %s", len(target_symbols), target_symbols)
 
+    # Macro score computed once with the caller's session (read-only, safe)
     macro_score = await _compute_macro_score(db)
     logger.info("Shared macro score for this batch: %.1f", macro_score)
 
     results:  dict[str, dict] = {}
     failures: list[str]       = []
 
-    # PERF: run symbols concurrently (max 4 at a time to avoid overwhelming DB)
+    # Each symbol gets its own AsyncSession — shared sessions are NOT concurrency-safe.
+    # Semaphore(4) caps concurrent DB connections without starving the pool.
+    from app.db.database import AsyncSessionLocal  # noqa: PLC0415
     _sem = asyncio.Semaphore(4)
 
     async def _compute_one(symbol: str) -> None:
         async with _sem:
-            try:
-                snap = await compute_gas_for_symbol(symbol, db, macro_score=macro_score)
-                results[symbol] = snap
-                logger.info(
-                    "  ✓ %s  GAS=%.1f  grade=%s  weather=%s  regime=%s  tradeable=%s",
-                    symbol,
-                    snap["gas_score"],
-                    snap.get("signal_grade", "?"),
-                    snap["weather_label"],
-                    snap["regime"],
-                    snap.get("signal_tradeable", "?"),
-                )
-            except Exception as exc:
-                logger.error("  ✗ %s  FAILED: %s", symbol, exc)
-                failures.append(symbol)
+            async with AsyncSessionLocal() as sym_db:
+                try:
+                    snap = await compute_gas_for_symbol(symbol, sym_db, macro_score=macro_score)
+                    await sym_db.commit()
+                    results[symbol] = snap
+                    logger.info(
+                        "  ✓ %s  GAS=%.1f  grade=%s  weather=%s  regime=%s  tradeable=%s",
+                        symbol,
+                        snap["gas_score"],
+                        snap.get("signal_grade", "?"),
+                        snap["weather_label"],
+                        snap["regime"],
+                        snap.get("signal_tradeable", "?"),
+                    )
+                except Exception as exc:
+                    await sym_db.rollback()
+                    logger.error("  ✗ %s  FAILED: %s", symbol, exc)
+                    failures.append(symbol)
 
     await asyncio.gather(*[_compute_one(s) for s in target_symbols])
-
-    await db.commit()
+    # No db.commit() here — each symbol committed its own session above
 
     elapsed_ms = (datetime.now(timezone.utc) - started_at).total_seconds() * 1000
 
@@ -505,7 +523,26 @@ async def run_gas_precompute_batch(
     return summary
 
 
-# ── Cache-first read ──────────────────────────────────────────────────────────
+# ── Sector lookup helper ────────────────────────────────────────────────────
+
+def _fetch_sector_sync(symbol: str) -> Optional[str]:
+    """Blocking yfinance call — run in executor."""
+    try:
+        import yfinance as yf  # noqa: PLC0415
+        return yf.Ticker(symbol).info.get("sector") or None
+    except Exception:
+        return None
+
+
+async def _get_sector(symbol: str) -> Optional[str]:
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _fetch_sector_sync, symbol)
+    except Exception:
+        return None
+
+
+# ── Cache-first read ──────────────────────────────────────────────────
 
 async def get_snapshot_cached(symbol: str, db: AsyncSession) -> Optional[dict]:
     symbol    = symbol.upper()

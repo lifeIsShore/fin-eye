@@ -78,25 +78,11 @@ async def lifespan(app: FastAPI):
     await test_db_connection()
     await init_redis()
 
-    # SEC-08: Sync missing ML model artifacts from R2 cloud storage
-    try:
-        from app.services.model_storage import sync_models_from_r2  # noqa: PLC0415
-        sync_result = await sync_models_from_r2()
-        if not sync_result.get("skipped"):
-            logger.info(
-                "📦 R2 model sync: downloaded=%d already_present=%d failed=%d",
-                sync_result["downloaded"],
-                sync_result["already_present"],
-                sync_result["failed"],
-            )
-    except Exception as exc:
-        logger.warning("⚠️  R2 model sync failed (non-fatal): %s", exc)
-
     scheduler = setup_scheduler()
     scheduler.start()
     logger.info("📅 APScheduler started with %d jobs.", len(scheduler.get_jobs()))
 
-    async def _warm_gas_cache_bg():
+    async def _warm_gas_cache_bg() -> None:
         await asyncio.sleep(10)
         try:
             from app.services.gas_precompute import run_gas_precompute_batch  # noqa: PLC0415
@@ -106,14 +92,12 @@ async def lifespan(app: FastAPI):
                 summary = await run_gas_precompute_batch(session)
             logger.info(
                 "✅ GAS cache warmed — %d/%d symbols succeeded in %.0fms",
-                summary["symbols_succeeded"],
-                summary["symbols_attempted"],
-                summary["elapsed_ms"],
+                summary["symbols_succeeded"], summary["symbols_attempted"], summary["elapsed_ms"],
             )
         except Exception as exc:
             logger.warning("⚠️  GAS cache warm failed (non-fatal): %s", exc)
 
-    async def _sync_r2_models_bg():
+    async def _sync_r2_models_bg() -> None:
         await asyncio.sleep(5)
         try:
             from app.services.model_storage import sync_models_from_r2  # noqa: PLC0415
@@ -123,8 +107,9 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("⚠️  R2 model sync failed (non-fatal): %s", exc)
 
-    asyncio.create_task(_warm_gas_cache_bg())
+    # SEC-08: Both background tasks start concurrently — R2 sync at +5s, GAS warm at +10s
     asyncio.create_task(_sync_r2_models_bg())
+    asyncio.create_task(_warm_gas_cache_bg())
 
     yield
 

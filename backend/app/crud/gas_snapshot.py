@@ -45,6 +45,7 @@ async def upsert_snapshot(
     signal_tradeable: Optional[bool] = None,
     signal_grade_desc: Optional[str] = None,
     signal_grade_reasons: Optional[list] = None,
+    sector: Optional[str] = None,
 ) -> GasSnapshot:
     """
     Insert a new GasSnapshot row, then trim old rows for that symbol so we
@@ -66,6 +67,7 @@ async def upsert_snapshot(
         signal_tradeable=signal_tradeable,
         signal_grade_desc=signal_grade_desc,
         signal_grade_reasons=signal_grade_reasons,
+        sector=sector,
     )
     db.add(snap)
     await db.flush()  # get the id so the trim query works correctly

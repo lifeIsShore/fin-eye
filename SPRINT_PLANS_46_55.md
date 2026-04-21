@@ -1558,3 +1558,127 @@ backend/alembic/versions/s59_001_bot_verbose_logging.py  # NEW migration
 cd backend
 alembic upgrade head   # applies s59_001_bot_verbose_logging
 ```
+
+---
+
+## Full Performance & Correctness Audit — April 21, 2026 (Session 3)
+**Scope:** Deep audit of concurrency safety, event-loop blocking, logging, DB pool, and frontend auth.
+
+### 🔴 Critical Bugs Fixed
+
+| # | File | Bug | Fix |
+|---|------|-----|-----|
+| BUG-S59-01 | `frontend/lib/api.ts` | `authHeaders()` called throughout file but **never defined** — every authenticated request (bot, billing, watchlist, referral, comments, polls) sent **no Authorization header**, returning 401/403 silently | Added `authHeaders()` definition at top of `api.ts` |
+| BUG-S59-02 | `gas_precompute.py` | Concurrent `asyncio.gather` across symbols all shared **one `AsyncSession`** — SQLAlchemy async sessions are not concurrency-safe; caused `MissingGreenlet` / data corruption under load | Each symbol now gets its own `AsyncSessionLocal()` session; each commits/rolls back independently |
+| BUG-S59-03 | `bot_service.py` `run_bot_cycle` | All users processed in a single session serially; one failing user blocked all others | Each user now gets own session; users processed concurrently with `Semaphore(3)` |
+
+### 🟠 Performance Fixes Applied
+
+| # | File | Issue | Fix |
+|---|------|-------|-----|
+| PERF-04 | `database.py` | Sync engine had `echo=True` — logged every SQL statement to stdout, doubling log I/O | `echo=False`; added `pool_size=10`, `max_overflow=20` to both engines |
+| PERF-05 | `database.py` | No `pool_recycle` — stale connections after overnight idle cause SSL errors on first morning request | Added `pool_recycle=1800` (30 min) to async engine |
+| PERF-06 | `bot.py` `_fetch_current_price` | Synchronous yfinance call directly in async context — blocked the event loop for every open position price check | Wrapped in `loop.run_in_executor(None, _sync_fetch)` |
+| PERF-07 | `ml_pipeline.py` | `import math` inside `engineer_features()` — re-imported on every training run | Moved to module-level imports |
+| PERF-08 | `cache_service.py` | f-string logging (`logger.error(f"...")`) — string built eagerly even when log level filters it out | Converted all 6 calls to `%s`-style lazy logging |
+
+### Files Modified (Session 3 — April 21, 2026)
+```
+frontend/lib/api.ts                    # Added authHeaders() definition (CRITICAL — BUG-S59-01)
+backend/app/services/gas_precompute.py # Per-symbol sessions in concurrent batch (BUG-S59-02)
+backend/app/services/bot_service.py    # Per-user sessions + concurrent users in run_bot_cycle (BUG-S59-03)
+backend/app/db/database.py             # echo=False, pool_size, max_overflow, pool_recycle
+backend/app/api/v1/endpoints/bot.py   # _fetch_current_price wrapped in run_in_executor
+backend/app/services/ml_pipeline.py   # import math moved to module level
+backend/app/services/cache_service.py # f-string logging → %s-style
+```
+
+---
+
+## Bug Audit — April 21, 2026 (Session 4)
+**Scope:** Verified 4 reported issues (2–5) against actual code.
+
+### Findings
+
+| # | Issue | Real? | Action |
+|---|-------|-------|--------|
+| 2 | Sequential `run_bot_cycle` | ❌ False — already fixed in Session 3 (BUG-S59-03) | None |
+| 3 | Memory-intensive `get_bot_performance` | ✅ Real | Fixed — replaced `.scalars().all()` row fetch with `func.sum/count/max/min/avg` aggregate queries (3 DB queries, O(1) memory) |
+| 4 | Missing sector exposure gate | ✅ Real | Gate added in `evaluate_symbol` BUY path; silently no-ops until `sector` field added to `GasSnapshot` — see follow-up below |
+| 5 | Audit log hides system actions on symbol filter | ❌ False — already fixed in Session 3 (`include_system=True` + `or_` clause) | None |
+
+### Follow-up: GasSnapshot needs `sector` column
+- `BotConfig.max_sector_pct` gate is implemented but `GasSnapshot` has no `sector` field
+- Fix: add `sector = Column(String(60), nullable=True)` to `GasSnapshot`, populate in `gas_precompute.py` from yfinance `.info["sector"]`
+- Status: **In progress (Session 4)**
+
+### Files Modified (Session 4 — April 21, 2026)
+```
+backend/app/services/bot_service.py      # Issue 3: aggregate queries in get_bot_performance; Issue 4: sector gate in evaluate_symbol BUY path
+backend/app/models/gas_snapshot.py       # Added sector = Column(String(60), nullable=True)
+backend/app/crud/gas_snapshot.py         # upsert_snapshot: added sector param + persists it
+backend/app/services/gas_precompute.py   # _fetch_sector_sync + _get_sector helpers; fetches sector concurrently; passes to upsert_snapshot
+backend/alembic/versions/s60_001_gas_snapshot_sector.py  # Migration: ADD COLUMN sector VARCHAR(60) to gas_snapshots
+```
+
+### Manual Step Required
+```bash
+cd backend
+alembic upgrade head   # applies s60_001_gas_snapshot_sector
+```
+
+---
+
+## Bug & Cleanup Session — April 21, 2026 (Session 5)
+**Scope:** 5 follow-up issues from Session 4 + fresh audit of main.py and scheduler.
+
+### Findings
+
+| # | Issue | Real? | Fix |
+|---|-------|-------|-----|
+| 1 | `max_sector_pct` migration | ❌ False — already in `s47_001_bot_tables.py` | None |
+| 2 | `GasSnapshot.to_dict()` missing `sector` | ✅ Real | Added `"sector": self.sector` |
+| 3 | Sector fetch on every precompute run | ✅ Real | Skip yfinance call if snapshot already has sector; only fetches for new symbols |
+| 4 | Test mock stale field names | ✅ Real | Fixed `win_rate`→`win_rate_pct`, `best/worst_trade_pct`→`best/worst_trade_usd`, added `wins`/`losses`/`avg_hold_hours` |
+| 5 | Frontend missing `max_sector_pct` | ✅ Real | Added slider (10–60%), wired to `updateBotConfig`, shown in summary row; fixed `win_rate`→`win_rate_pct` display; updated `BotPerformanceDto` TS type |
+
+### Additional Issues Found & Fixed
+
+| # | Issue | Fix |
+|---|-------|-----|
+| A | `main.py` double R2 sync — `sync_models_from_r2` called once blocking then again in background task | Removed blocking call; only background task `_sync_r2_models_bg` runs (at +5s); scheduler start moved back to correct position |
+| B | `bot_audit_log` grows unboundedly — no TTL cleanup job | Added `job_bot_audit_log_cleanup`: deletes rows > 90 days old; runs weekly Sunday 03:00 UTC |
+| C | `job_churn_check` and `job_onboarding_day3` both at `hour=9, minute=0` | Staggered `churn_check` to 09:15 UTC |
+
+### Files Modified (Session 5 — April 21, 2026)
+```
+backend/app/models/gas_snapshot.py       # to_dict(): added sector field
+backend/app/services/gas_precompute.py   # skip sector yfinance fetch if already stored
+backend/tests/api/test_bot_api.py        # fixed mock shape to match new get_bot_performance response
+frontend/app/bot/paper/page.tsx          # max_sector_pct slider + summary row + win_rate_pct fix
+frontend/lib/api.ts                      # BotPerformanceDto: win_rate_pct, wins, losses, removed stale fields
+backend/app/main.py                      # removed duplicate R2 sync; restored scheduler.start(); clean background tasks
+backend/app/services/scheduler.py       # job_bot_audit_log_cleanup added; churn_check offset to 09:15
+```
+
+---
+
+## Manual Trigger Audit — April 21, 2026 (Session 6)
+**Scope:** Verified all manual trigger endpoints and admin UI controls.
+
+### Bugs Found & Fixed
+
+| # | File | Bug | Fix |
+|---|------|-----|-----|
+| 1 | `data.py` | `POST /data/fetch/ohlcv`, `/fetch/macro`, `/fetch/news` had **no auth** — open to unauthenticated users | Added `dependencies=[Depends(require_admin)]` to all three |
+| 2 | `ops.py` `backup-now` | Used `asyncio.create_task()` inside request context — task can be silently killed if event loop shuts down before it completes | Replaced with `BackgroundTasks.add_task()` (FastAPI-managed, request lifecycle safe) |
+| 3 | `admin_gas.py` `POST /precompute` | No concurrency guard — double-clicking "Run All Symbols" spawned two concurrent full precompute batches, doubling DB load | Added `_batch_running` module-level flag; returns `{"status": "already_running"}` on second call |
+| 4 | `admin/gas/page.tsx` | `batchStatus` never reset to `"idle"` — "Run All Symbols" button stayed stuck in "Running…" forever after triggering | Button resets to idle after 60s (with refresh) or immediately on `already_running`; errors auto-reset after 5s |
+
+### Files Modified (Session 6 — April 21, 2026)
+```
+backend/app/api/v1/data.py                        # require_admin on all 3 fetch trigger endpoints
+backend/app/api/v1/endpoints/ops.py               # backup-now: asyncio.create_task → BackgroundTasks; added BackgroundTasks import
+backend/app/api/v1/endpoints/admin_gas.py         # _batch_running lock; already_running response
+frontend/app/admin/gas/page.tsx                   # button resets after 60s; already_running handled; error auto-reset
+```

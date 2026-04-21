@@ -62,6 +62,7 @@ function SettingsPanel({
     const [minGrade, setMinGrade]      = useState(config.min_grade);
     const [maxPos, setMaxPos]          = useState(config.max_position_pct * 100);
     const [maxTotal, setMaxTotal]      = useState(config.max_total_pct * 100);
+    const [maxSector, setMaxSector]    = useState(config.max_sector_pct * 100);
     const [lossLimit, setLossLimit]    = useState(config.daily_loss_limit * 100);
     const [portfolio, setPortfolio]    = useState(config.portfolio_value);
     const [saving, setSaving]          = useState(false);
@@ -74,6 +75,7 @@ function SettingsPanel({
                 strategy, min_grade: minGrade,
                 max_position_pct: maxPos / 100,
                 max_total_pct: maxTotal / 100,
+                max_sector_pct: maxSector / 100,
                 daily_loss_limit: lossLimit / 100,
                 portfolio_value: portfolio,
             });
@@ -127,6 +129,7 @@ function SettingsPanel({
                     {[
                         { label: "Max position size", val: maxPos, set: setMaxPos, min: 5, max: 25, suffix: "%" },
                         { label: "Max total deployed", val: maxTotal, set: setMaxTotal, min: 40, max: 100, suffix: "%" },
+                        { label: "Max sector exposure", val: maxSector, set: setMaxSector, min: 10, max: 60, suffix: "%" },
                         { label: "Daily loss limit", val: lossLimit, set: setLossLimit, min: 1, max: 10, suffix: "%" },
                     ].map(({ label, val, set, min, max, suffix }) => (
                         <div key={label}>
@@ -280,6 +283,7 @@ export default function PaperBotPage() {
                     <span>Strategy: <span className="text-slate-300 capitalize">{config.strategy}</span></span>
                     <span>Min grade: <span className={`font-bold ${GRADE_COLOR[config.min_grade] ?? "text-slate-300"}`}>{config.min_grade}</span></span>
                     <span>Max position: <span className="text-slate-300">{(config.max_position_pct * 100).toFixed(0)}%</span></span>
+                    <span>Max sector: <span className="text-slate-300">{(config.max_sector_pct * 100).toFixed(0)}%</span></span>
                     <span>Daily loss limit: <span className="text-slate-300">{(config.daily_loss_limit * 100).toFixed(0)}%</span></span>
                 </div>
             </div>
@@ -289,7 +293,7 @@ export default function PaperBotPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
                         { label: "Total PnL", value: usd(perf.total_pnl_usd), sub: pct(perf.total_pnl_pct), color: perf.total_pnl_usd >= 0 ? "text-emerald-400" : "text-rose-400" },
-                        { label: "Win Rate", value: `${((perf.win_rate ?? 0) * 100).toFixed(0)}%`, sub: `${perf.total_trades} trades`, color: "text-sky-400" },
+                        { label: "Win Rate", value: `${(perf.win_rate_pct ?? 0).toFixed(1)}%`, sub: `${perf.total_trades} trades`, color: "text-sky-400" },
                         { label: "Best Trade", value: usd(perf.best_trade_usd), sub: pct(perf.best_trade_pct), color: "text-emerald-400" },
                         { label: "Worst Trade", value: usd(perf.worst_trade_usd), sub: pct(perf.worst_trade_pct), color: "text-rose-400" },
                     ].map(({ label, value, sub, color }) => (

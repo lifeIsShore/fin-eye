@@ -235,6 +235,49 @@ async def evaluate_symbol(
 
     # 7. BUY: no position, grade passes minimum, GAS strong enough
     if not position and _grade_passes_min(grade, config.min_grade) and gas_score >= 60:
+        # Sector exposure gate
+        if config.max_sector_pct and config.max_sector_pct < 1.0:
+            from app.models.gas_snapshot import GasSnapshot  # noqa: PLC0415
+            # Get sector for this symbol
+            snap_for_sector = (await db.execute(
+                select(GasSnapshot.sector)
+                .where(GasSnapshot.symbol == symbol)
+                .order_by(GasSnapshot.computed_at.desc())
+                .limit(1)
+            )).scalar_one_or_none()
+            if snap_for_sector:
+                # Sum size_usd of open positions in same sector
+                sector_symbols_result = await db.execute(
+                    select(GasSnapshot.symbol)
+                    .where(
+                        GasSnapshot.sector == snap_for_sector,
+                        GasSnapshot.symbol != symbol,
+                    )
+                    .distinct()
+                )
+                sector_symbols = [r[0] for r in sector_symbols_result.fetchall()]
+                sector_deployed: float = 0.0
+                if sector_symbols:
+                    sd_result = await db.execute(
+                        select(func.coalesce(func.sum(BotPosition.size_usd), 0.0)).where(
+                            BotPosition.user_id == user_id,
+                            BotPosition.is_open == True,  # noqa: E712
+                            BotPosition.symbol.in_(sector_symbols),
+                        )
+                    )
+                    sector_deployed = float(sd_result.scalar() or 0.0)
+                sector_pct = sector_deployed / config.portfolio_value if config.portfolio_value > 0 else 1.0
+                if sector_pct >= config.max_sector_pct:
+                    reason = (
+                        f"Sector exposure limit reached for '{snap_for_sector}' "
+                        f"({sector_pct*100:.0f}% vs {config.max_sector_pct*100:.0f}% max). "
+                        f"Skipping {symbol}."
+                    )
+                    if config.verbose_logging:
+                        await _log(db, user_id, "SKIP", reason, symbol=symbol, grade=grade,
+                                   gas_score=gas_score, price=current_price, regime=regime)
+                    return BotDecision(action="SKIP", reason=reason)
+
         # Check total deployment cap
         total_deployed = await _get_total_deployed(db, user_id)
         deployed_pct = total_deployed / config.portfolio_value if config.portfolio_value > 0 else 1.0
@@ -322,54 +365,69 @@ async def evaluate_symbol(
 # ── Performance summary ────────────────────────────────────────────────────────
 
 async def get_bot_performance(db: AsyncSession, user_id: UUID, config: BotConfig) -> dict:
-    """Compute paper trading performance summary for the dashboard."""
-    closed = (await db.execute(
-        select(BotPosition).where(
+    """Compute paper trading performance summary — uses DB aggregates, no full row fetch."""
+    # Aggregate closed-position stats in one query
+    agg = (await db.execute(
+        select(
+            func.count(BotPosition.id).label("total"),
+            func.coalesce(func.sum(BotPosition.pnl_usd), 0.0).label("total_pnl"),
+            func.count(BotPosition.id).filter(BotPosition.pnl_usd > 0).label("wins"),
+            func.max(BotPosition.pnl_usd).label("best"),
+            func.min(BotPosition.pnl_usd).label("worst"),
+        ).where(
             BotPosition.user_id == user_id,
             BotPosition.is_open == False,  # noqa: E712
-        ).order_by(BotPosition.closed_at.desc())
-    )).scalars().all()
+        )
+    )).one()
 
-    open_pos = (await db.execute(
-        select(BotPosition).where(
+    total_trades = agg.total or 0
+    total_pnl = float(agg.total_pnl or 0.0)
+    wins = agg.wins or 0
+    losses = total_trades - wins
+    win_rate = round(wins / total_trades * 100, 1) if total_trades else 0.0
+
+    # Open positions aggregate
+    open_agg = (await db.execute(
+        select(
+            func.count(BotPosition.id).label("cnt"),
+            func.coalesce(func.sum(BotPosition.size_usd), 0.0).label("deployed"),
+        ).where(
             BotPosition.user_id == user_id,
             BotPosition.is_open == True,  # noqa: E712
         )
-    )).scalars().all()
+    )).one()
 
-    total_pnl = sum(p.pnl_usd or 0.0 for p in closed)
-    wins = [p for p in closed if (p.pnl_usd or 0) > 0]
-    losses = [p for p in closed if (p.pnl_usd or 0) <= 0]
-    win_rate = round(len(wins) / len(closed) * 100, 1) if closed else 0.0
-
-    deployed = sum(p.size_usd for p in open_pos)
+    deployed = float(open_agg.deployed or 0.0)
     deployed_pct = round(deployed / config.portfolio_value * 100, 1) if config.portfolio_value > 0 else 0.0
 
-    best = max(closed, key=lambda p: p.pnl_usd or 0.0, default=None)
-    worst = min(closed, key=lambda p: p.pnl_usd or 0.0, default=None)
-
-    avg_hold_hours = None
-    hold_times = [
-        (p.closed_at - p.opened_at).total_seconds() / 3600
-        for p in closed
-        if p.closed_at and p.opened_at
-    ]
-    if hold_times:
-        avg_hold_hours = round(sum(hold_times) / len(hold_times), 1)
+    # Avg hold time — aggregate via DB epoch arithmetic (PostgreSQL)
+    hold_agg = (await db.execute(
+        select(
+            func.avg(
+                func.extract("epoch", BotPosition.closed_at) -
+                func.extract("epoch", BotPosition.opened_at)
+            ).label("avg_hold_secs")
+        ).where(
+            BotPosition.user_id == user_id,
+            BotPosition.is_open == False,  # noqa: E712
+            BotPosition.closed_at.isnot(None),
+        )
+    )).one()
+    avg_hold_hours = round(float(hold_agg.avg_hold_secs) / 3600, 1) if hold_agg.avg_hold_secs else None
 
     return {
         "total_pnl_usd": round(total_pnl, 2),
         "total_pnl_pct": round(total_pnl / config.portfolio_value * 100, 2) if config.portfolio_value else 0,
         "win_rate_pct": win_rate,
-        "total_trades": len(closed),
-        "wins": len(wins),
-        "losses": len(losses),
-        "open_positions": len(open_pos),
+        "total_trades": total_trades,
+        "wins": wins,
+        "losses": losses,
+        "open_positions": open_agg.cnt or 0,
         "deployed_usd": round(deployed, 2),
         "deployed_pct": deployed_pct,
         "avg_hold_hours": avg_hold_hours,
-        "best_trade_usd": round(best.pnl_usd or 0, 2) if best else None,
-        "worst_trade_usd": round(worst.pnl_usd or 0, 2) if worst else None,
+        "best_trade_usd": round(float(agg.best), 2) if agg.best is not None else None,
+        "worst_trade_usd": round(float(agg.worst), 2) if agg.worst is not None else None,
     }
 
 
@@ -378,16 +436,17 @@ async def get_bot_performance(db: AsyncSession, user_id: UUID, config: BotConfig
 async def run_bot_cycle(db: AsyncSession) -> dict:
     """
     Called by job_bot_evaluate in scheduler.py every 15 minutes.
-    Iterates all bot-enabled users and their watchlist symbols,
-    running evaluate_symbol() for each pair.
+    Each user gets their own session so a slow/failing user doesn't block others.
     Returns a stats dict for metrics recording.
     """
     from sqlalchemy import select as sa_select  # noqa: PLC0415
     from app.models.watchlist import WatchlistItem  # noqa: PLC0415
     from app.models.gas_snapshot import GasSnapshot  # noqa: PLC0415
+    from app.db.database import AsyncSessionLocal  # noqa: PLC0415
 
     stats = {"users": 0, "evaluations": 0, "buys": 0, "sells": 0, "halts": 0, "errors": 0}
 
+    # Read enabled configs with the caller's session (lightweight read)
     cfg_result = await db.execute(
         sa_select(BotConfig).where(
             BotConfig.is_enabled == True,  # noqa: E712
@@ -399,42 +458,71 @@ async def run_bot_cycle(db: AsyncSession) -> dict:
     if not configs:
         return stats
 
-    for cfg in configs:
-        wl_result = await db.execute(
-            sa_select(WatchlistItem.symbol).where(WatchlistItem.user_id == cfg.user_id)
-        )
-        symbols = [r[0] for r in wl_result.fetchall()]
-
-        for symbol in symbols:
+    async def _process_user(cfg: BotConfig) -> dict:
+        """Run one user's full evaluation cycle in its own session."""
+        user_stats = {"evaluations": 0, "buys": 0, "sells": 0, "halts": 0, "errors": 0}
+        async with AsyncSessionLocal() as user_db:
             try:
-                snap_result = await db.execute(
-                    sa_select(GasSnapshot)
-                    .where(GasSnapshot.symbol == symbol)
-                    .order_by(GasSnapshot.computed_at.desc())
-                    .limit(1)
+                wl_result = await user_db.execute(
+                    sa_select(WatchlistItem.symbol).where(WatchlistItem.user_id == cfg.user_id)
                 )
-                snap = snap_result.scalar_one_or_none()
-                if not snap:
-                    continue
+                symbols = [r[0] for r in wl_result.fetchall()]
 
-                gas = snap.gas_score or 50.0
-                grade = snap.signal_grade or "C"
-
-                # Best-effort price from snapshot or skip
-                price = getattr(snap, "last_price", 0.0) or 0.0
-
-                decision = await evaluate_symbol(
-                    db, cfg.user_id, symbol, cfg,
-                    grade=grade, gas_score=gas,
-                    current_price=price, regime=snap.regime,
+                # Re-fetch config in this session to allow mutations
+                cfg_result2 = await user_db.execute(
+                    sa_select(BotConfig).where(BotConfig.user_id == cfg.user_id)
                 )
-                stats["evaluations"] += 1
-                if decision.action == "BUY":  stats["buys"]  += 1
-                if decision.action == "SELL": stats["sells"] += 1
-                if decision.action == "HALT": stats["halts"] += 1
+                user_cfg = cfg_result2.scalar_one_or_none()
+                if not user_cfg:
+                    return user_stats
+
+                for symbol in symbols:
+                    try:
+                        snap_result = await user_db.execute(
+                            sa_select(GasSnapshot)
+                            .where(GasSnapshot.symbol == symbol)
+                            .order_by(GasSnapshot.computed_at.desc())
+                            .limit(1)
+                        )
+                        snap = snap_result.scalar_one_or_none()
+                        if not snap:
+                            continue
+
+                        gas = snap.gas_score or 50.0
+                        grade = snap.signal_grade or "C"
+                        price = getattr(snap, "last_price", 0.0) or 0.0
+
+                        decision = await evaluate_symbol(
+                            user_db, cfg.user_id, symbol, user_cfg,
+                            grade=grade, gas_score=gas,
+                            current_price=price, regime=snap.regime,
+                        )
+                        user_stats["evaluations"] += 1
+                        if decision.action == "BUY":  user_stats["buys"]  += 1
+                        if decision.action == "SELL": user_stats["sells"] += 1
+                        if decision.action == "HALT": user_stats["halts"] += 1
+                    except Exception as exc:
+                        logger.debug("run_bot_cycle error %s/%s: %s", cfg.user_id, symbol, exc)
+                        user_stats["errors"] += 1
+
+                await user_db.commit()
             except Exception as exc:
-                logger.debug("run_bot_cycle error %s/%s: %s", cfg.user_id, symbol, exc)
-                stats["errors"] += 1
+                await user_db.rollback()
+                logger.error("run_bot_cycle user session failed %s: %s", cfg.user_id, exc)
+                user_stats["errors"] += 1
+        return user_stats
 
-    await db.commit()
+    # Process users concurrently (max 3 at a time)
+    _sem = asyncio.Semaphore(3)
+
+    async def _bounded(cfg: BotConfig) -> dict:
+        async with _sem:
+            return await _process_user(cfg)
+
+    user_results = await asyncio.gather(*[_bounded(cfg) for cfg in configs], return_exceptions=True)
+    for r in user_results:
+        if isinstance(r, dict):
+            for k in ("evaluations", "buys", "sells", "halts", "errors"):
+                stats[k] += r[k]
+
     return stats

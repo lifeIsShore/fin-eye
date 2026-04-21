@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
-    echo=True
+    pool_size=10,
+    max_overflow=20,
+    echo=False,  # was True — SQL logging in prod is a perf killer
 )
 
 # Sync session factory
@@ -29,7 +31,10 @@ async_database_url = settings.database_url.replace("postgresql://", "postgresql+
 async_engine = create_async_engine(
     async_database_url,
     pool_pre_ping=True,
-    echo=False
+    pool_size=10,
+    max_overflow=20,
+    pool_recycle=1800,  # recycle connections every 30 min — prevents stale conn errors
+    echo=False,
 )
 
 AsyncSessionLocal = async_sessionmaker(

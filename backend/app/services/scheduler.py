@@ -769,6 +769,36 @@ async def job_churn_check() -> None:
 
 # ── Sprint 52: Weekly Poll Creator ──────────────────────────────────────────────
 
+async def job_bot_audit_log_cleanup() -> None:
+    """
+    Delete bot_audit_log rows older than 90 days.
+    Runs weekly on Sunday at 03:00 UTC. Prevents unbounded table growth.
+    """
+    from sqlalchemy import delete as sql_delete  # noqa: PLC0415
+    from app.models.bot import BotAuditLog       # noqa: PLC0415
+    started = datetime.now(timezone.utc).isoformat()
+    t0 = time.perf_counter()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                sql_delete(BotAuditLog).where(BotAuditLog.logged_at < cutoff)
+            )
+            await session.commit()
+        detail = f"deleted={result.rowcount} cutoff={cutoff.date()}"
+        logger.info("Bot audit log cleanup: %s", detail)
+        get_metrics().record_pipeline_run(
+            "bot_audit_log_cleanup", started, datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, True, detail,
+        )
+    except Exception as exc:
+        logger.error("job_bot_audit_log_cleanup failed: %s", exc)
+        get_metrics().record_pipeline_run(
+            "bot_audit_log_cleanup", started, datetime.now(timezone.utc).isoformat(),
+            (time.perf_counter() - t0) * 1000, False, str(exc),
+        )
+
+
 async def job_create_weekly_poll() -> None:
     """Creates the current week's SPY Bull vs Bear poll if it doesn't exist."""
     from app.models.weekly_poll import WeeklyPoll  # noqa: PLC0415
@@ -952,9 +982,9 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="optuna_tuning", name="Overnight Optuna Hyperparameter Tuning",
         replace_existing=True, misfire_grace_time=7200)
 
-    # Sprint 44 — Churn early warning: daily at 09:00 UTC
+    # Sprint 44 — Churn early warning: daily at 09:15 UTC (offset from onboarding jobs)
     scheduler.add_job(job_churn_check,
-        trigger=CronTrigger(hour=9, minute=0),
+        trigger=CronTrigger(hour=9, minute=15),
         id="churn_check", name="Pro User Churn Early Warning",
         replace_existing=True, misfire_grace_time=3600)
 
@@ -962,6 +992,13 @@ def setup_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(job_create_weekly_poll,
         trigger=CronTrigger(day_of_week="mon", hour=0, minute=1),
         id="create_weekly_poll", name="Create Weekly SPY Poll",
+        replace_existing=True, misfire_grace_time=3600)
+
+    # Bot audit log TTL cleanup: weekly on Sunday at 03:00 UTC
+    # Keeps last 90 days of logs per user; prevents unbounded table growth
+    scheduler.add_job(job_bot_audit_log_cleanup,
+        trigger=CronTrigger(day_of_week="sun", hour=3, minute=0),
+        id="bot_audit_log_cleanup", name="Bot Audit Log TTL Cleanup (90d)",
         replace_existing=True, misfire_grace_time=3600)
 
     logger.info(

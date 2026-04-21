@@ -77,6 +77,9 @@ class GasSnapshot(Base):
     # List of reasons [ "GAS 82 — strong tailwind", ... ]
     signal_grade_reasons: Mapped[list] = Column(JSON, nullable=True)
 
+    # Sector for the symbol (e.g. "Technology", "Healthcare") — used by bot sector gate
+    sector: Mapped[str] = Column(String(60), nullable=True)
+
     # ── Composite index: fast lookup by symbol, most recent first ──────────
     __table_args__ = (
         Index("ix_gas_snapshots_symbol_computed", "symbol", "computed_at"),
@@ -97,6 +100,7 @@ class GasSnapshot(Base):
             "signal_tradeable":   self.signal_tradeable,
             "signal_grade_desc":  self.signal_grade_desc,
             "signal_grade_reasons": self.signal_grade_reasons,
+            "sector":           self.sector,
         }
 
     def __repr__(self) -> str:

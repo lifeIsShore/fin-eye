@@ -117,15 +117,24 @@ async def _get_or_create_config(db: AsyncSession, user_id: UUID) -> BotConfig:
 
 
 async def _fetch_current_price(symbol: str) -> Optional[float]:
-    """Best-effort live price fetch — returns None on failure."""
+    """Best-effort live price fetch — runs in executor to avoid blocking the event loop."""
+    import asyncio as _asyncio  # noqa: PLC0415
+
+    def _sync_fetch() -> Optional[float]:
+        try:
+            from app.services.market_data import OHLCVFetcher  # noqa: PLC0415
+            records = OHLCVFetcher.fetch_historical_data(symbol, period="5d", interval="1d")
+            if records:
+                return float(records[-1].close)
+        except Exception:
+            pass
+        return None
+
     try:
-        from app.services.market_data import OHLCVFetcher  # noqa: PLC0415
-        records = OHLCVFetcher.fetch_historical_data(symbol, period="5d", interval="1d")
-        if records:
-            return float(records[-1].close)
+        loop = _asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _sync_fetch)
     except Exception:
-        pass
-    return None
+        return None
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────

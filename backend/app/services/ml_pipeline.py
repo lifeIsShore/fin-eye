@@ -23,6 +23,7 @@ Start UI with start_mlflow.bat to browse runs at http://localhost:5000.
 
 import os
 import json
+import math
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -230,9 +231,7 @@ def engineer_features(df: pd.DataFrame, horizon: int = DEFAULT_HORIZON) -> pd.Da
     # Especially useful for commodity futures (seasonal price patterns).
     day_of_week = pd.Series(d.index.dayofweek if hasattr(d.index, 'dayofweek') else 0, index=d.index, dtype=float)
     month_of_year = pd.Series(d.index.month if hasattr(d.index, 'month') else 1, index=d.index, dtype=float)
-    import math  # noqa: PLC0415
-    # BUG-BE-04: use period=7 for all symbols — correct for both 5-day equity
-    # and 7-day crypto/FX trading weeks (sin(5*2π/7) ≠ sin(0) so equities are fine).
+    # BUG-BE-04: use period=7 for all symbols
     d["sin_dow"]   = (day_of_week   * (2 * math.pi / 7)).apply(math.sin)
     d["cos_dow"]   = (day_of_week   * (2 * math.pi / 7)).apply(math.cos)
     d["sin_month"] = (month_of_year * (2 * math.pi / 12)).apply(math.sin)

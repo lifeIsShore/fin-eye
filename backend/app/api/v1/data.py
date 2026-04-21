@@ -21,12 +21,13 @@ from app.services.ohlcv_fetcher import OHLCVFetcher
 from app.services.macro_data import MacroFetcher
 from app.services.news_data import NewsFetcher
 from app.services.cache import get_cache
+from app.api.v1.deps import require_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/data", tags=["Data Pipelines"])
 
 
-@router.post("/fetch/ohlcv", summary="Trigger OHLCV daily fetch")
+@router.post("/fetch/ohlcv", summary="Trigger OHLCV daily fetch", dependencies=[Depends(require_admin)])
 async def trigger_ohlcv_fetch(
     symbols: Optional[List[str]] = Query(default=None),
     db: AsyncSession = Depends(get_db),
@@ -44,7 +45,7 @@ async def trigger_ohlcv_fetch(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post("/fetch/macro", summary="Trigger macro data fetch")
+@router.post("/fetch/macro", summary="Trigger macro data fetch", dependencies=[Depends(require_admin)])
 async def trigger_macro_fetch(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -63,7 +64,7 @@ async def trigger_macro_fetch(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post("/fetch/news", summary="Trigger news fetch")
+@router.post("/fetch/news", summary="Trigger news fetch", dependencies=[Depends(require_admin)])
 async def trigger_news_fetch(
     symbols: Optional[List[str]] = Query(default=None),
     lookback_days: int = Query(default=7, ge=1, le=30),

@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 
 from app.services.metrics import get_metrics
 from app.api.v1.deps import require_admin
@@ -148,15 +148,13 @@ def get_backup_status() -> Dict[str, Any]:
 
 
 @router.post("/backup-now", dependencies=[Depends(require_admin)])
-async def trigger_backup_now() -> Dict[str, Any]:
+async def trigger_backup_now(background_tasks: BackgroundTasks) -> Dict[str, Any]:
     """
     Manually trigger an immediate DB backup (runs in background task).
     Returns immediately — check /backup-status for result.
     """
-    import asyncio  # noqa: PLC0415
     from app.services.scheduler import job_backup_db  # noqa: PLC0415
-
-    asyncio.create_task(job_backup_db())
+    background_tasks.add_task(job_backup_db)
     return {"status": "started", "message": "Backup triggered. Check /backup-status for result."}
 
 

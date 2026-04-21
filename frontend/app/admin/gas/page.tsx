@@ -218,14 +218,20 @@ export default function AdminGasPage() {
         throw new Error((d as any).detail ?? `HTTP ${res.status}`);
       }
       const data = await res.json();
+      if (data.status === "already_running") {
+        setBatchMsg(data.message);
+        setBatchStatus("idle");
+        return;
+      }
       setBatchMsg(data.message ?? "Batch precompute started in background.");
-      // Poll for updates
+      // Poll for updates, then reset button
       setTimeout(() => refresh(), 10_000);
       setTimeout(() => refresh(), 25_000);
-      setTimeout(() => refresh(), 60_000);
+      setTimeout(() => { refresh(); setBatchStatus("idle"); }, 60_000);
     } catch (e) {
       setBatchStatus("error");
       setBatchMsg((e as Error).message);
+      setTimeout(() => setBatchStatus("idle"), 5_000);
     }
   };
 
