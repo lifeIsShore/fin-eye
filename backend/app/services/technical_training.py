@@ -7,6 +7,7 @@ from typing import List, Tuple
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
 from app.services.technical_models import (
@@ -92,7 +93,7 @@ def train_logistic_baseline_for_timeframe(
 
     for _window, X_train, y_train, X_valid, y_valid in splits:
         # For the baseline, treat positive class as +1 and negative as -1, ignoring 0 for Sharpe
-        clf = LogisticRegression(max_iter=1000, multi_class="auto")
+        clf = LogisticRegression(max_iter=2000)
         clf.fit(X_train, y_train)
 
         y_pred = clf.predict(X_valid)
@@ -140,10 +141,18 @@ def train_xgboost_for_timeframe(
     correct_predictions = 0
     total_predictions = 0
 
+    from sklearn.preprocessing import LabelEncoder
+
     for _window, X_train, y_train, X_valid, y_valid in splits:
-        # XGBoost expects non-negative class labels; map {-1,0,1} -> {0,1,2}
-        y_train_mapped = (y_train.to_numpy() + 1).astype(int)
-        y_valid_mapped = (y_valid.to_numpy() + 1).astype(int)
+        # XGBoost predicts directional labels. We must map them to 
+        # contiguous integers {0, 1, 2} even if some classes are missing 
+        # in a specific walk-forward split.
+        le = LabelEncoder()
+        # Always fit on the full possible set to keep mapping consistent: {-1, 0, 1}
+        le.fit([-1, 0, 1])
+        
+        y_train_mapped = le.transform(y_train)
+        y_valid_mapped = le.transform(y_valid)
 
         clf = XGBClassifier(
             max_depth=4,
@@ -232,10 +241,13 @@ def train_all_models_for_timeframe(
         y_full = df["target"]
 
         if winner.model_kind == ModelKind.LOGISTIC:
-            final_model = LogisticRegression(max_iter=1000, multi_class="auto")
+            final_model = LogisticRegression(max_iter=2000)
             final_model.fit(X_full, y_full)
         else:
-            y_full_mapped = (y_full.to_numpy() + 1).astype(int)
+            le = LabelEncoder()
+            le.fit([-1, 0, 1])
+            y_full_mapped = le.transform(y_full)
+            
             final_model = XGBClassifier(
                 max_depth=4,
                 n_estimators=100,

@@ -48,6 +48,30 @@ todo-v5/v6 blockers are complete. See SPRINT_PROGRESS.md for full details.
 
 ### Files Created
 ```
+
+---
+
+## Bug Fixes — April 21, 2026 (Session 7)
+**Scope:** Seed pipeline, ML training pipeline, Redis, DB model fix.
+
+### Bugs Fixed
+
+| # | File | Bug | Fix |
+|---|------|-----|-----|
+| 1 | `app/models/showcase.py` | `FeatureInterest.user_id` FK pointed to `"user.id"` (wrong table name) and used `Integer` type instead of `UUID` | Changed to `ForeignKey("users.id")`, `UUID(as_uuid=True)`; added `UUID` import |
+| 2 | `docker-compose.yml` | Redis container started without reading `.env`, so `${REDIS_PASSWORD}` resolved to fallback `changeme_set_REDIS_PASSWORD_in_env` — auth mismatch with backend | Added `env_file: - ./backend/.env` to redis service |
+| 3 | `app/services/technical_training.py` | `LabelEncoder` imported inside loop body only; `multi_class="auto"` deprecated in sklearn 1.5; `max_iter=1000` caused convergence warnings | Moved `LabelEncoder` import to top-level; removed `multi_class` arg; raised `max_iter` to 2000 |
+| 4 | `scripts/seed_training_data.py` | `db.add()` on `StockOHLCV` and `SentimentAggregate` crashed with `IntegrityError` on re-runs due to unique constraint violations | Replaced with `pg_insert(...).on_conflict_do_nothing()` |
+| 5 | `scripts/run_technical_training.py` | `--timeframe` choices used `"1w"`/`"1m"` but `Timeframe` enum values are `"1wk"`/`"1mo"` — caused `ValueError` at parse time | Updated choices to `["1h", "4h", "1d", "1wk", "1mo", "all"]` |
+
+### Files Modified (Session 7 — April 21, 2026)
+```
+backend/app/models/showcase.py                    # FeatureInterest FK: user.id → users.id, Integer → UUID
+docker-compose.yml                                # redis env_file: ./backend/.env
+backend/app/services/technical_training.py        # LabelEncoder top-level import; removed multi_class; max_iter=2000
+backend/scripts/seed_training_data.py             # on_conflict_do_nothing for StockOHLCV + SentimentAggregate
+backend/scripts/run_technical_training.py         # timeframe choices: 1w→1wk, 1m→1mo
+```
 backend/app/services/model_storage.py
 frontend/components/EmailVerificationBanner.tsx
 frontend/app/verify-email/page.tsx
@@ -1453,6 +1477,7 @@ alembic upgrade head
 *Sprint Plans 46–55 created: April 2026 · Last updated: April 2026*
 *Based on complete audit of: todos.md · todos-v3.md · todos-v4.md · todos-v5.md · todos-v6.md · SPRINT_PROGRESS.md (Sprints 0–45)*
 *Sprints 46–56 all complete as of April 2026.*
+*April 25, 2026 — Reviewed go-live seeding order with user. Confirmed next actions: BUG-013 secret rotation, temp file cleanup, pytest suite, production env assertion check.*
 
 ---
 

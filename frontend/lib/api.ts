@@ -595,15 +595,6 @@ export interface WatchlistItem {
   added_at: string;
 }
 
-function authHeaders(): HeadersInit {
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-  return {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 export async function fetchWatchlist(): Promise<WatchlistItem[]> {
   const res = await fetch(`${API_BASE_URL}/api/v1/watchlist/`, {
     headers: authHeaders(),
@@ -3135,108 +3126,6 @@ export const disableBot = () => _botAction("disable");
 export const resumeBot = () => _botAction("resume");
 export const haltBot = (closeAll = false) => _botAction("halt", { close_all: closeAll });
 
-// ── Sprint 56: Monte Carlo ───────────────────────────────────────────────
-
-export interface MCAssetParams {
-  symbol: string;
-  starting_value?: number;
-  mu: number;
-  sigma: number;
-  years?: number;
-  paths?: number;
-  steps_per_year?: number;
-  model_type?: string;
-  jump_intensity?: number;
-  jump_mean?: number;
-  jump_std?: number;
-}
-
-export interface MCPercentileResult {
-  step: number;
-  day: number;
-  p5: number;
-  p25: number;
-  p50: number;
-  p75: number;
-  p95: number;
-  mean: number;
-}
-
-export interface MCSimulationResult {
-  symbol: string;
-  final_median: number;
-  final_p5: number;
-  final_p95: number;
-  max_drawdown_p95: number;
-  cvar_95: number;
-  paths_generated: number;
-  trajectory: MCPercentileResult[];
-}
-
-export async function runAssetMonteCarlo(
-  params: MCAssetParams,
-): Promise<MCSimulationResult> {
-  const token = localStorage.getItem("access_token");
-  const res = await fetch(`${API_BASE_URL}/api/v1/montecarlo/asset`, {
-    method: "POST",
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Simulation failed: ${text}`);
-  }
-  return res.json();
-}
-
-export interface MCPortfolioAsset {
-  symbol: string;
-  starting_value: number;
-  mu: number;
-  sigma: number;
-}
-
-export interface MCPortfolioParams {
-  starting_capital: number;
-  assets: MCPortfolioAsset[];
-  years: number;
-  paths: number;
-  steps_per_year: number;
-  monthly_contribution: number;
-  correlation_matrix?: number[][];
-}
-
-export interface MCPortfolioResult {
-  final_median: number;
-  final_p5: number;
-  final_p95: number;
-  success_rate: number;
-  trajectory: MCPercentileResult[];
-}
-
-export async function runPortfolioMonteCarlo(
-  params: MCPortfolioParams,
-): Promise<MCPortfolioResult> {
-  const token = localStorage.getItem("access_token");
-  const res = await fetch(`${API_BASE_URL}/api/v1/montecarlo/portfolio`, {
-    method: "POST",
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Portfolio simulation failed: ${text}`);
-  }
-  return res.json();
-}
-
-// ─── Monte Carlo Simulation (Sprint 47 / Sprint 56) ───────────────────────────────
 
 export interface MCPercentileResult {
   step: number;

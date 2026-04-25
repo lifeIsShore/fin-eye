@@ -727,9 +727,7 @@ export default function MacroPage() {
                     </span>
                   </span>
                 )}
-    </div>
-  );
-}          {advData.yield_curve.spread_30y_2y !== null && (
+              {advData.yield_curve.spread_30y_2y !== null && (
                   <span>
                     30Y–2Y spread:{" "}
                     <span className="font-mono text-slate-300">

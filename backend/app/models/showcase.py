@@ -6,6 +6,7 @@ ShowcaseClick    — lightweight click analytics (views, detail-opens, outbound 
 """
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from app.db.database import Base
 
 
@@ -55,7 +56,7 @@ class FeatureInterest(Base):
     __tablename__ = "feature_interests"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     email = Column(String(255), nullable=True)
     feature_name = Column(String(100), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -61,3 +61,28 @@ class SentimentSourceBreakdownResponse(BaseModel):
     symbol: str
     days: int
     breakdown: List[SentimentSourceBreakdownEntry]
+
+
+class TechnicalFeatureRow(BaseModel):
+    symbol: str
+    timestamp: datetime
+    return_1d: float
+    return_5d: float
+    volatility_20d: float
+    rsi_14: float
+    macd: float
+    macd_signal: float
+    macd_hist: float
+    bb_upper: float
+    bb_middle: float
+    bb_lower: float
+    news_sentiment_1d: float
+    news_sentiment_7d: float
+    news_sentiment_30d: float
+    news_source_diversity_30d: float
+    macro_score: float
+    vix_level: float
+    yield_spread_10y_2y: float
+    day_of_week: int
+    month: int
+    hour_of_day: int

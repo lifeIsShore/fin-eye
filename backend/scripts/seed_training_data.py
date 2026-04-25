@@ -9,6 +9,7 @@ from pathlib import Path
 # Ensure `backend/` is on sys.path so `import app` works when running as a script.
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.db.database import SessionLocal
 from app.models.market import StockOHLCV
 from app.models.macro import MacroIndicator
@@ -56,8 +57,8 @@ def main() -> None:
             low = min(open_, close) - rng.uniform(0.0, 0.3)
             volume = 1_000_000.0 + rng.uniform(-50_000, 50_000)
 
-            db.add(
-                StockOHLCV(
+            db.execute(
+                pg_insert(StockOHLCV).values(
                     symbol=symbol,
                     timestamp=ts,
                     open=float(open_),
@@ -65,19 +66,19 @@ def main() -> None:
                     low=float(low),
                     close=float(close),
                     volume=float(volume),
-                )
+                ).on_conflict_do_nothing()
             )
 
             # Daily sentiment aggregate (news)
             sent = rng.uniform(-0.2, 0.2)
-            db.add(
-                SentimentAggregate(
+            db.execute(
+                pg_insert(SentimentAggregate).values(
                     symbol=symbol,
                     date=ts.date(),
                     mentions=10,
                     sentiment_score=float(sent),
                     source_type="news",
-                )
+                ).on_conflict_do_nothing()
             )
 
             # A couple of articles on some days for source diversity
@@ -104,17 +105,19 @@ def main() -> None:
             # Macro indicators: seed weekly (ffill will carry)
             if i % 7 == 0:
                 d = ts.date()
-                db.add(MacroIndicator(indicator_name="vix", value=18.0 + rng.uniform(-2, 2), date=d))
-                db.add(
-                    MacroIndicator(
-                        indicator_name="yield_spread_10y_2y",
-                        value=0.5 + rng.uniform(-0.2, 0.2),
-                        date=d,
+                existing_macro = db.query(MacroIndicator).filter(MacroIndicator.date == d).first()
+                if not existing_macro:
+                    db.add(MacroIndicator(indicator_name="vix", value=18.0 + rng.uniform(-2, 2), date=d))
+                    db.add(
+                        MacroIndicator(
+                            indicator_name="yield_spread_10y_2y",
+                            value=0.5 + rng.uniform(-0.2, 0.2),
+                            date=d,
+                        )
                     )
-                )
-                db.add(MacroIndicator(indicator_name="fed_funds_rate", value=5.0, date=d))
-                db.add(MacroIndicator(indicator_name="unemployment_rate", value=4.0, date=d))
-                db.add(MacroIndicator(indicator_name="cpi_yoy", value=3.0, date=d))
+                    db.add(MacroIndicator(indicator_name="fed_funds_rate", value=5.0, date=d))
+                    db.add(MacroIndicator(indicator_name="unemployment_rate", value=4.0, date=d))
+                    db.add(MacroIndicator(indicator_name="cpi_yoy", value=3.0, date=d))
 
         db.commit()
         print(f"Seeded synthetic data for {symbol} from {start.date()} to {end.date()}.")
