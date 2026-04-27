@@ -35,7 +35,8 @@ function scoreFill(score: number): string {
   return "#f87171";
 }
 
-function labelBadge(label: string): string {
+function labelBadge(label: string | undefined | null): string {
+  if (!label) return "bg-slate-800/60 border-slate-700/50 text-slate-400";
   if (label.includes("Strong Bullish")) return "bg-emerald-900/40 border-emerald-700/50 text-emerald-300";
   if (label.includes("Bullish"))        return "bg-teal-900/40 border-teal-700/50 text-teal-300";
   if (label.includes("Neutral"))        return "bg-slate-800/60 border-slate-700/50 text-slate-400";

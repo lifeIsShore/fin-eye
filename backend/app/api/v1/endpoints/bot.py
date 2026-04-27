@@ -182,11 +182,11 @@ async def update_config(
     return await get_config(current_user, db)
 
 
-@router.post("/enable", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/enable")
 async def enable_bot(
     current_user: Annotated[User, Depends(get_current_active_verified_user)],
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> dict:
     # Require at least one watchlist item
     wl = await db.execute(
         select(WatchlistItem).where(WatchlistItem.user_id == current_user.id).limit(1)
@@ -203,26 +203,28 @@ async def enable_bot(
                        reason="Bot enabled by user."))
     await db.commit()
     logger.info("Bot enabled for user_id=%s", current_user.id)
+    return {"ok": True}
 
 
-@router.post("/disable", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/disable")
 async def disable_bot(
     current_user: Annotated[User, Depends(get_current_active_verified_user)],
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> dict:
     config = await _get_or_create_config(db, current_user.id)
     config.is_enabled = False
     db.add(BotAuditLog(user_id=current_user.id, action="DISABLE",
                        reason="Bot disabled by user. Open positions remain open."))
     await db.commit()
+    return {"ok": True}
 
 
-@router.post("/halt", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/halt")
 async def halt_bot(
     body: HaltRequest,
     current_user: Annotated[User, Depends(get_current_active_verified_user)],
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> dict:
     """Kill switch — sets halt_flag immediately. Optionally closes all open positions at market."""
     from datetime import datetime as _dt, timezone as tz  # noqa: PLC0415
     config = await _get_or_create_config(db, current_user.id)
@@ -252,18 +254,20 @@ async def halt_bot(
     db.add(BotAuditLog(user_id=current_user.id, action="HALT", reason=reason))
     await db.commit()
     logger.info("Bot halted for user_id=%s (closed=%d)", current_user.id, closed_count)
+    return {"ok": True, "closed": closed_count}
 
 
-@router.post("/resume", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/resume")
 async def resume_bot(
     current_user: Annotated[User, Depends(get_current_active_verified_user)],
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> dict:
     config = await _get_or_create_config(db, current_user.id)
     config.halt_flag = False
     db.add(BotAuditLog(user_id=current_user.id, action="RESUME",
                        reason="Bot resumed by user."))
     await db.commit()
+    return {"ok": True}
 
 
 @router.get("/positions", response_model=List[BotPositionResponse])

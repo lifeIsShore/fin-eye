@@ -41,14 +41,16 @@ export default function EventTimeline() {
     // Group events by date
     const groupedEvents = events.reduce((acc, event) => {
         const date = event.date;
+        if (!date) return acc;
         if (!acc[date]) acc[date] = [];
         acc[date].push(event);
         return acc;
     }, {} as Record<string, MarketEvent[]>);
 
     const formatDate = (dateString: string) => {
-        // Treat as UTC to avoid timezone shifting
+        if (!dateString) return "Unknown date";
         const date = new Date(dateString + 'T00:00:00Z');
+        if (isNaN(date.getTime())) return dateString;
         return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(date);
     };
 

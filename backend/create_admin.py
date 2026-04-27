@@ -12,10 +12,10 @@ async def run():
             user = User(
                 email="admin@yagmurterminal.com",
                 hashed_password=hash_password("admin"),
+                name="Admin",
                 is_active=True,
+                is_verified=True,
                 is_admin=True,
-                first_name="Admin",
-                last_name="User"
             )
             db.add(user)
             await db.commit()

@@ -79,8 +79,11 @@ async def lifespan(app: FastAPI):
     await init_redis()
 
     scheduler = setup_scheduler()
-    scheduler.start()
-    logger.info("📅 APScheduler started with %d jobs.", len(scheduler.get_jobs()))
+    try:
+        scheduler.start()
+        logger.info("📅 APScheduler started with %d jobs.", len(scheduler.get_jobs()))
+    except Exception as exc:
+        logger.warning("⚠️  Scheduler failed to start (DB may be unavailable): %s — continuing without scheduler", exc)
 
     async def _warm_gas_cache_bg() -> None:
         await asyncio.sleep(10)

@@ -17,19 +17,17 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, field_validator
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user, get_optional_user
 from app.db.database import get_db
+from app.middleware.rate_limit import limiter
 from app.models.ticker_comment import TickerComment, TickerCommentReaction
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/comments", tags=["Comments"])
-limiter = Limiter(key_func=get_remote_address)
 
 BANNED_WORDS: set[str] = {"spam", "scam", "pump", "dump"}  # extend via env/config
 
@@ -225,12 +223,12 @@ async def post_comment(
 
 # ── DELETE /comments/{comment_id} ────────────────────────────────────────────
 
-@router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{comment_id}")
 async def delete_comment(
     comment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> None:
+) -> dict:
     comment = await db.get(TickerComment, comment_id)
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
@@ -241,6 +239,7 @@ async def delete_comment(
     comment.is_deleted = True
     comment.body = "[deleted]"
     await db.commit()
+    return {"ok": True}
 
 
 # ── POST /comments/{comment_id}/react ────────────────────────────────────────

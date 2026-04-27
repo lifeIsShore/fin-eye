@@ -7,7 +7,6 @@ from typing import List, Tuple
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
 from app.services.technical_models import (
@@ -141,18 +140,11 @@ def train_xgboost_for_timeframe(
     correct_predictions = 0
     total_predictions = 0
 
-    from sklearn.preprocessing import LabelEncoder
-
     for _window, X_train, y_train, X_valid, y_valid in splits:
-        # XGBoost predicts directional labels. We must map them to 
-        # contiguous integers {0, 1, 2} even if some classes are missing 
-        # in a specific walk-forward split.
-        le = LabelEncoder()
-        # Always fit on the full possible set to keep mapping consistent: {-1, 0, 1}
-        le.fit([-1, 0, 1])
-        
-        y_train_mapped = le.transform(y_train)
-        y_valid_mapped = le.transform(y_valid)
+        # Convert {-1, 0, 1} to binary: bullish (1) vs not-bullish (0)
+        # This avoids multi-class issues when neutral class is absent in a window.
+        y_train_bin = (y_train > 0).astype(int)
+        y_valid_bin = (y_valid > 0).astype(int)
 
         clf = XGBClassifier(
             max_depth=4,
@@ -160,20 +152,19 @@ def train_xgboost_for_timeframe(
             learning_rate=0.1,
             subsample=0.8,
             colsample_bytree=0.8,
-            objective="multi:softmax",
-            num_class=3,
-            eval_metric="mlogloss",
+            objective="binary:logistic",
+            eval_metric="logloss",
             n_jobs=1,
         )
-        clf.fit(X_train, y_train_mapped)
+        clf.fit(X_train, y_train_bin)
 
         y_pred = clf.predict(X_valid)
 
-        returns = np.where(y_pred == y_valid_mapped, 1.0, -1.0)
+        returns = np.where(y_pred == y_valid_bin, 1.0, -1.0)
         all_valid_returns.extend(returns.tolist())
 
-        correct_predictions += int((y_pred == y_valid_mapped).sum())
-        total_predictions += y_valid_mapped.shape[0]
+        correct_predictions += int((y_pred == y_valid_bin).sum())
+        total_predictions += y_valid_bin.shape[0]
 
     sharpe = compute_sharpe_ratio(np.array(all_valid_returns))
     accuracy = (correct_predictions / total_predictions) if total_predictions else 0.0
@@ -244,22 +235,18 @@ def train_all_models_for_timeframe(
             final_model = LogisticRegression(max_iter=2000)
             final_model.fit(X_full, y_full)
         else:
-            le = LabelEncoder()
-            le.fit([-1, 0, 1])
-            y_full_mapped = le.transform(y_full)
-            
+            y_full_bin = (y_full > 0).astype(int)
             final_model = XGBClassifier(
                 max_depth=4,
                 n_estimators=100,
                 learning_rate=0.1,
                 subsample=0.8,
                 colsample_bytree=0.8,
-                objective="multi:softmax",
-                num_class=3,
-                eval_metric="mlogloss",
+                objective="binary:logistic",
+                eval_metric="logloss",
                 n_jobs=1,
             )
-            final_model.fit(X_full, y_full_mapped)
+            final_model.fit(X_full, y_full_bin)
 
         store = artifact_store or ModelArtifactStore(artifact_base_dir)
         saved = store.save(

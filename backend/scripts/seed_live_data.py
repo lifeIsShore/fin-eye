@@ -105,23 +105,16 @@ async def step_sentiment(session) -> None:
     _banner("Step 5 / 5  —  Sentiment scoring (FinBERT / VADER fallback)")
     from app.config import settings
     from app.services.sentiment_service import SentimentService
-    from app.db.database import SessionLocal
 
     t0 = time.perf_counter()
-
-    # SentimentService uses a sync Session internally — open a separate sync session
-    sync_session = SessionLocal()
-    try:
-        svc = SentimentService(db=sync_session)
-        symbols = settings.ohlcv_symbols_default
-        for sym in symbols:
-            try:
-                articles, aggregates = await svc.refresh_symbol_sentiment(sym, days_back=7)
-                logger.info("  %-8s  %d articles scored  %d daily aggregates", sym, len(articles), len(aggregates))
-            except Exception as exc:
-                logger.warning("  %-8s  ⚠️  sentiment failed: %s", sym, exc)
-    finally:
-        sync_session.close()
+    svc = SentimentService(db=session)
+    symbols = settings.ohlcv_symbols_default
+    for sym in symbols:
+        try:
+            articles, aggregates = await svc.refresh_symbol_sentiment(sym, days_back=7)
+            logger.info("  %-8s  %d articles scored  %d daily aggregates", sym, len(articles), len(aggregates))
+        except Exception as exc:
+            logger.warning("  %-8s  ⚠️  sentiment failed: %s", sym, exc)
 
     logger.info("✅  Sentiment done in %.1fs", time.perf_counter() - t0)
 
@@ -166,9 +159,6 @@ async def main() -> None:
         await step_ohlcv_daily(session)
         await step_ohlcv_intraday(session)
         await step_news(session)
-
-    # Sentiment uses sync session — runs outside async session block
-    async with AsyncSessionLocal() as session:
         await step_sentiment(session)
 
     await close_redis()

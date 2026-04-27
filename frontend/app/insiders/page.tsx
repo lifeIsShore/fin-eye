@@ -387,7 +387,14 @@ export default function InsidersPage() {
           </div>
         )}
 
-        {data && (
+        {data && !data.sentiment && !isLoading && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center text-sm text-slate-500">
+            No insider filing data found for <span className="font-semibold text-slate-300">{symbol}</span>.
+            Only US-listed equities with SEC EDGAR Form 4 filings are supported.
+          </div>
+        )}
+
+        {data && data.sentiment && (
           <>
             {/* Company strip */}
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">

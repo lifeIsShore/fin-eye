@@ -222,13 +222,16 @@ def fetch_sector_rotation() -> SectorRotationData:
         auto_adjust=True,
         actions=False,
         progress=False,
-        group_by="ticker",
     )
 
     # Normalise DataFrame structure
-    # yfinance returns multi-level columns when multiple tickers
+    # yfinance v0.2+ returns MultiIndex with (Price, Ticker) ordering
     if isinstance(raw.columns, pd.MultiIndex):
-        closes = raw.xs("Close", axis=1, level=0)
+        # Try both level orderings for compatibility
+        try:
+            closes = raw.xs("Close", axis=1, level=0)
+        except KeyError:
+            closes = raw.xs("Close", axis=1, level=1)
     else:
         closes = raw[["Close"]]
         closes.columns = [tickers[0]]

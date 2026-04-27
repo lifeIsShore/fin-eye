@@ -1478,6 +1478,10 @@ alembic upgrade head
 *Based on complete audit of: todos.md · todos-v3.md · todos-v4.md · todos-v5.md · todos-v6.md · SPRINT_PROGRESS.md (Sprints 0–45)*
 *Sprints 46–56 all complete as of April 2026.*
 *April 25, 2026 — Reviewed go-live seeding order with user. Confirmed next actions: BUG-013 secret rotation, temp file cleanup, pytest suite, production env assertion check.*
+*April 25, 2026 — BUG-S60-02: Fixed FastAPI startup crash in `bot.py` — 4 POST endpoints (`/enable`, `/disable`, `/halt`, `/resume`) used `status_code=204` which FastAPI rejects when a request/response body is present. Changed all four to `200` returning `{"ok": True}`. File: `backend/app/api/v1/endpoints/bot.py`.*
+*April 25, 2026 — BUG-S60-03: Fixed Windows `UnicodeDecodeError` crash in `comments.py` — local `Limiter(key_func=get_remote_address)` instantiation bypassed the `config_filename` workaround used by the app-level limiter. Removed local Limiter; now imports shared `limiter` from `app.middleware.rate_limit`. Also fixed `DELETE /{comment_id}` using `status_code=204` with a body — changed to `200 + {"ok": True}`. Confirmed no remaining `204_NO_CONTENT` in entire `app/api/` tree. File: `backend/app/api/v1/endpoints/comments.py`. Note: must clear `__pycache__` before restarting uvicorn on Windows.*
+*April 25, 2026 — BUG-S60-05: XGBoost training crash `ValueError: Invalid classes [0 2]` — multi-class objective with `num_class=3` failed when a walk-forward window had no neutral (0) class in `y_train`, causing LabelEncoder to map `{-1→0, 1→2}` skipping index 1. Fixed by switching XGBoost to binary classification (`objective="binary:logistic"`, `eval_metric="logloss"`) with target binarised as `(y > 0).astype(int)`. Applied in both walk-forward loop and final model fit. Removed unused `LabelEncoder` import. File: `backend/app/services/technical_training.py`.*
+*April 26, 2026 — BUG-S60-07: Sector rotation 502 — `yf.download()` with `group_by="ticker"` deprecated in yfinance 0.2+, causing MultiIndex level ordering to flip from `(Close, Ticker)` to `(Ticker, Close)`. Fixed by removing `group_by` param and adding try/except on both `xs("Close", level=0)` and `xs("Close", level=1)` for compatibility. File: `backend/app/services/sector_service.py`.* in `seed_live_data.py` with `ChunkedIteratorResult can't be used in 'await'` — `step_sentiment()` was creating a sync `SessionLocal()` and passing it to `SentimentService` which uses async `await db.execute()`. Fixed by passing the existing `AsyncSessionLocal` session directly, removing the sync session workaround. Also consolidated both async blocks into one. File: `backend/scripts/seed_live_data.py`.*
 
 ---
 
@@ -1707,3 +1711,5 @@ backend/app/api/v1/endpoints/ops.py               # backup-now: asyncio.create_t
 backend/app/api/v1/endpoints/admin_gas.py         # _batch_running lock; already_running response
 frontend/app/admin/gas/page.tsx                   # button resets after 60s; already_running handled; error auto-reset
 ```
+Email: admin@yagmurterminal.com
+Password: admin

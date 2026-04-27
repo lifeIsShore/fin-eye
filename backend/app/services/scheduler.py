@@ -190,16 +190,40 @@ async def job_gas_precompute() -> None:
 
 
 async def job_backup_db() -> None:
-    import sys, os  # noqa: PLC0415
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "backup")))
     started = datetime.now(timezone.utc).isoformat()
     t0 = time.perf_counter()
     try:
-        from backup_db import run_backup  # noqa: PLC0415
-        dump_path = run_backup()
-        get_metrics().record_pipeline_run("backup_db", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, True, f"Saved: {dump_path.name}")
+        import subprocess, os  # noqa: PLC0415
+        db_url = settings.database_url or ""
+        # Parse connection params from DATABASE_URL
+        # postgresql+psycopg2://user:pass@host:port/dbname
+        import re  # noqa: PLC0415
+        m = re.match(r"postgresql(?:\+\w+)?://([^:]+):([^@]+)@([^:/]+):(\d+)/(.+)", db_url)
+        if not m:
+            raise RuntimeError(f"Cannot parse DATABASE_URL for backup: {db_url}")
+        user, password, host, port, dbname = m.groups()
+        backup_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        dump_path = os.path.abspath(os.path.join(backup_dir, f"fin_eye_{ts}.sql"))
+        env = {**os.environ, "PGPASSWORD": password}
+        result = subprocess.run(
+            ["pg_dump", "-h", host, "-p", port, "-U", user, "-F", "p", "-f", dump_path, dbname],
+            env=env, capture_output=True, text=True, timeout=300
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"pg_dump failed: {result.stderr[:300]}")
+        size_mb = os.path.getsize(dump_path) / 1_048_576
+        detail = f"Saved: {os.path.basename(dump_path)} ({size_mb:.1f} MB)"
+        get_metrics().record_pipeline_run("backup_db", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, True, detail)
+        logger.info("DB backup complete: %s", detail)
+    except FileNotFoundError:
+        # pg_dump not installed on this machine — mark as skipped, not failed
+        get_metrics().record_pipeline_run("backup_db", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, True, "pg_dump not available — skipped")
+        logger.info("DB backup skipped: pg_dump not found on PATH")
     except Exception as exc:
         get_metrics().record_pipeline_run("backup_db", started, datetime.now(timezone.utc).isoformat(), (time.perf_counter()-t0)*1000, False, str(exc))
+        logger.error("job_backup_db failed: %s", exc)
 
 
 async def job_fetch_news() -> None:
